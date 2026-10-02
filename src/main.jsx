@@ -2,6 +2,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -13,16 +14,25 @@ import {
 
 import "./styles.css";
 
+// ======================================================
+// SUPABASE
+// ======================================================
+
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL;
 
 const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+const supabase =
+  createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+  );
+
+// ======================================================
+// BRAND STATUS CONFIG
+// ======================================================
 
 const BRAND_STATUSES = {
   Qualicare: [
@@ -52,8 +62,14 @@ const BRAND_STATUSES = {
   ],
 };
 
+// ======================================================
+// HELPERS
+// ======================================================
+
 function formatDate(value) {
-  if (!value) return "—";
+  if (!value) {
+    return "—";
+  }
 
   const date =
     new Date(value);
@@ -77,7 +93,9 @@ function formatDate(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   const date =
     new Date(value);
@@ -102,7 +120,9 @@ function formatDateTime(value) {
 }
 
 function dateInputValue(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   const date =
     new Date(value);
@@ -121,23 +141,32 @@ function dateInputValue(value) {
   const month =
     String(
       date.getMonth() + 1
-    ).padStart(2, "0");
+    ).padStart(
+      2,
+      "0"
+    );
 
   const day =
     String(
       date.getDate()
-    ).padStart(2, "0");
+    ).padStart(
+      2,
+      "0"
+    );
 
   return `${year}-${month}-${day}`;
 }
 
 function isOverdue(ticket) {
-  if (!ticket?.due_date) {
+  if (
+    !ticket?.due_date
+  ) {
     return false;
   }
 
   if (
-    ticket.status === "Closed"
+    ticket.status ===
+    "Closed"
   ) {
     return false;
   }
@@ -158,7 +187,8 @@ function brandClass(source) {
   }
 
   if (
-    source === "Tutor Doctor"
+    source ===
+    "Tutor Doctor"
   ) {
     return "brand-tutordoctor";
   }
@@ -177,7 +207,10 @@ function statusClass(status) {
     status || ""
   )
     .toLowerCase()
-    .replaceAll(" ", "-")}`;
+    .replaceAll(
+      " ",
+      "-"
+    )}`;
 }
 
 function getTicketSummary(ticket) {
@@ -192,6 +225,142 @@ function getTicketSummary(ticket) {
     )
     .trim();
 }
+
+function stripHtml(html) {
+  if (!html) {
+    return "";
+  }
+
+  const div =
+    document.createElement(
+      "div"
+    );
+
+  div.innerHTML =
+    html;
+
+  return (
+    div.textContent ||
+    div.innerText ||
+    ""
+  ).trim();
+}
+
+function extractEmail(value) {
+  if (!value) {
+    return "";
+  }
+
+  const text =
+    String(value)
+      .trim();
+
+  const match =
+    text.match(
+      /<([^>]+)>/
+    );
+
+  return (
+    match?.[1] ||
+    text
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function splitAddresses(value) {
+  if (!value) {
+    return [];
+  }
+
+  return String(value)
+    .split(
+      /[,;]+/
+    )
+    .map(
+      (item) =>
+        item.trim()
+    )
+    .filter(Boolean);
+}
+
+function uniqueAddresses(values) {
+  const seen =
+    new Set();
+
+  const output =
+    [];
+
+  for (
+    const value of
+    values
+  ) {
+    const email =
+      extractEmail(
+        value
+      );
+
+    if (
+      !email ||
+      seen.has(
+        email
+      )
+    ) {
+      continue;
+    }
+
+    seen.add(
+      email
+    );
+
+    output.push(
+      value
+    );
+  }
+
+  return output;
+}
+
+function formatFileSize(bytes) {
+  if (
+    bytes === null ||
+    bytes === undefined
+  ) {
+    return "";
+  }
+
+  if (
+    bytes < 1024
+  ) {
+    return `${bytes} B`;
+  }
+
+  if (
+    bytes <
+    1024 * 1024
+  ) {
+    return `${(
+      bytes /
+      1024
+    ).toFixed(
+      1
+    )} KB`;
+  }
+
+  return `${(
+    bytes /
+    (
+      1024 *
+      1024
+    )
+  ).toFixed(
+    1
+  )} MB`;
+}
+
+// ======================================================
+// SMALL COMPONENTS
+// ======================================================
 
 function BrandBadge({
   source,
@@ -229,6 +398,7 @@ function Detail({
 }) {
   return (
     <div className="detail-row">
+
       <div className="detail-label">
         {label}
       </div>
@@ -239,6 +409,10 @@ function Detail({
     </div>
   );
 }
+
+// ======================================================
+// LOGIN
+// ======================================================
 
 function Login({
   onSignedIn,
@@ -266,7 +440,9 @@ function Login({
   ) {
     event.preventDefault();
 
-    if (!email.trim()) {
+    if (
+      !email.trim()
+    ) {
       return;
     }
 
@@ -328,7 +504,9 @@ function Login({
       );
 
     return () => {
-      listener.subscription.unsubscribe();
+      listener
+        .subscription
+        .unsubscribe();
     };
   }, [
     onSignedIn,
@@ -336,7 +514,9 @@ function Login({
 
   return (
     <div className="login-page">
+
       <div className="login-card">
+
         <div className="login-logo">
           CSG
         </div>
@@ -354,6 +534,7 @@ function Login({
             signIn
           }
         >
+
           <label>
             Work email
           </label>
@@ -366,7 +547,9 @@ function Login({
               event
             ) =>
               setEmail(
-                event.target.value
+                event
+                  .target
+                  .value
               )
             }
           />
@@ -374,7 +557,9 @@ function Login({
           <button
             type="submit"
             className="primary-button"
-            disabled={busy}
+            disabled={
+              busy
+            }
           >
             {busy
               ? "Sending…"
@@ -392,7 +577,20 @@ function Login({
   );
 }
 
+// ======================================================
+// APP
+// ======================================================
+
 function App() {
+  const editorRef =
+    useRef(null);
+
+  const fileInputRef =
+    useRef(null);
+
+  const imageInputRef =
+    useRef(null);
+
   const [
     session,
     setSession,
@@ -442,24 +640,6 @@ function App() {
     useState(null);
 
   const [
-    filter,
-    setFilter,
-  ] =
-    useState("all");
-
-  const [
-    brandFilter,
-    setBrandFilter,
-  ] =
-    useState("all");
-
-  const [
-    search,
-    setSearch,
-  ] =
-    useState("");
-
-  const [
     loadingTickets,
     setLoadingTickets,
   ] =
@@ -484,20 +664,20 @@ function App() {
     useState(false);
 
   const [
-    replyText,
-    setReplyText,
+    filter,
+    setFilter,
   ] =
-    useState("");
+    useState("all");
 
   const [
-    replyBusy,
-    setReplyBusy,
+    brandFilter,
+    setBrandFilter,
   ] =
-    useState(false);
+    useState("all");
 
   const [
-    replyNotice,
-    setReplyNotice,
+    search,
+    setSearch,
   ] =
     useState("");
 
@@ -512,6 +692,10 @@ function App() {
     setUpdateNotice,
   ] =
     useState("");
+
+  // ====================================================
+  // TAG STATE
+  // ====================================================
 
   const [
     tagInput,
@@ -537,12 +721,102 @@ function App() {
   ] =
     useState(false);
 
+  // ====================================================
+  // COMPOSER STATE
+  // ====================================================
+
+  const [
+    replyMode,
+    setReplyMode,
+  ] =
+    useState(
+      "reply"
+    );
+
+  const [
+    showReplyModeMenu,
+    setShowReplyModeMenu,
+  ] =
+    useState(false);
+
+  const [
+    showSendMenu,
+    setShowSendMenu,
+  ] =
+    useState(false);
+
+  const [
+    showCc,
+    setShowCc,
+  ] =
+    useState(false);
+
+  const [
+    showBcc,
+    setShowBcc,
+  ] =
+    useState(false);
+
+  const [
+    recipientTo,
+    setRecipientTo,
+  ] =
+    useState("");
+
+  const [
+    recipientCc,
+    setRecipientCc,
+  ] =
+    useState("");
+
+  const [
+    recipientBcc,
+    setRecipientBcc,
+  ] =
+    useState("");
+
+  const [
+    editorHtml,
+    setEditorHtml,
+  ] =
+    useState("");
+
+  const [
+    composerBusy,
+    setComposerBusy,
+  ] =
+    useState(false);
+
+  const [
+    composerNotice,
+    setComposerNotice,
+  ] =
+    useState("");
+
+  const [
+    pendingFiles,
+    setPendingFiles,
+  ] =
+    useState([]);
+
+  const [
+    uploadProgress,
+    setUploadProgress,
+  ] =
+    useState("");
+
+  // ====================================================
+  // AUTH
+  // ====================================================
+
   useEffect(() => {
     async function loadSession() {
       const {
         data,
       } =
-        await supabase.auth.getSession();
+        await supabase
+          .auth
+          .getSession();
 
       setSession(
         data.session
@@ -559,28 +833,38 @@ function App() {
       data:
         listener,
     } =
-      supabase.auth.onAuthStateChange(
-        (
-          _event,
-          nextSession
-        ) => {
-          setSession(
+      supabase
+        .auth
+        .onAuthStateChange(
+          (
+            _event,
             nextSession
-          );
-        }
-      );
+          ) => {
+            setSession(
+              nextSession
+            );
+          }
+        );
 
     return () => {
-      listener.subscription.unsubscribe();
+      listener
+        .subscription
+        .unsubscribe();
     };
   }, []);
+
+  // ====================================================
+  // TICKETS
+  // ====================================================
 
   const loadTickets =
     useCallback(
       async (
         preferredKey = null
       ) => {
-        if (!session) {
+        if (
+          !session
+        ) {
           return;
         }
 
@@ -610,13 +894,17 @@ function App() {
               {
                 ascending:
                   false,
+
                 nullsFirst:
                   false,
               }
             );
 
-        if (error) {
+        if (
+          error
+        ) {
           console.error(
+            "Ticket load error:",
             error
           );
 
@@ -673,7 +961,9 @@ function App() {
     );
 
   useEffect(() => {
-    if (session) {
+    if (
+      session
+    ) {
       loadTickets();
     }
   }, [
@@ -698,6 +988,10 @@ function App() {
       ]
     );
 
+  // ====================================================
+  // THREADS
+  // ====================================================
+
   const loadThreads =
     useCallback(
       async (
@@ -707,7 +1001,10 @@ function App() {
           !session ||
           !ticketKey
         ) {
-          setThreads([]);
+          setThreads(
+            []
+          );
+
           return;
         }
 
@@ -717,6 +1014,7 @@ function App() {
 
         const {
           data,
+          error,
         } =
           await supabase
             .from(
@@ -735,9 +1033,23 @@ function App() {
               }
             );
 
-        setThreads(
-          data || []
-        );
+        if (
+          error
+        ) {
+          console.error(
+            "Thread load error:",
+            error
+          );
+
+          setThreads(
+            []
+          );
+        } else {
+          setThreads(
+            data ||
+            []
+          );
+        }
 
         setLoadingThreads(
           false
@@ -749,7 +1061,9 @@ function App() {
     );
 
   useEffect(() => {
-    if (selectedKey) {
+    if (
+      selectedKey
+    ) {
       loadThreads(
         selectedKey
       );
@@ -758,6 +1072,10 @@ function App() {
     selectedKey,
     loadThreads,
   ]);
+
+  // ====================================================
+  // AGENTS
+  // ====================================================
 
   const loadAgents =
     useCallback(
@@ -768,7 +1086,10 @@ function App() {
           !session ||
           !source
         ) {
-          setAgents([]);
+          setAgents(
+            []
+          );
+
           return;
         }
 
@@ -778,6 +1099,7 @@ function App() {
 
         const {
           data,
+          error,
         } =
           await supabase
             .from(
@@ -802,9 +1124,23 @@ function App() {
               }
             );
 
-        setAgents(
-          data || []
-        );
+        if (
+          error
+        ) {
+          console.error(
+            "Agent load error:",
+            error
+          );
+
+          setAgents(
+            []
+          );
+        } else {
+          setAgents(
+            data ||
+            []
+          );
+        }
 
         setLoadingAgents(
           false
@@ -815,6 +1151,10 @@ function App() {
       ]
     );
 
+  // ====================================================
+  // TAGS
+  // ====================================================
+
   const loadTags =
     useCallback(
       async (
@@ -824,7 +1164,10 @@ function App() {
           !session ||
           !ticketKey
         ) {
-          setTags([]);
+          setTags(
+            []
+          );
+
           return;
         }
 
@@ -834,6 +1177,7 @@ function App() {
 
         const {
           data,
+          error,
         } =
           await supabase
             .from(
@@ -854,9 +1198,23 @@ function App() {
               }
             );
 
-        setTags(
-          data || []
-        );
+        if (
+          error
+        ) {
+          console.error(
+            "Tag load error:",
+            error
+          );
+
+          setTags(
+            []
+          );
+        } else {
+          setTags(
+            data ||
+            []
+          );
+        }
 
         setLoadingTags(
           false
@@ -876,7 +1234,10 @@ function App() {
           !session ||
           !source
         ) {
-          setTagCatalog([]);
+          setTagCatalog(
+            []
+          );
+
           return;
         }
 
@@ -907,16 +1268,21 @@ function App() {
               }
             );
 
-        if (error) {
+        if (
+          error
+        ) {
           console.error(
             "Tag catalog error:",
             error
           );
 
-          setTagCatalog([]);
+          setTagCatalog(
+            []
+          );
         } else {
           setTagCatalog(
-            data || []
+            data ||
+            []
           );
         }
       },
@@ -937,8 +1303,13 @@ function App() {
         selected.source
       );
     } else {
-      setAgents([]);
-      setTagCatalog([]);
+      setAgents(
+        []
+      );
+
+      setTagCatalog(
+        []
+      );
     }
   }, [
     selected?.source,
@@ -947,7 +1318,9 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (selectedKey) {
+    if (
+      selectedKey
+    ) {
       loadTags(
         selectedKey
       );
@@ -963,8 +1336,14 @@ function App() {
     loadTags,
   ]);
 
+  // ====================================================
+  // REALTIME
+  // ====================================================
+
   useEffect(() => {
-    if (!session) {
+    if (
+      !session
+    ) {
       return;
     }
 
@@ -976,21 +1355,28 @@ function App() {
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event:
+              "*",
+
             schema:
               "public",
+
             table:
               "tickets",
           },
-          () =>
-            loadTickets()
+          () => {
+            loadTickets();
+          }
         )
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event:
+              "*",
+
             schema:
               "public",
+
             table:
               "ticket_threads",
           },
@@ -1016,9 +1402,12 @@ function App() {
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event:
+              "*",
+
             schema:
               "public",
+
             table:
               "ticket_tags",
           },
@@ -1044,9 +1433,10 @@ function App() {
         .subscribe();
 
     return () => {
-      supabase.removeChannel(
-        channel
-      );
+      supabase
+        .removeChannel(
+          channel
+        );
     };
   }, [
     session,
@@ -1056,6 +1446,817 @@ function App() {
     loadTags,
   ]);
 
+  // ====================================================
+  // COMPOSER RECIPIENTS
+  // ====================================================
+
+  const latestThread =
+    useMemo(() => {
+      if (
+        threads.length ===
+        0
+      ) {
+        return null;
+      }
+
+      return (
+        threads[
+          threads.length -
+          1
+        ] ||
+        null
+      );
+    }, [
+      threads,
+    ]);
+
+  const detectedFromEmail =
+    useMemo(() => {
+      const outbound =
+        [...threads]
+          .reverse()
+          .find(
+            (
+              thread
+            ) =>
+              String(
+                thread.direction ||
+                  ""
+              )
+                .toLowerCase()
+                .includes(
+                  "out"
+                ) &&
+              thread.from_email
+          );
+
+      return (
+        outbound
+          ?.from_email ||
+        "Configured Zoho support address"
+      );
+    }, [
+      threads,
+    ]);
+
+  function calculateReplyAllCc() {
+    if (
+      !selected
+    ) {
+      return "";
+    }
+
+    const candidates =
+      [
+        ...splitAddresses(
+          latestThread
+            ?.from_email
+        ),
+
+        ...splitAddresses(
+          latestThread
+            ?.to_email
+        ),
+
+        ...splitAddresses(
+          latestThread
+            ?.cc
+        ),
+      ];
+
+    const excluded =
+      new Set(
+        [
+          selected
+            .contact_email,
+          detectedFromEmail,
+          session
+            ?.user
+            ?.email,
+        ]
+          .filter(Boolean)
+          .map(
+            extractEmail
+          )
+      );
+
+    return uniqueAddresses(
+      candidates
+    )
+      .filter(
+        (
+          value
+        ) =>
+          !excluded.has(
+            extractEmail(
+              value
+            )
+          )
+      )
+      .join(
+        ", "
+      );
+  }
+
+  const resetComposer =
+    useCallback(() => {
+      setReplyMode(
+        "reply"
+      );
+
+      setRecipientTo(
+        selected
+          ?.contact_email ||
+        ""
+      );
+
+      setRecipientCc(
+        ""
+      );
+
+      setRecipientBcc(
+        ""
+      );
+
+      setShowCc(
+        false
+      );
+
+      setShowBcc(
+        false
+      );
+
+      setEditorHtml(
+        ""
+      );
+
+      setPendingFiles(
+        []
+      );
+
+      setComposerNotice(
+        ""
+      );
+
+      setUploadProgress(
+        ""
+      );
+
+      if (
+        editorRef.current
+      ) {
+        editorRef.current.innerHTML =
+          "";
+      }
+    }, [
+      selected,
+    ]);
+
+  useEffect(() => {
+    resetComposer();
+  }, [
+    selectedKey,
+    resetComposer,
+  ]);
+
+  function changeReplyMode(
+    mode
+  ) {
+    setReplyMode(
+      mode
+    );
+
+    setShowReplyModeMenu(
+      false
+    );
+
+    setComposerNotice(
+      ""
+    );
+
+    if (
+      mode ===
+      "reply"
+    ) {
+      setRecipientTo(
+        selected
+          ?.contact_email ||
+        ""
+      );
+
+      setRecipientCc(
+        ""
+      );
+
+      setRecipientBcc(
+        ""
+      );
+
+      setShowCc(
+        false
+      );
+
+      setShowBcc(
+        false
+      );
+    }
+
+    if (
+      mode ===
+      "reply_all"
+    ) {
+      setRecipientTo(
+        selected
+          ?.contact_email ||
+        ""
+      );
+
+      const replyAllCc =
+        calculateReplyAllCc();
+
+      setRecipientCc(
+        replyAllCc
+      );
+
+      setShowCc(
+        true
+      );
+    }
+
+    if (
+      mode ===
+      "forward"
+    ) {
+      setRecipientTo(
+        ""
+      );
+
+      setRecipientCc(
+        ""
+      );
+
+      setRecipientBcc(
+        ""
+      );
+
+      setShowCc(
+        false
+      );
+
+      setShowBcc(
+        false
+      );
+    }
+  }
+
+  // ====================================================
+  // RICH TEXT COMMANDS
+  // ====================================================
+
+  function focusEditor() {
+    editorRef
+      .current
+      ?.focus();
+  }
+
+  function runEditorCommand(
+    command,
+    value = null
+  ) {
+    focusEditor();
+
+    document.execCommand(
+      command,
+      false,
+      value
+    );
+
+    setEditorHtml(
+      editorRef
+        .current
+        ?.innerHTML ||
+        ""
+    );
+  }
+
+  function addLink() {
+    const url =
+      window.prompt(
+        "Enter the link URL:"
+      );
+
+    if (
+      !url
+    ) {
+      return;
+    }
+
+    runEditorCommand(
+      "createLink",
+      url
+    );
+  }
+
+  // ====================================================
+  // ATTACHMENTS
+  // ====================================================
+
+  function addFiles(
+    fileList
+  ) {
+    const files =
+      Array.from(
+        fileList ||
+        []
+      );
+
+    if (
+      files.length ===
+      0
+    ) {
+      return;
+    }
+
+    setPendingFiles(
+      (
+        current
+      ) => {
+        const existing =
+          new Set(
+            current.map(
+              (
+                item
+              ) =>
+                `${item.name}-${item.size}-${item.lastModified}`
+            )
+          );
+
+        const additions =
+          files.filter(
+            (
+              file
+            ) =>
+              !existing.has(
+                `${file.name}-${file.size}-${file.lastModified}`
+              )
+          );
+
+        return [
+          ...current,
+          ...additions,
+        ];
+      }
+    );
+  }
+
+  function removePendingFile(
+    index
+  ) {
+    setPendingFiles(
+      (
+        current
+      ) =>
+        current.filter(
+          (
+            _,
+            itemIndex
+          ) =>
+            itemIndex !==
+            index
+        )
+    );
+  }
+
+  async function uploadAttachment(
+    file
+  ) {
+    const {
+      data:
+        sessionData,
+    } =
+      await supabase
+        .auth
+        .getSession();
+
+    const token =
+      sessionData
+        .session
+        ?.access_token;
+
+    if (
+      !token
+    ) {
+      throw new Error(
+        "Your session expired. Please sign in again."
+      );
+    }
+
+    const formData =
+      new FormData();
+
+    formData.append(
+      "ticket_key",
+      selected.ticket_key
+    );
+
+    formData.append(
+      "file",
+      file,
+      file.name
+    );
+
+    const response =
+      await fetch(
+        `${SUPABASE_URL}/functions/v1/upload-zoho-attachment`,
+        {
+          method:
+            "POST",
+
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
+
+            apikey:
+              SUPABASE_ANON_KEY,
+          },
+
+          body:
+            formData,
+        }
+      );
+
+    const raw =
+      await response.text();
+
+    let data =
+      {};
+
+    try {
+      data =
+        raw
+          ? JSON.parse(
+              raw
+            )
+          : {};
+    } catch {
+      data = {
+        raw,
+      };
+    }
+
+    if (
+      !response.ok ||
+      !data?.success
+    ) {
+      throw new Error(
+        data?.error ||
+        `Could not upload ${file.name}`
+      );
+    }
+
+    return data
+      .attachment;
+  }
+
+  // ====================================================
+  // SEND MESSAGE
+  // ====================================================
+
+  async function sendMessage(
+    sendAction =
+      "send"
+  ) {
+    if (
+      !selected ||
+      composerBusy
+    ) {
+      return;
+    }
+
+    const html =
+      editorRef
+        .current
+        ?.innerHTML ||
+      editorHtml;
+
+    const plainText =
+      stripHtml(
+        html
+      );
+
+    if (
+      !plainText
+    ) {
+      setComposerNotice(
+        "Write a message before sending."
+      );
+
+      return;
+    }
+
+    if (
+      !recipientTo.trim()
+    ) {
+      setComposerNotice(
+        replyMode ===
+        "forward"
+          ? "Add at least one forwarding recipient."
+          : "A recipient is required."
+      );
+
+      return;
+    }
+
+    setComposerBusy(
+      true
+    );
+
+    setComposerNotice(
+      ""
+    );
+
+    setShowSendMenu(
+      false
+    );
+
+    try {
+      const uploaded =
+        [];
+
+      for (
+        let index = 0;
+        index <
+        pendingFiles.length;
+        index++
+      ) {
+        const file =
+          pendingFiles[
+            index
+          ];
+
+        setUploadProgress(
+          `Uploading ${index + 1} of ${pendingFiles.length}: ${file.name}`
+        );
+
+        const attachment =
+          await uploadAttachment(
+            file
+          );
+
+        uploaded.push(
+          attachment
+        );
+      }
+
+      setUploadProgress(
+        pendingFiles.length
+          ? "Sending message…"
+          : ""
+      );
+
+      const {
+        data,
+        error,
+      } =
+        await supabase
+          .functions
+          .invoke(
+            "reply-to-zoho-ticket",
+            {
+              body: {
+                ticket_key:
+                  selected.ticket_key,
+
+                mode:
+                  replyMode,
+
+                send_action:
+                  sendAction,
+
+                content_html:
+                  html,
+
+                to:
+                  recipientTo,
+
+                cc:
+                  recipientCc,
+
+                bcc:
+                  recipientBcc,
+
+                attachment_ids:
+                  uploaded.map(
+                    (
+                      attachment
+                    ) =>
+                      attachment.id
+                  ),
+              },
+            }
+          );
+
+      if (
+        error ||
+        !data?.success
+      ) {
+        throw new Error(
+          data?.error ||
+          error?.message ||
+          "Could not send the message."
+        );
+      }
+
+      let successText =
+        "Message sent";
+
+      if (
+        sendAction ===
+        "send_close"
+      ) {
+        successText =
+          "Message sent and ticket closed";
+      }
+
+      if (
+        sendAction ===
+        "send_waiting"
+      ) {
+        successText =
+          "Message sent and ticket set to Waiting";
+      }
+
+      if (
+        sendAction ===
+        "send_on_hold"
+      ) {
+        successText =
+          "Message sent and ticket set to On Hold";
+      }
+
+      setComposerNotice(
+        successText
+      );
+
+      setEditorHtml(
+        ""
+      );
+
+      if (
+        editorRef.current
+      ) {
+        editorRef.current.innerHTML =
+          "";
+      }
+
+      setPendingFiles(
+        []
+      );
+
+      setUploadProgress(
+        ""
+      );
+
+      await loadThreads(
+        selected.ticket_key
+      );
+
+      await loadTickets(
+        selected.ticket_key
+      );
+
+      setTimeout(
+        () => {
+          setComposerNotice(
+            ""
+          );
+        },
+        2500
+      );
+    } catch (
+      error
+    ) {
+      setUploadProgress(
+        ""
+      );
+
+      setComposerNotice(
+        error instanceof
+        Error
+          ? error.message
+          : "Could not send the message."
+      );
+    } finally {
+      setComposerBusy(
+        false
+      );
+    }
+  }
+
+  // ====================================================
+  // UPDATE TICKET FIELD
+  // ====================================================
+
+  async function updateTicketField(
+    field,
+    value
+  ) {
+    if (
+      !selected ||
+      updateBusy
+    ) {
+      return;
+    }
+
+    setUpdateBusy(
+      true
+    );
+
+    setUpdateNotice(
+      ""
+    );
+
+    let finalValue =
+      value;
+
+    if (
+      field ===
+      "dueDate"
+    ) {
+      finalValue =
+        value
+          ? new Date(
+              `${value}T12:00:00`
+            ).toISOString()
+          : null;
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .functions
+        .invoke(
+          "update-zoho-ticket",
+          {
+            body: {
+              ticket_key:
+                selected.ticket_key,
+
+              changes: {
+                [field]:
+                  finalValue,
+              },
+            },
+          }
+        );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      setUpdateNotice(
+        `Could not update: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setUpdateBusy(
+        false
+      );
+
+      return;
+    }
+
+    setUpdateNotice(
+      "Saved"
+    );
+
+    await loadTickets(
+      selected.ticket_key
+    );
+
+    setTimeout(
+      () => {
+        setUpdateNotice(
+          ""
+        );
+      },
+      1800
+    );
+
+    setUpdateBusy(
+      false
+    );
+  }
+
+  // ====================================================
+  // TAG AUTOCOMPLETE
+  // ====================================================
+
   const suggestedTags =
     useMemo(() => {
       const needle =
@@ -1063,11 +2264,13 @@ function App() {
           .trim()
           .toLowerCase();
 
-      if (!needle) {
+      if (
+        !needle
+      ) {
         return [];
       }
 
-      const attachedNames =
+      const attached =
         new Set(
           tags.map(
             (
@@ -1076,7 +2279,9 @@ function App() {
               String(
                 tag.name ||
                   ""
-              ).toLowerCase()
+              )
+                .trim()
+                .toLowerCase()
           )
         );
 
@@ -1085,11 +2290,13 @@ function App() {
           (
             tag
           ) =>
-            !attachedNames.has(
+            !attached.has(
               String(
                 tag.name ||
                   ""
-              ).toLowerCase()
+              )
+                .trim()
+                .toLowerCase()
             )
         )
         .filter(
@@ -1122,7 +2329,9 @@ function App() {
           .trim()
           .toLowerCase();
 
-      if (!needle) {
+      if (
+        !needle
+      ) {
         return false;
       }
 
@@ -1133,7 +2342,9 @@ function App() {
           String(
             tag.name ||
               ""
-          ).toLowerCase() ===
+          )
+            .trim()
+            .toLowerCase() ===
           needle
       );
     }, [
@@ -1141,11 +2352,234 @@ function App() {
       tagInput,
     ]);
 
+  async function addTagByName(
+    name
+  ) {
+    if (
+      !selected ||
+      tagBusy ||
+      !name.trim()
+    ) {
+      return;
+    }
+
+    const cleanName =
+      name.trim();
+
+    const duplicate =
+      tags.some(
+        (
+          tag
+        ) =>
+          String(
+            tag.name ||
+              ""
+          )
+            .toLowerCase() ===
+          cleanName
+            .toLowerCase()
+      );
+
+    if (
+      duplicate
+    ) {
+      setTagNotice(
+        "This ticket already has that tag."
+      );
+
+      return;
+    }
+
+    setTagBusy(
+      true
+    );
+
+    setTagNotice(
+      ""
+    );
+
+    setShowTagSuggestions(
+      false
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .functions
+        .invoke(
+          "manage-zoho-ticket-tags",
+          {
+            body: {
+              ticket_key:
+                selected.ticket_key,
+
+              action:
+                "add",
+
+              tag_name:
+                cleanName,
+            },
+          }
+        );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      setTagNotice(
+        `Could not add tag: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setTagBusy(
+        false
+      );
+
+      return;
+    }
+
+    setTagInput(
+      ""
+    );
+
+    setTagNotice(
+      exactTagMatch
+        ? "Tag added"
+        : "Tag created and added"
+    );
+
+    await loadTags(
+      selected.ticket_key
+    );
+
+    await loadTagCatalog(
+      selected.source
+    );
+
+    setTimeout(
+      () => {
+        setTagNotice(
+          ""
+        );
+      },
+      1800
+    );
+
+    setTagBusy(
+      false
+    );
+  }
+
+  async function addTag(
+    event
+  ) {
+    event.preventDefault();
+
+    await addTagByName(
+      tagInput
+    );
+  }
+
+  async function removeTag(
+    tag
+  ) {
+    if (
+      !selected ||
+      !tag?.zoho_tag_id ||
+      tagBusy
+    ) {
+      return;
+    }
+
+    setTagBusy(
+      true
+    );
+
+    setTagNotice(
+      ""
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .functions
+        .invoke(
+          "manage-zoho-ticket-tags",
+          {
+            body: {
+              ticket_key:
+                selected.ticket_key,
+
+              action:
+                "remove",
+
+              tag_id:
+                tag.zoho_tag_id,
+
+              tag_name:
+                tag.name,
+            },
+          }
+        );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      setTagNotice(
+        `Could not remove tag: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setTagBusy(
+        false
+      );
+
+      return;
+    }
+
+    setTagNotice(
+      "Tag removed"
+    );
+
+    await loadTags(
+      selected.ticket_key
+    );
+
+    setTimeout(
+      () => {
+        setTagNotice(
+          ""
+        );
+      },
+      1800
+    );
+
+    setTagBusy(
+      false
+    );
+  }
+
+  // ====================================================
+  // FILTERS
+  // ====================================================
+
   const filteredTickets =
     useMemo(() => {
-      let rows = [
-        ...tickets,
-      ];
+      let rows =
+        [
+          ...tickets,
+        ];
 
       if (
         brandFilter !==
@@ -1162,7 +2596,8 @@ function App() {
       }
 
       if (
-        filter === "all"
+        filter ===
+        "all"
       ) {
         rows =
           rows.filter(
@@ -1175,7 +2610,8 @@ function App() {
       }
 
       if (
-        filter === "open"
+        filter ===
+        "open"
       ) {
         rows =
           rows.filter(
@@ -1202,7 +2638,8 @@ function App() {
       }
 
       if (
-        filter === "onhold"
+        filter ===
+        "onhold"
       ) {
         rows =
           rows.filter(
@@ -1243,7 +2680,8 @@ function App() {
       }
 
       if (
-        filter === "closed"
+        filter ===
+        "closed"
       ) {
         rows =
           rows.filter(
@@ -1281,10 +2719,13 @@ function App() {
       }
 
       if (
-        filter === "mine"
+        filter ===
+        "mine"
       ) {
-        const email =
-          session?.user?.email
+        const userEmail =
+          session
+            ?.user
+            ?.email
             ?.toLowerCase();
 
         rows =
@@ -1296,7 +2737,7 @@ function App() {
                 ticket.assignee_email ||
                   ""
               ).toLowerCase() ===
-                email &&
+                userEmail &&
               ticket.status !==
                 "Closed"
           );
@@ -1314,24 +2755,32 @@ function App() {
           rows.filter(
             (
               ticket
-            ) =>
-              [
-                ticket.subject,
-                ticket.ticket_number,
-                ticket.contact_name,
-                ticket.contact_email,
-                ticket.assignee_name,
-                ticket.status,
-                ticket.source,
-              ]
-                .filter(
-                  Boolean
-                )
-                .join(" ")
-                .toLowerCase()
+            ) => {
+              const haystack =
+                [
+                  ticket.subject,
+                  ticket.ticket_number,
+                  ticket.contact_name,
+                  ticket.contact_email,
+                  ticket.assignee_name,
+                  ticket.assignee_email,
+                  ticket.status,
+                  ticket.source,
+                  ticket.description,
+                ]
+                  .filter(
+                    Boolean
+                  )
+                  .join(
+                    " "
+                  )
+                  .toLowerCase();
+
+              return haystack
                 .includes(
                   needle
-                )
+                );
+            }
           );
       }
 
@@ -1345,515 +2794,137 @@ function App() {
     ]);
 
   const counts =
-    useMemo(() => {
-      const email =
-        session?.user?.email
-          ?.toLowerCase();
+  useMemo(() => {
+    const userEmail =
+      session
+        ?.user
+        ?.email
+        ?.toLowerCase();
 
-      return {
-        active:
-          tickets.filter(
+    const countTickets =
+      brandFilter ===
+      "all"
+        ? tickets
+        : tickets.filter(
             (
               ticket
             ) =>
-              ticket.status !==
-              "Closed"
-          ).length,
+              ticket.source ===
+              brandFilter
+          );
 
-        mine:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status !==
-                "Closed" &&
-              String(
-                ticket.assignee_email ||
-                  ""
-              ).toLowerCase() ===
-                email
-          ).length,
-
-        open:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-              "Open"
-          ).length,
-
-        inprogress:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-              "In Progress"
-          ).length,
-
-        onhold:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-              "On Hold"
-          ).length,
-
-        waiting:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-              "Waiting"
-          ).length,
-
-        escalated:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-              "Escalated"
-          ).length,
-
-        closed:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-              "Closed"
-          ).length,
-
-        overdue:
-          tickets.filter(
-            isOverdue
-          ).length,
-
-        unassigned:
-          tickets.filter(
-            (
-              ticket
-            ) =>
-              !ticket.assignee_id &&
-              ticket.status !==
-                "Closed"
-          ).length,
-      };
-    }, [
-      tickets,
-      session,
-    ]);
-
-  async function updateTicketField(
-    field,
-    value
-  ) {
-    if (
-      !selected ||
-      updateBusy
-    ) {
-      return;
-    }
-
-    setUpdateBusy(true);
-    setUpdateNotice("");
-
-    let finalValue =
-      value;
-
-    if (
-      field === "dueDate"
-    ) {
-      finalValue =
-        value
-          ? new Date(
-              `${value}T12:00:00`
-            ).toISOString()
-          : null;
-    }
-
-    const {
-      data,
-      error,
-    } =
-      await supabase.functions.invoke(
-        "update-zoho-ticket",
-        {
-          body: {
-            ticket_key:
-              selected.ticket_key,
-
-            changes: {
-              [field]:
-                finalValue,
-            },
-          },
-        }
-      );
-
-    if (
-      error ||
-      !data?.success
-    ) {
-      setUpdateNotice(
-        `Could not update: ${
-          data?.error ||
-          error?.message ||
-          "Unknown error"
-        }`
-      );
-
-      setUpdateBusy(false);
-      return;
-    }
-
-    setUpdateNotice("Saved");
-
-    await loadTickets(
-      selected.ticket_key
-    );
-
-    setTimeout(
-      () =>
-        setUpdateNotice(
-          ""
-        ),
-      1800
-    );
-
-    setUpdateBusy(false);
-  }
-
-  async function addTagByName(
-    name
-  ) {
-    if (
-      !selected ||
-      tagBusy ||
-      !name.trim()
-    ) {
-      return;
-    }
-
-    const cleanName =
-      name.trim();
-
-    const duplicate =
-      tags.some(
-        (
-          tag
-        ) =>
-          String(
-            tag.name ||
-              ""
-          ).toLowerCase() ===
-          cleanName.toLowerCase()
-      );
-
-    if (duplicate) {
-      setTagNotice(
-        "This ticket already has that tag."
-      );
-
-      return;
-    }
-
-    setTagBusy(true);
-    setTagNotice("");
-    setShowTagSuggestions(
-      false
-    );
-
-    const {
-      data,
-      error,
-    } =
-      await supabase.functions.invoke(
-        "manage-zoho-ticket-tags",
-        {
-          body: {
-            ticket_key:
-              selected.ticket_key,
-
-            action: "add",
-
-            tag_name:
-              cleanName,
-          },
-        }
-      );
-
-    if (
-      error ||
-      !data?.success
-    ) {
-      setTagNotice(
-        `Could not add tag: ${
-          data?.error ||
-          error?.message ||
-          "Unknown error"
-        }`
-      );
-
-      setTagBusy(false);
-      return;
-    }
-
-    setTagInput("");
-    setTagNotice(
-      exactTagMatch
-        ? "Tag added"
-        : "Tag created and added"
-    );
-
-    await loadTags(
-      selected.ticket_key
-    );
-
-    /*
-      Also add the newly-created/associated tag
-      to our autocomplete catalog.
-    */
-    const {
-      data:
-        refreshedTicketTags,
-    } =
-      await supabase
-        .from(
-          "ticket_tags"
-        )
-        .select(
-          "zoho_tag_id, name, tag_type"
-        )
-        .eq(
-          "ticket_key",
-          selected.ticket_key
-        );
-
-    const matched =
-      (
-        refreshedTicketTags ||
-        []
-      ).find(
-        (
-          tag
-        ) =>
-          String(
-            tag.name
-          ).toLowerCase() ===
-          cleanName.toLowerCase()
-      );
-
-    /*
-      We cannot write to zoho_tags from the browser because
-      RLS is intentionally read-only. The catalog will be
-      refreshed server-side as more tickets sync. We do,
-      however, temporarily add it to local suggestions so
-      the UI knows about it immediately.
-    */
-    if (
-      matched &&
-      !tagCatalog.some(
-        (
-          tag
-        ) =>
-          tag.zoho_tag_id ===
-          matched.zoho_tag_id
-      )
-    ) {
-      setTagCatalog(
-        (
-          current
-        ) => [
-          ...current,
-          matched,
-        ].sort(
+    return {
+      active:
+        countTickets.filter(
           (
-            a,
-            b
+            ticket
           ) =>
+            ticket.status !==
+            "Closed"
+        ).length,
+
+      mine:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status !==
+              "Closed" &&
             String(
-              a.name
-            ).localeCompare(
-              String(
-                b.name
-              )
-            )
-        )
-      );
-    }
+              ticket.assignee_email ||
+                ""
+            ).toLowerCase() ===
+              userEmail
+        ).length,
 
-    setTimeout(
-      () =>
-        setTagNotice(
-          ""
-        ),
-      1800
-    );
+      open:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status ===
+            "Open"
+        ).length,
 
-    setTagBusy(false);
-  }
+      inprogress:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status ===
+            "In Progress"
+        ).length,
 
-  async function addTag(
-    event
-  ) {
-    event.preventDefault();
+      onhold:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status ===
+            "On Hold"
+        ).length,
 
-    await addTagByName(
-      tagInput
-    );
-  }
+      waiting:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status ===
+            "Waiting"
+        ).length,
 
-  async function removeTag(
-    tag
-  ) {
-    if (
-      !selected ||
-      !tag?.zoho_tag_id ||
-      tagBusy
-    ) {
-      return;
-    }
+      escalated:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status ===
+            "Escalated"
+        ).length,
 
-    setTagBusy(true);
-    setTagNotice("");
+      closed:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            ticket.status ===
+            "Closed"
+        ).length,
 
-    const {
-      data,
-      error,
-    } =
-      await supabase.functions.invoke(
-        "manage-zoho-ticket-tags",
-        {
-          body: {
-            ticket_key:
-              selected.ticket_key,
+      overdue:
+        countTickets.filter(
+          isOverdue
+        ).length,
 
-            action:
-              "remove",
-
-            tag_id:
-              tag.zoho_tag_id,
-
-            tag_name:
-              tag.name,
-          },
-        }
-      );
-
-    if (
-      error ||
-      !data?.success
-    ) {
-      setTagNotice(
-        `Could not remove tag: ${
-          data?.error ||
-          error?.message ||
-          "Unknown error"
-        }`
-      );
-
-      setTagBusy(false);
-      return;
-    }
-
-    setTagNotice(
-      "Tag removed"
-    );
-
-    await loadTags(
-      selected.ticket_key
-    );
-
-    setTimeout(
-      () =>
-        setTagNotice(
-          ""
-        ),
-      1800
-    );
-
-    setTagBusy(false);
-  }
-
-  async function sendReply() {
-    if (
-      !selected ||
-      !replyText.trim() ||
-      replyBusy
-    ) {
-      return;
-    }
-
-    setReplyBusy(true);
-    setReplyNotice("");
-
-    const {
-      data,
-      error,
-    } =
-      await supabase.functions.invoke(
-        "reply-to-zoho-ticket",
-        {
-          body: {
-            ticket_key:
-              selected.ticket_key,
-
-            content:
-              replyText.trim(),
-          },
-        }
-      );
-
-    if (
-      error ||
-      !data?.success
-    ) {
-      setReplyNotice(
-        `Could not send: ${
-          data?.error ||
-          error?.message ||
-          "Unknown error"
-        }`
-      );
-
-      setReplyBusy(false);
-      return;
-    }
-
-    setReplyText("");
-    setReplyNotice(
-      "Reply sent"
-    );
-
-    await loadThreads(
-      selected.ticket_key
-    );
-
-    await loadTickets(
-      selected.ticket_key
-    );
-
-    setTimeout(
-      () =>
-        setReplyNotice(
-          ""
-        ),
-      1800
-    );
-
-    setReplyBusy(false);
-  }
+      unassigned:
+        countTickets.filter(
+          (
+            ticket
+          ) =>
+            !ticket.assignee_id &&
+            ticket.status !==
+              "Closed"
+        ).length,
+    };
+  }, [
+    tickets,
+    session,
+    brandFilter,
+  ]);
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await supabase
+      .auth
+      .signOut();
   }
 
-  if (authLoading) {
+  // ====================================================
+  // AUTH UI
+  // ====================================================
+
+  if (
+    authLoading
+  ) {
     return (
       <div className="full-page-loading">
         Loading…
@@ -1861,7 +2932,9 @@ function App() {
     );
   }
 
-  if (!session) {
+  if (
+    !session
+  ) {
     return (
       <Login
         onSignedIn={
@@ -1880,12 +2953,21 @@ function App() {
       "Closed",
     ];
 
+  // ====================================================
+  // UI
+  // ====================================================
+
   return (
     <div className="app-shell">
+
+      {/* ================================================= */}
+      {/* SIDEBAR */}
+      {/* ================================================= */}
 
       <aside className="sidebar">
 
         <div className="sidebar-header">
+
           <div className="app-mark">
             CSG
           </div>
@@ -1902,6 +2984,7 @@ function App() {
         </div>
 
         <div className="sidebar-section">
+
           <div className="sidebar-label">
             MY WORK
           </div>
@@ -1963,6 +3046,7 @@ function App() {
         </div>
 
         <div className="sidebar-section">
+
           <div className="sidebar-label">
             STATUS
           </div>
@@ -2039,6 +3123,7 @@ function App() {
         </div>
 
         <div className="sidebar-section">
+
           <div className="sidebar-label">
             BRANDS
           </div>
@@ -2099,6 +3184,7 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
+
           <div className="user-email">
             {
               session.user
@@ -2117,9 +3203,14 @@ function App() {
         </div>
       </aside>
 
+      {/* ================================================= */}
+      {/* TICKET LIST */}
+      {/* ================================================= */}
+
       <section className="ticket-column">
 
         <div className="ticket-column-header">
+
           <div>
             <h1>
               Tickets
@@ -2135,15 +3226,21 @@ function App() {
         </div>
 
         <div className="search-wrap">
+
           <input
             className="search-input"
+            type="search"
             placeholder="Search tickets…"
-            value={search}
+            value={
+              search
+            }
             onChange={(
               event
             ) =>
               setSearch(
-                event.target.value
+                event
+                  .target
+                  .value
               )
             }
           />
@@ -2156,6 +3253,14 @@ function App() {
               0 && (
               <div className="empty-state">
                 Loading tickets…
+              </div>
+            )}
+
+          {!loadingTickets &&
+            filteredTickets.length ===
+              0 && (
+              <div className="empty-state">
+                No tickets match this view.
               </div>
             )}
 
@@ -2179,7 +3284,9 @@ function App() {
                   )
                 }
               >
+
                 <div className="ticket-row-top">
+
                   <BrandBadge
                     source={
                       ticket.source
@@ -2213,6 +3320,7 @@ function App() {
                 </div>
 
                 <div className="ticket-row-bottom">
+
                   <StatusBadge
                     status={
                       ticket.status
@@ -2238,18 +3346,33 @@ function App() {
         </div>
       </section>
 
+      {/* ================================================= */}
+      {/* CONVERSATION */}
+      {/* ================================================= */}
+
       <main className="conversation-column">
 
         {!selected ? (
           <div className="conversation-empty">
-            Select a ticket
+
+            <div>
+              <h2>
+                Select a ticket
+              </h2>
+
+              <p>
+                Choose a ticket to view its conversation.
+              </p>
+            </div>
           </div>
         ) : (
           <>
             <header className="conversation-header">
 
               <div className="conversation-heading">
+
                 <div className="conversation-meta">
+
                   <BrandBadge
                     source={
                       selected.source
@@ -2296,7 +3419,9 @@ function App() {
 
               {selected.description && (
                 <article className="original-message">
+
                   <div className="message-header">
+
                     <div>
                       <div className="message-author">
                         {selected.contact_name ||
@@ -2332,124 +3457,1063 @@ function App() {
                 </div>
               )}
 
-              {threads.map(
-                (
-                  thread
-                ) => {
-                  const outbound =
-                    String(
-                      thread.direction ||
-                        ""
-                    )
-                      .toLowerCase()
-                      .includes(
-                        "out"
-                      );
+              {!loadingThreads &&
+                threads.map(
+                  (
+                    thread
+                  ) => {
+                    const outbound =
+                      String(
+                        thread.direction ||
+                          ""
+                      )
+                        .toLowerCase()
+                        .includes(
+                          "out"
+                        );
 
-                  return (
-                    <article
-                      key={
-                        thread.thread_key ||
-                        thread.id
-                      }
-                      className={`thread-message ${
-                        outbound
-                          ? "outbound"
-                          : "inbound"
-                      }`}
-                    >
-                      <div className="message-header">
-                        <div>
-                          <div className="message-author">
-                            {thread.author_name ||
-                              thread.author_email ||
-                              "Message"}
+                    const attachments =
+                      Array.isArray(
+                        thread.attachments
+                      )
+                        ? thread.attachments
+                        : [];
+
+                    return (
+                      <article
+                        key={
+                          thread.thread_key ||
+                          thread.id
+                        }
+                        className={`thread-message ${
+                          outbound
+                            ? "outbound"
+                            : "inbound"
+                        }`}
+                      >
+
+                        <div className="message-header">
+
+                          <div>
+                            <div className="message-author">
+                              {thread.author_name ||
+                                thread.author_email ||
+                                (outbound
+                                  ? "Team"
+                                  : "Requester")}
+                            </div>
+
+                            {thread.author_email && (
+                              <div className="message-email">
+                                {
+                                  thread.author_email
+                                }
+                              </div>
+                            )}
                           </div>
 
-                          {thread.author_email && (
-                            <div className="message-email">
-                              {
-                                thread.author_email
-                              }
-                            </div>
-                          )}
+                          <span className="message-time">
+                            {formatDateTime(
+                              thread.created_at_zoho
+                            )}
+                          </span>
                         </div>
 
-                        <span className="message-time">
-                          {formatDateTime(
-                            thread.created_at_zoho
-                          )}
-                        </span>
-                      </div>
+                        {thread.content_html ? (
+                          <div
+                            className="message-body"
+                            dangerouslySetInnerHTML={{
+                              __html:
+                                thread.content_html,
+                            }}
+                          />
+                        ) : (
+                          <div className="message-body text-message">
+                            {thread.content_text ||
+                              thread.summary ||
+                              ""}
+                          </div>
+                        )}
 
-                      {thread.content_html ? (
-                        <div
-                          className="message-body"
-                          dangerouslySetInnerHTML={{
-                            __html:
-                              thread.content_html,
-                          }}
-                        />
-                      ) : (
-                        <div className="message-body text-message">
-                          {thread.content_text ||
-                            thread.summary ||
-                            ""}
-                        </div>
-                      )}
-                    </article>
-                  );
-                }
-              )}
+                        {attachments.length >
+                          0 && (
+                          <div className="existing-attachments">
+
+                            {attachments.map(
+                              (
+                                attachment,
+                                index
+                              ) => (
+                                <div
+                                  className="existing-attachment"
+                                  key={
+                                    attachment.id ||
+                                    `${attachment.name}-${index}`
+                                  }
+                                >
+                                  <span className="attachment-icon">
+                                    📎
+                                  </span>
+
+                                  <span className="existing-attachment-name">
+                                    {attachment.name ||
+                                      "Attachment"}
+                                  </span>
+
+                                  {attachment.size && (
+                                    <span className="existing-attachment-size">
+                                      {formatFileSize(
+                                        attachment.size
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  }
+                )}
             </div>
 
-            <div className="composer">
-              <div className="composer-toolbar">
-                <button className="composer-mode">
-                  Reply
+            {/* ================================================= */}
+            {/* RICH COMPOSER */}
+            {/* ================================================= */}
+
+            <div className="rich-composer">
+
+              {/* MODE */}
+
+              <div className="composer-mode-row">
+
+                <div className="composer-dropdown-wrap">
+
+                  <button
+                    type="button"
+                    className="composer-mode-button"
+                    onClick={() =>
+                      setShowReplyModeMenu(
+                        (
+                          current
+                        ) =>
+                          !current
+                      )
+                    }
+                  >
+                    {replyMode ===
+                    "reply"
+                      ? "Reply"
+                      : replyMode ===
+                        "reply_all"
+                      ? "Reply All"
+                      : "Forward"}
+
+                    <span className="dropdown-chevron">
+                      ▾
+                    </span>
+                  </button>
+
+                  {showReplyModeMenu && (
+                    <div className="composer-dropdown-menu">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          changeReplyMode(
+                            "reply"
+                          )
+                        }
+                      >
+                        <strong>
+                          Reply
+                        </strong>
+
+                        <span>
+                          Reply to the requester
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          changeReplyMode(
+                            "reply_all"
+                          )
+                        }
+                      >
+                        <strong>
+                          Reply All
+                        </strong>
+
+                        <span>
+                          Include other participants
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          changeReplyMode(
+                            "forward"
+                          )
+                        }
+                      >
+                        <strong>
+                          Forward
+                        </strong>
+
+                        <span>
+                          Send this conversation to someone else
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="composer-top-actions">
+
+                  {!showCc && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowCc(
+                          true
+                        )
+                      }
+                    >
+                      Cc
+                    </button>
+                  )}
+
+                  {!showBcc && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowBcc(
+                          true
+                        )
+                      }
+                    >
+                      Bcc
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* RECIPIENTS */}
+
+              <div className="recipient-section">
+
+                <div className="recipient-row">
+
+                  <div className="recipient-label">
+                    From
+                  </div>
+
+                  <div className="recipient-readonly">
+                    {detectedFromEmail}
+                  </div>
+                </div>
+
+                <div className="recipient-row">
+
+                  <div className="recipient-label">
+                    To
+                  </div>
+
+                  <input
+                    type="text"
+                    className="recipient-input"
+                    value={
+                      recipientTo
+                    }
+                    placeholder={
+                      replyMode ===
+                      "forward"
+                        ? "Enter recipient email…"
+                        : "Recipient"
+                    }
+                    disabled={
+                      composerBusy
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setRecipientTo(
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                  />
+                </div>
+
+                {showCc && (
+                  <div className="recipient-row">
+
+                    <div className="recipient-label">
+                      Cc
+                    </div>
+
+                    <input
+                      type="text"
+                      className="recipient-input"
+                      value={
+                        recipientCc
+                      }
+                      placeholder="Add CC recipients…"
+                      disabled={
+                        composerBusy
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setRecipientCc(
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+
+                    <button
+                      type="button"
+                      className="recipient-remove"
+                      onClick={() => {
+                        setRecipientCc(
+                          ""
+                        );
+
+                        setShowCc(
+                          false
+                        );
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {showBcc && (
+                  <div className="recipient-row">
+
+                    <div className="recipient-label">
+                      Bcc
+                    </div>
+
+                    <input
+                      type="text"
+                      className="recipient-input"
+                      value={
+                        recipientBcc
+                      }
+                      placeholder="Add BCC recipients…"
+                      disabled={
+                        composerBusy
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setRecipientBcc(
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+
+                    <button
+                      type="button"
+                      className="recipient-remove"
+                      onClick={() => {
+                        setRecipientBcc(
+                          ""
+                        );
+
+                        setShowBcc(
+                          false
+                        );
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* TOOLBAR */}
+
+              <div className="rich-toolbar">
+
+                <button
+                  type="button"
+                  title="Undo"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "undo"
+                    );
+                  }}
+                >
+                  ↶
+                </button>
+
+                <button
+                  type="button"
+                  title="Redo"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "redo"
+                    );
+                  }}
+                >
+                  ↷
+                </button>
+
+                <div className="toolbar-divider" />
+
+                <button
+                  type="button"
+                  className="toolbar-bold"
+                  title="Bold"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "bold"
+                    );
+                  }}
+                >
+                  B
+                </button>
+
+                <button
+                  type="button"
+                  className="toolbar-italic"
+                  title="Italic"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "italic"
+                    );
+                  }}
+                >
+                  I
+                </button>
+
+                <button
+                  type="button"
+                  className="toolbar-underline"
+                  title="Underline"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "underline"
+                    );
+                  }}
+                >
+                  U
+                </button>
+
+                <button
+                  type="button"
+                  className="toolbar-strike"
+                  title="Strikethrough"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "strikeThrough"
+                    );
+                  }}
+                >
+                  S
+                </button>
+
+                <div className="toolbar-divider" />
+
+                <select
+                  className="toolbar-select"
+                  title="Font size"
+                  defaultValue="3"
+                  onChange={(
+                    event
+                  ) =>
+                    runEditorCommand(
+                      "fontSize",
+                      event
+                        .target
+                        .value
+                    )
+                  }
+                >
+                  <option value="2">
+                    Small
+                  </option>
+
+                  <option value="3">
+                    Normal
+                  </option>
+
+                  <option value="4">
+                    Large
+                  </option>
+
+                  <option value="5">
+                    Larger
+                  </option>
+                </select>
+
+                <label
+                  className="toolbar-color"
+                  title="Text color"
+                >
+                  A
+
+                  <input
+                    type="color"
+                    defaultValue="#333333"
+                    onChange={(
+                      event
+                    ) =>
+                      runEditorCommand(
+                        "foreColor",
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                  />
+                </label>
+
+                <label
+                  className="toolbar-highlight"
+                  title="Highlight"
+                >
+                  ▬
+
+                  <input
+                    type="color"
+                    defaultValue="#fff2a8"
+                    onChange={(
+                      event
+                    ) =>
+                      runEditorCommand(
+                        "hiliteColor",
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                  />
+                </label>
+
+                <div className="toolbar-divider" />
+
+                <button
+                  type="button"
+                  title="Align left"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "justifyLeft"
+                    );
+                  }}
+                >
+                  ≡
+                </button>
+
+                <button
+                  type="button"
+                  title="Align center"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "justifyCenter"
+                    );
+                  }}
+                >
+                  ≣
+                </button>
+
+                <button
+                  type="button"
+                  title="Align right"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "justifyRight"
+                    );
+                  }}
+                >
+                  ☷
+                </button>
+
+                <div className="toolbar-divider" />
+
+                <button
+                  type="button"
+                  title="Bulleted list"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "insertUnorderedList"
+                    );
+                  }}
+                >
+                  •≡
+                </button>
+
+                <button
+                  type="button"
+                  title="Numbered list"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "insertOrderedList"
+                    );
+                  }}
+                >
+                  1≡
+                </button>
+
+                <button
+                  type="button"
+                  title="Outdent"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "outdent"
+                    );
+                  }}
+                >
+                  ⇤
+                </button>
+
+                <button
+                  type="button"
+                  title="Indent"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "indent"
+                    );
+                  }}
+                >
+                  ⇥
+                </button>
+
+                <div className="toolbar-divider" />
+
+                <button
+                  type="button"
+                  title="Insert link"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    addLink();
+                  }}
+                >
+                  🔗
+                </button>
+
+                <button
+                  type="button"
+                  title="Remove formatting"
+                  onMouseDown={(
+                    event
+                  ) => {
+                    event.preventDefault();
+
+                    runEditorCommand(
+                      "removeFormat"
+                    );
+                  }}
+                >
+                  Tx
                 </button>
               </div>
 
-              <textarea
-                placeholder="Write a reply…"
-                value={
-                  replyText
+              {/* EDITOR */}
+
+              <div
+                ref={
+                  editorRef
                 }
-                onChange={(
+                className="rich-editor"
+                contentEditable={
+                  !composerBusy
+                }
+                suppressContentEditableWarning
+                data-placeholder={
+                  replyMode ===
+                  "forward"
+                    ? "Add a message to your forwarded email…"
+                    : "Write your reply…"
+                }
+                onInput={(
                   event
                 ) =>
-                  setReplyText(
-                    event.target.value
+                  setEditorHtml(
+                    event
+                      .currentTarget
+                      .innerHTML
                   )
                 }
               />
 
-              <div className="composer-footer">
-                <div className="composer-notice">
-                  {
-                    replyNotice
-                  }
+              {/* ATTACHMENTS */}
+
+              {pendingFiles.length >
+                0 && (
+                <div className="pending-attachments">
+
+                  {pendingFiles.map(
+                    (
+                      file,
+                      index
+                    ) => (
+                      <div
+                        className="pending-attachment"
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                      >
+
+                        <div className="pending-file-icon">
+                          {file.type
+                            ?.startsWith(
+                              "image/"
+                            )
+                            ? "🖼"
+                            : "📎"}
+                        </div>
+
+                        <div className="pending-file-meta">
+
+                          <div className="pending-file-name">
+                            {
+                              file.name
+                            }
+                          </div>
+
+                          <div className="pending-file-size">
+                            {formatFileSize(
+                              file.size
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="pending-file-remove"
+                          disabled={
+                            composerBusy
+                          }
+                          onClick={() =>
+                            removePendingFile(
+                              index
+                            )
+                          }
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              {/* FOOTER */}
+
+              <div className="rich-composer-footer">
+
+                <div className="composer-footer-left">
+
+                  <input
+                    ref={
+                      fileInputRef
+                    }
+                    type="file"
+                    multiple
+                    className="hidden-file-input"
+                    onChange={(
+                      event
+                    ) => {
+                      addFiles(
+                        event
+                          .target
+                          .files
+                      );
+
+                      event.target.value =
+                        "";
+                    }}
+                  />
+
+                  <input
+                    ref={
+                      imageInputRef
+                    }
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden-file-input"
+                    onChange={(
+                      event
+                    ) => {
+                      addFiles(
+                        event
+                          .target
+                          .files
+                      );
+
+                      event.target.value =
+                        "";
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    className="composer-icon-button"
+                    title="Attach files"
+                    disabled={
+                      composerBusy
+                    }
+                    onClick={() =>
+                      fileInputRef
+                        .current
+                        ?.click()
+                    }
+                  >
+                    📎
+                  </button>
+
+                  <button
+                    type="button"
+                    className="composer-icon-button"
+                    title="Attach images"
+                    disabled={
+                      composerBusy
+                    }
+                    onClick={() =>
+                      imageInputRef
+                        .current
+                        ?.click()
+                    }
+                  >
+                    🖼
+                  </button>
+
+                  <button
+                    type="button"
+                    className="close-ticket-button"
+                    disabled={
+                      composerBusy ||
+                      selected.status ===
+                        "Closed"
+                    }
+                    onClick={() =>
+                      updateTicketField(
+                        "status",
+                        "Closed"
+                      )
+                    }
+                  >
+                    Close ticket
+                  </button>
+
+                  {(uploadProgress ||
+                    composerNotice) && (
+                    <div
+                      className={`composer-status ${
+                        composerNotice
+                          ?.toLowerCase()
+                          .includes(
+                            "could"
+                          ) ||
+                        composerNotice
+                          ?.toLowerCase()
+                          .includes(
+                            "required"
+                          ) ||
+                        composerNotice
+                          ?.toLowerCase()
+                          .includes(
+                            "expired"
+                          )
+                          ? "error"
+                          : ""
+                      }`}
+                    >
+                      {uploadProgress ||
+                        composerNotice}
+                    </div>
+                  )}
                 </div>
 
-                <button
-                  className="send-button"
-                  disabled={
-                    replyBusy ||
-                    !replyText.trim()
-                  }
-                  onClick={
-                    sendReply
-                  }
-                >
-                  {replyBusy
-                    ? "Sending…"
-                    : "Send reply"}
-                </button>
+                <div className="send-split">
+
+                  <button
+                    type="button"
+                    className="send-main-button"
+                    disabled={
+                      composerBusy
+                    }
+                    onClick={() =>
+                      sendMessage(
+                        "send"
+                      )
+                    }
+                  >
+                    {composerBusy
+                      ? "Sending…"
+                      : "Send"}
+                  </button>
+
+                  <div className="send-menu-wrap">
+
+                    <button
+                      type="button"
+                      className="send-menu-button"
+                      disabled={
+                        composerBusy
+                      }
+                      onClick={() =>
+                        setShowSendMenu(
+                          (
+                            current
+                          ) =>
+                            !current
+                        )
+                      }
+                    >
+                      ▾
+                    </button>
+
+                    {showSendMenu && (
+                      <div className="send-menu">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendMessage(
+                              "send"
+                            )
+                          }
+                        >
+                          <strong>
+                            Send
+                          </strong>
+
+                          <span>
+                            Send and keep current status
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendMessage(
+                              "send_close"
+                            )
+                          }
+                        >
+                          <strong>
+                            Send & Close
+                          </strong>
+
+                          <span>
+                            Send reply and close ticket
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendMessage(
+                              "send_waiting"
+                            )
+                          }
+                        >
+                          <strong>
+                            Send & Waiting
+                          </strong>
+
+                          <span>
+                            Send reply and set status to Waiting
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            sendMessage(
+                              "send_on_hold"
+                            )
+                          }
+                        >
+                          <strong>
+                            Send & On Hold
+                          </strong>
+
+                          <span>
+                            Send reply and set status to On Hold
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </>
         )}
       </main>
+
+      {/* ================================================= */}
+      {/* DETAILS */}
+      {/* ================================================= */}
 
       <aside className="details-column">
 
@@ -2468,6 +4532,7 @@ function App() {
             <div className="details-content">
 
               <Detail label="Brand">
+
                 <BrandBadge
                   source={
                     selected.source
@@ -2476,6 +4541,7 @@ function App() {
               </Detail>
 
               <Detail label="Status">
+
                 <select
                   className="detail-control"
                   value={
@@ -2490,10 +4556,28 @@ function App() {
                   ) =>
                     updateTicketField(
                       "status",
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                 >
+
+                  {selected.status &&
+                    !availableStatuses.includes(
+                      selected.status
+                    ) && (
+                      <option
+                        value={
+                          selected.status
+                        }
+                      >
+                        {
+                          selected.status
+                        }
+                      </option>
+                    )}
+
                   {availableStatuses.map(
                     (
                       status
@@ -2536,11 +4620,14 @@ function App() {
                     ) =>
                       updateTicketField(
                         "assigneeId",
-                        event.target.value ||
+                        event
+                          .target
+                          .value ||
                           null
                       )
                     }
                   >
+
                     <option value="">
                       Unassigned
                     </option>
@@ -2557,7 +4644,9 @@ function App() {
                             agent.zoho_agent_id
                           }
                         >
-                          {agent.name}
+                          {agent.name ||
+                            agent.email ||
+                            "Unnamed agent"}
                           {agent.email
                             ? ` — ${agent.email}`
                             : ""}
@@ -2566,7 +4655,17 @@ function App() {
                     )}
                   </select>
                 )}
+
+                {selected.assignee_email && (
+                  <div className="owner-current-email">
+                    {
+                      selected.assignee_email
+                    }
+                  </div>
+                )}
               </Detail>
+
+              {/* TAGS */}
 
               <Detail label="Tags">
 
@@ -2576,7 +4675,16 @@ function App() {
                   </div>
                 ) : (
                   <>
+
                     <div className="tag-list">
+
+                      {tags.length ===
+                        0 && (
+                        <div className="no-tags">
+                          No tags yet
+                        </div>
+                      )}
+
                       {tags.map(
                         (
                           tag
@@ -2587,6 +4695,7 @@ function App() {
                             }
                             className="ticket-tag"
                           >
+
                             <span>
                               {
                                 tag.name
@@ -2610,13 +4719,6 @@ function App() {
                           </div>
                         )
                       )}
-
-                      {tags.length ===
-                        0 && (
-                        <div className="no-tags">
-                          No tags yet
-                        </div>
-                      )}
                     </div>
 
                     <form
@@ -2625,6 +4727,7 @@ function App() {
                         addTag
                       }
                     >
+
                       <div className="tag-input-wrap">
 
                         <input
@@ -2646,7 +4749,9 @@ function App() {
                             event
                           ) => {
                             setTagInput(
-                              event.target.value
+                              event
+                                .target
+                                .value
                             );
 
                             setShowTagSuggestions(
@@ -2728,14 +4833,6 @@ function App() {
                                   </span>
                                 </button>
                               )}
-
-                              {suggestedTags.length ===
-                                0 &&
-                                exactTagMatch && (
-                                  <div className="tag-no-results">
-                                    Press Enter to add this existing tag.
-                                  </div>
-                                )}
                             </div>
                           )}
                       </div>
@@ -2769,22 +4866,29 @@ function App() {
               </Detail>
 
               <Detail label="Priority">
+
                 <select
                   className="detail-control"
                   value={
                     selected.priority ||
                     ""
                   }
+                  disabled={
+                    updateBusy
+                  }
                   onChange={(
                     event
                   ) =>
                     updateTicketField(
                       "priority",
-                      event.target.value ||
+                      event
+                        .target
+                        .value ||
                         null
                     )
                   }
                 >
+
                   <option value="">
                     No priority
                   </option>
@@ -2804,18 +4908,24 @@ function App() {
               </Detail>
 
               <Detail label="Due date">
+
                 <input
                   className="detail-control"
                   type="date"
                   value={dateInputValue(
                     selected.due_date
                   )}
+                  disabled={
+                    updateBusy
+                  }
                   onChange={(
                     event
                   ) =>
                     updateTicketField(
                       "dueDate",
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                 />
@@ -2823,7 +4933,15 @@ function App() {
 
               {(updateBusy ||
                 updateNotice) && (
-                <div className="update-notice">
+                <div
+                  className={`update-notice ${
+                    updateNotice.startsWith(
+                      "Could"
+                    )
+                      ? "error"
+                      : ""
+                  }`}
+                >
                   {updateBusy
                     ? "Saving…"
                     : updateNotice}
@@ -2833,21 +4951,31 @@ function App() {
               <div className="details-divider" />
 
               <Detail label="Requester">
+
                 <div className="requester-detail">
+
                   <strong>
                     {selected.contact_name ||
                       "—"}
                   </strong>
 
-                  <span>
-                    {selected.contact_email ||
-                      ""}
-                  </span>
+                  {selected.contact_email && (
+                    <span>
+                      {
+                        selected.contact_email
+                      }
+                    </span>
+                  )}
                 </div>
               </Detail>
 
               <Detail label="Department">
                 {selected.department ||
+                  "—"}
+              </Detail>
+
+              <Detail label="Layout">
+                {selected.layout_name ||
                   "—"}
               </Detail>
 
@@ -2862,6 +4990,15 @@ function App() {
                   selected.updated_at_zoho
                 )}
               </Detail>
+
+              <Detail label="Ticket ID">
+
+                <span className="technical-value">
+                  {
+                    selected.zoho_ticket_id
+                  }
+                </span>
+              </Detail>
             </div>
           </>
         )}
@@ -2870,12 +5007,18 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(
-  document.getElementById(
-    "root"
+// ======================================================
+// RENDER
+// ======================================================
+
+ReactDOM
+  .createRoot(
+    document.getElementById(
+      "root"
+    )
   )
-).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+  .render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
