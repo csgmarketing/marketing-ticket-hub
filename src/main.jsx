@@ -25,6 +25,38 @@ const supabase = createClient(
 );
 
 // ======================================================
+// BRAND STATUS CONFIG
+// ======================================================
+
+const BRAND_STATUSES = {
+  Qualicare: [
+    "Open",
+    "On Hold",
+    "Escalated",
+    "Waiting",
+    "Closed",
+  ],
+
+  "Tutor Doctor": [
+    "Open",
+    "In Progress",
+    "On Hold",
+    "Escalated",
+    "Waiting",
+    "Closed",
+  ],
+
+  "Code Wiz": [
+    "Open",
+    "In Progress",
+    "On Hold",
+    "Escalated",
+    "Waiting",
+    "Closed",
+  ],
+};
+
+// ======================================================
 // HELPERS
 // ======================================================
 
@@ -94,18 +126,12 @@ function dateInputValue(value) {
   const month =
     String(
       date.getMonth() + 1
-    ).padStart(
-      2,
-      "0"
-    );
+    ).padStart(2, "0");
 
   const day =
     String(
       date.getDate()
-    ).padStart(
-      2,
-      "0"
-    );
+    ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
@@ -226,7 +252,7 @@ function Detail({
 }
 
 // ======================================================
-// LOGIN SCREEN
+// LOGIN
 // ======================================================
 
 function Login({
@@ -352,9 +378,7 @@ function Login({
               event
             ) =>
               setEmail(
-                event
-                  .target
-                  .value
+                event.target.value
               )
             }
           />
@@ -381,7 +405,7 @@ function Login({
 }
 
 // ======================================================
-// MAIN APP
+// APP
 // ======================================================
 
 function App() {
@@ -410,6 +434,12 @@ function App() {
     useState([]);
 
   const [
+    agents,
+    setAgents,
+  ] =
+    useState([]);
+
+  const [
     selectedKey,
     setSelectedKey,
   ] =
@@ -424,6 +454,12 @@ function App() {
   const [
     loadingThreads,
     setLoadingThreads,
+  ] =
+    useState(false);
+
+  const [
+    loadingAgents,
+    setLoadingAgents,
   ] =
     useState(false);
 
@@ -445,8 +481,6 @@ function App() {
   ] =
     useState("");
 
-  // Reply composer
-
   const [
     replyText,
     setReplyText,
@@ -464,8 +498,6 @@ function App() {
     setReplyNotice,
   ] =
     useState("");
-
-  // Ticket editing
 
   const [
     updateBusy,
@@ -521,7 +553,7 @@ function App() {
   }, []);
 
   // ====================================================
-  // LOAD TICKETS
+  // TICKETS
   // ====================================================
 
   const loadTickets =
@@ -542,9 +574,7 @@ function App() {
           error,
         } =
           await supabase
-            .from(
-              "tickets"
-            )
+            .from("tickets")
             .select("*")
             .eq(
               "is_deleted",
@@ -644,7 +674,7 @@ function App() {
     );
 
   // ====================================================
-  // LOAD THREADS
+  // THREADS
   // ====================================================
 
   const loadThreads =
@@ -720,6 +750,95 @@ function App() {
   }, [
     selectedKey,
     loadThreads,
+  ]);
+
+  // ====================================================
+  // LOAD AGENTS FOR SELECTED BRAND
+  // ====================================================
+
+  const loadAgents =
+    useCallback(
+      async (
+        source
+      ) => {
+        if (
+          !session ||
+          !source
+        ) {
+          setAgents(
+            []
+          );
+          return;
+        }
+
+        setLoadingAgents(
+          true
+        );
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "zoho_agents"
+            )
+            .select(
+              "zoho_agent_id, name, email, active, source"
+            )
+            .eq(
+              "source",
+              source
+            )
+            .eq(
+              "active",
+              true
+            )
+            .order(
+              "name",
+              {
+                ascending:
+                  true,
+              }
+            );
+
+        if (error) {
+          console.error(
+            "Agent load error:",
+            error
+          );
+
+          setAgents(
+            []
+          );
+        } else {
+          setAgents(
+            data || []
+          );
+        }
+
+        setLoadingAgents(
+          false
+        );
+      },
+      [session]
+    );
+
+  useEffect(() => {
+    if (
+      selected?.source
+    ) {
+      loadAgents(
+        selected.source
+      );
+    } else {
+      setAgents(
+        []
+      );
+    }
+  }, [
+    selected?.source,
+    loadAgents,
   ]);
 
   // ====================================================
@@ -816,7 +935,7 @@ function App() {
 
       if (
         filter ===
-        "open"
+        "all"
       ) {
         rows =
           rows.filter(
@@ -828,18 +947,73 @@ function App() {
 
       if (
         filter ===
+        "open"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.status ===
+              "Open"
+          );
+      }
+
+      if (
+        filter ===
         "waiting"
       ) {
         rows =
           rows.filter(
             (ticket) =>
-              [
-                "On Hold",
-                "Waiting",
-                "Pending",
-              ].includes(
-                ticket.status
-              )
+              ticket.status ===
+              "Waiting"
+          );
+      }
+
+      if (
+        filter ===
+        "onhold"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.status ===
+              "On Hold"
+          );
+      }
+
+      if (
+        filter ===
+        "escalated"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.status ===
+              "Escalated"
+          );
+      }
+
+      if (
+        filter ===
+        "inprogress"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.status ===
+              "In Progress"
+          );
+      }
+
+      if (
+        filter ===
+        "closed"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.status ===
+              "Closed"
           );
       }
 
@@ -860,8 +1034,28 @@ function App() {
         rows =
           rows.filter(
             (ticket) =>
-              !ticket.assignee_name &&
-              !ticket.assignee_email
+              !ticket.assignee_id
+          );
+      }
+
+      if (
+        filter ===
+        "mine"
+      ) {
+        const userEmail =
+          session?.user?.email
+            ?.toLowerCase();
+
+        rows =
+          rows.filter(
+            (ticket) =>
+              String(
+                ticket.assignee_email ||
+                  ""
+              ).toLowerCase() ===
+                userEmail &&
+              ticket.status !==
+                "Closed"
           );
       }
 
@@ -891,9 +1085,7 @@ function App() {
                   .filter(
                     Boolean
                   )
-                  .join(
-                    " "
-                  )
+                  .join(" ")
                   .toLowerCase();
 
               return haystack.includes(
@@ -909,31 +1101,79 @@ function App() {
       filter,
       brandFilter,
       search,
+      session,
     ]);
+
+  // ====================================================
+  // COUNTS
+  // ====================================================
 
   const counts =
     useMemo(() => {
-      return {
-        all:
-          tickets.length,
+      const userEmail =
+        session?.user?.email
+          ?.toLowerCase();
 
-        open:
+      return {
+        active:
           tickets.filter(
             (ticket) =>
               ticket.status !==
               "Closed"
           ).length,
 
+        mine:
+          tickets.filter(
+            (ticket) =>
+              ticket.status !==
+                "Closed" &&
+              String(
+                ticket.assignee_email ||
+                  ""
+              ).toLowerCase() ===
+                userEmail
+          ).length,
+
+        open:
+          tickets.filter(
+            (ticket) =>
+              ticket.status ===
+              "Open"
+          ).length,
+
+        onhold:
+          tickets.filter(
+            (ticket) =>
+              ticket.status ===
+              "On Hold"
+          ).length,
+
         waiting:
           tickets.filter(
             (ticket) =>
-              [
-                "On Hold",
-                "Waiting",
-                "Pending",
-              ].includes(
-                ticket.status
-              )
+              ticket.status ===
+              "Waiting"
+          ).length,
+
+        escalated:
+          tickets.filter(
+            (ticket) =>
+              ticket.status ===
+              "Escalated"
+          ).length,
+
+        inprogress:
+          tickets.filter(
+            (ticket) =>
+              ticket.status ===
+              "In Progress"
+          ).length,
+
+        closed:
+          tickets.filter(
+            (ticket) =>
+              ticket.status ===
+              "Closed"
           ).length,
 
         overdue:
@@ -944,16 +1184,18 @@ function App() {
         unassigned:
           tickets.filter(
             (ticket) =>
-              !ticket.assignee_name &&
-              !ticket.assignee_email
+              !ticket.assignee_id &&
+              ticket.status !==
+                "Closed"
           ).length,
       };
     }, [
       tickets,
+      session,
     ]);
 
   // ====================================================
-  // UPDATE STATUS / PRIORITY / DUE DATE
+  // UPDATE TICKET FIELD
   // ====================================================
 
   async function updateTicketField(
@@ -986,7 +1228,6 @@ function App() {
         finalValue =
           null;
       } else {
-        // Use midday locally to avoid accidental date shifts.
         finalValue =
           new Date(
             `${value}T12:00:00`
@@ -1081,9 +1322,6 @@ function App() {
       ""
     );
 
-    const textToSend =
-      replyText.trim();
-
     const {
       data,
       error,
@@ -1096,7 +1334,7 @@ function App() {
               selected.ticket_key,
 
             content:
-              textToSend,
+              replyText.trim(),
           },
         }
       );
@@ -1105,12 +1343,6 @@ function App() {
       error ||
       !data?.success
     ) {
-      console.error(
-        "Reply error:",
-        error ||
-          data
-      );
-
       setReplyNotice(
         `Could not send: ${
           data?.error ||
@@ -1142,13 +1374,13 @@ function App() {
       selected.ticket_key
     );
 
-    window.setTimeout(
+    setTimeout(
       () => {
         setReplyNotice(
           ""
         );
       },
-      2000
+      1800
     );
 
     setReplyBusy(
@@ -1156,16 +1388,12 @@ function App() {
     );
   }
 
-  // ====================================================
-  // SIGN OUT
-  // ====================================================
-
   async function signOut() {
     await supabase.auth.signOut();
   }
 
   // ====================================================
-  // AUTH STATES
+  // AUTH UI
   // ====================================================
 
   if (
@@ -1188,6 +1416,15 @@ function App() {
     );
   }
 
+  const availableStatuses =
+    BRAND_STATUSES[
+      selected?.source
+    ] || [
+      "Open",
+      "On Hold",
+      "Closed",
+    ];
+
   // ====================================================
   // UI
   // ====================================================
@@ -1195,11 +1432,10 @@ function App() {
   return (
     <div className="app-shell">
 
-      {/* ============================================= */}
-      {/* LEFT NAVIGATION */}
-      {/* ============================================= */}
+      {/* LEFT NAV */}
 
       <aside className="sidebar">
+
         <div className="sidebar-header">
           <div className="app-mark">
             CSG
@@ -1218,8 +1454,32 @@ function App() {
 
         <div className="sidebar-section">
           <div className="sidebar-label">
-            INBOX
+            MY WORK
           </div>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "mine"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "mine"
+              )
+            }
+          >
+            <span>
+              My Tickets
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.mine
+              }
+            </span>
+          </button>
 
           <button
             className={`nav-item ${
@@ -1235,15 +1495,69 @@ function App() {
             }
           >
             <span>
-              All tickets
+              Active Tickets
             </span>
 
             <span className="nav-count">
               {
-                counts.all
+                counts.active
               }
             </span>
           </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "unassigned"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "unassigned"
+              )
+            }
+          >
+            <span>
+              Unassigned
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.unassigned
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "overdue"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "overdue"
+              )
+            }
+          >
+            <span>
+              Overdue
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.overdue
+              }
+            </span>
+          </button>
+        </div>
+
+        <div className="sidebar-section">
+          <div className="sidebar-label">
+            STATUS
+          </div>
 
           <button
             className={`nav-item ${
@@ -1265,6 +1579,54 @@ function App() {
             <span className="nav-count">
               {
                 counts.open
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "inprogress"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "inprogress"
+              )
+            }
+          >
+            <span>
+              In Progress
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.inprogress
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "onhold"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "onhold"
+              )
+            }
+          >
+            <span>
+              On Hold
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.onhold
               }
             </span>
           </button>
@@ -1296,47 +1658,47 @@ function App() {
           <button
             className={`nav-item ${
               filter ===
-              "overdue"
+              "escalated"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
               setFilter(
-                "overdue"
+                "escalated"
               )
             }
           >
             <span>
-              Overdue
+              Escalated
             </span>
 
             <span className="nav-count">
               {
-                counts.overdue
+                counts.escalated
               }
             </span>
           </button>
 
           <button
-            className={`nav-item ${
+            className={`nav-item closed-nav ${
               filter ===
-              "unassigned"
+              "closed"
                 ? "active"
                 : ""
             }`}
             onClick={() =>
               setFilter(
-                "unassigned"
+                "closed"
               )
             }
           >
             <span>
-              Unassigned
+              Closed Tickets
             </span>
 
             <span className="nav-count">
               {
-                counts.unassigned
+                counts.closed
               }
             </span>
           </button>
@@ -1361,7 +1723,6 @@ function App() {
             }
           >
             <span className="brand-dot all-dot" />
-
             All brands
           </button>
 
@@ -1379,7 +1740,6 @@ function App() {
             }
           >
             <span className="brand-dot qualicare-dot" />
-
             Qualicare
           </button>
 
@@ -1397,7 +1757,6 @@ function App() {
             }
           >
             <span className="brand-dot tutordoctor-dot" />
-
             Tutor Doctor
           </button>
 
@@ -1415,7 +1774,6 @@ function App() {
             }
           >
             <span className="brand-dot codewiz-dot" />
-
             Code Wiz
           </button>
         </div>
@@ -1439,11 +1797,10 @@ function App() {
         </div>
       </aside>
 
-      {/* ============================================= */}
       {/* TICKET LIST */}
-      {/* ============================================= */}
 
       <section className="ticket-column">
+
         <div className="ticket-column-header">
           <div>
             <h1>
@@ -1478,6 +1835,7 @@ function App() {
         </div>
 
         <div className="ticket-list">
+
           {loadingTickets &&
             tickets.length ===
               0 && (
@@ -1491,7 +1849,7 @@ function App() {
               0 && (
               <div className="empty-state">
                 No tickets match
-                this filter.
+                this view.
               </div>
             )}
 
@@ -1572,17 +1930,15 @@ function App() {
         </div>
       </section>
 
-      {/* ============================================= */}
       {/* CONVERSATION */}
-      {/* ============================================= */}
 
       <main className="conversation-column">
+
         {!selected ? (
           <div className="conversation-empty">
             <div>
               <h2>
-                Select a
-                ticket
+                Select a ticket
               </h2>
 
               <p>
@@ -1643,6 +1999,7 @@ function App() {
 
               {selected.description && (
                 <article className="original-message">
+
                   <div className="message-header">
                     <div>
                       <div className="message-author">
@@ -1652,8 +2009,7 @@ function App() {
                       </div>
 
                       <div className="message-type">
-                        Original
-                        request
+                        Original request
                       </div>
                     </div>
 
@@ -1676,8 +2032,7 @@ function App() {
 
               {loadingThreads && (
                 <div className="loading-threads">
-                  Loading
-                  conversation…
+                  Loading conversation…
                 </div>
               )}
 
@@ -1755,11 +2110,8 @@ function App() {
                 )}
             </div>
 
-            {/* ======================================= */}
-            {/* REPLY COMPOSER */}
-            {/* ======================================= */}
-
             <div className="composer">
+
               <div className="composer-toolbar">
                 <button className="composer-mode">
                   Reply
@@ -1786,6 +2138,7 @@ function App() {
               />
 
               <div className="composer-footer">
+
                 <div
                   className={`composer-notice ${
                     replyNotice.startsWith(
@@ -1820,11 +2173,10 @@ function App() {
         )}
       </main>
 
-      {/* ============================================= */}
       {/* DETAILS */}
-      {/* ============================================= */}
 
       <aside className="details-column">
+
         {!selected ? (
           <div className="details-empty">
             Ticket details
@@ -1869,11 +2221,7 @@ function App() {
                   }
                 >
                   {selected.status &&
-                    ![
-                      "Open",
-                      "On Hold",
-                      "Closed",
-                    ].includes(
+                    !availableStatuses.includes(
                       selected.status
                     ) && (
                       <option
@@ -1887,30 +2235,101 @@ function App() {
                       </option>
                     )}
 
-                  <option value="Open">
-                    Open
-                  </option>
-
-                  <option value="On Hold">
-                    On Hold
-                  </option>
-
-                  <option value="Closed">
-                    Closed
-                  </option>
+                  {availableStatuses.map(
+                    (
+                      status
+                    ) => (
+                      <option
+                        key={
+                          status
+                        }
+                        value={
+                          status
+                        }
+                      >
+                        {
+                          status
+                        }
+                      </option>
+                    )
+                  )}
                 </select>
               </Detail>
 
-              <Detail label="Assignee">
-                <div className="read-only-detail">
-                  {selected.assignee_name ||
-                    selected.assignee_email ||
-                    "Unassigned"}
-                </div>
+              {/* TICKET OWNER */}
 
-                <div className="coming-next">
-                  Editable next
-                </div>
+              <Detail label="Ticket Owner">
+
+                {loadingAgents ? (
+                  <div className="agent-loading">
+                    Loading agents…
+                  </div>
+                ) : (
+                  <select
+                    className="detail-control owner-select"
+                    value={
+                      selected.assignee_id ||
+                      ""
+                    }
+                    disabled={
+                      updateBusy
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      updateTicketField(
+                        "assigneeId",
+                        event
+                          .target
+                          .value ||
+                          null
+                      )
+                    }
+                  >
+                    <option value="">
+                      Unassigned
+                    </option>
+
+                    {agents.map(
+                      (
+                        agent
+                      ) => (
+                        <option
+                          key={
+                            agent.zoho_agent_id
+                          }
+                          value={
+                            agent.zoho_agent_id
+                          }
+                        >
+                          {agent.name ||
+                            agent.email ||
+                            "Unnamed agent"}
+                          {agent.email
+                            ? ` — ${agent.email}`
+                            : ""}
+                        </option>
+                      )
+                    )}
+                  </select>
+                )}
+
+                {selected.assignee_email && (
+                  <div className="owner-current-email">
+                    {
+                      selected.assignee_email
+                    }
+                  </div>
+                )}
+
+                {!loadingAgents &&
+                  agents.length ===
+                    0 && (
+                    <div className="field-help error-help">
+                      No active agents have been synced for this brand yet.
+                    </div>
+                  )}
+
               </Detail>
 
               <Detail label="Tier">
@@ -2048,6 +2467,7 @@ function App() {
                   }
                 </span>
               </Detail>
+
             </div>
           </>
         )}
