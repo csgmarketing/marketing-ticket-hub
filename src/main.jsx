@@ -7,10 +7,7 @@ import React, {
 } from "react";
 
 import ReactDOM from "react-dom/client";
-
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 import "./styles.css";
 
@@ -31,7 +28,7 @@ const supabase =
   );
 
 // ======================================================
-// BRAND STATUS CONFIG
+// CONFIG
 // ======================================================
 
 const BRAND_STATUSES = {
@@ -67,9 +64,7 @@ const BRAND_STATUSES = {
 // ======================================================
 
 function formatDate(value) {
-  if (!value) {
-    return "—";
-  }
+  if (!value) return "—";
 
   const date =
     new Date(value);
@@ -93,9 +88,7 @@ function formatDate(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
   const date =
     new Date(value);
@@ -113,6 +106,7 @@ function formatDateTime(value) {
     {
       month: "short",
       day: "numeric",
+      year: "numeric",
       hour: "numeric",
       minute: "2-digit",
     }
@@ -120,9 +114,7 @@ function formatDateTime(value) {
 }
 
 function dateInputValue(value) {
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
   const date =
     new Date(value);
@@ -141,26 +133,18 @@ function dateInputValue(value) {
   const month =
     String(
       date.getMonth() + 1
-    ).padStart(
-      2,
-      "0"
-    );
+    ).padStart(2, "0");
 
   const day =
     String(
       date.getDate()
-    ).padStart(
-      2,
-      "0"
-    );
+    ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
 function isOverdue(ticket) {
-  if (
-    !ticket?.due_date
-  ) {
+  if (!ticket?.due_date) {
     return false;
   }
 
@@ -179,27 +163,35 @@ function isOverdue(ticket) {
   );
 }
 
-function brandClass(source) {
+function brandSlug(source) {
   if (
-    source === "Qualicare"
+    source ===
+    "Qualicare"
   ) {
-    return "brand-qualicare";
+    return "qualicare";
   }
 
   if (
     source ===
     "Tutor Doctor"
   ) {
-    return "brand-tutordoctor";
+    return "tutordoctor";
   }
 
   if (
-    source === "Code Wiz"
+    source ===
+    "Code Wiz"
   ) {
-    return "brand-codewiz";
+    return "codewiz";
   }
 
-  return "";
+  return "unknown";
+}
+
+function brandClass(source) {
+  return `brand-${brandSlug(
+    source
+  )}`;
 }
 
 function statusClass(status) {
@@ -252,8 +244,7 @@ function extractEmail(value) {
   }
 
   const text =
-    String(value)
-      .trim();
+    String(value).trim();
 
   const match =
     text.match(
@@ -296,26 +287,17 @@ function uniqueAddresses(values) {
     values
   ) {
     const email =
-      extractEmail(
-        value
-      );
+      extractEmail(value);
 
     if (
       !email ||
-      seen.has(
-        email
-      )
+      seen.has(email)
     ) {
       continue;
     }
 
-    seen.add(
-      email
-    );
-
-    output.push(
-      value
-    );
+    seen.add(email);
+    output.push(value);
   }
 
   return output;
@@ -340,11 +322,8 @@ function formatFileSize(bytes) {
     1024 * 1024
   ) {
     return `${(
-      bytes /
-      1024
-    ).toFixed(
-      1
-    )} KB`;
+      bytes / 1024
+    ).toFixed(1)} KB`;
   }
 
   return `${(
@@ -353,13 +332,36 @@ function formatFileSize(bytes) {
       1024 *
       1024
     )
-  ).toFixed(
-    1
-  )} MB`;
+  ).toFixed(1)} MB`;
+}
+
+function isOutboundThread(thread) {
+  const direction =
+    String(
+      thread?.direction ||
+      ""
+    ).toLowerCase();
+
+  return (
+    direction.includes(
+      "out"
+    ) ||
+    direction ===
+      "outbound"
+  );
+}
+
+function hasRecipientInfo(thread) {
+  return Boolean(
+    thread?.from_email ||
+    thread?.to_email ||
+    thread?.cc ||
+    thread?.bcc
+  );
 }
 
 // ======================================================
-// SMALL COMPONENTS
+// COMPONENTS
 // ======================================================
 
 function BrandBadge({
@@ -398,13 +400,33 @@ function Detail({
 }) {
   return (
     <div className="detail-row">
-
       <div className="detail-label">
         {label}
       </div>
 
       <div className="detail-value">
         {children}
+      </div>
+    </div>
+  );
+}
+
+function RecipientLine({
+  label,
+  value,
+}) {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <div className="message-recipient-line">
+      <div className="message-recipient-label">
+        {label}
+      </div>
+
+      <div className="message-recipient-value">
+        {value}
       </div>
     </div>
   );
@@ -514,11 +536,16 @@ function Login({
 
   return (
     <div className="login-page">
-
       <div className="login-card">
 
         <div className="login-logo">
-          CSG
+          <span className="login-logo-mountain">
+            ▲
+          </span>
+
+          <span>
+            CSG
+          </span>
         </div>
 
         <h1>
@@ -526,7 +553,8 @@ function Login({
         </h1>
 
         <p>
-          Qualicare, Tutor Doctor and Code Wiz tickets in one place.
+          One workspace for Qualicare,
+          Tutor Doctor and Code Wiz.
         </p>
 
         <form
@@ -534,7 +562,6 @@ function Login({
             signIn
           }
         >
-
           <label>
             Work email
           </label>
@@ -583,6 +610,9 @@ function Login({
 
 function App() {
   const editorRef =
+    useRef(null);
+
+  const composerRef =
     useRef(null);
 
   const fileInputRef =
@@ -862,9 +892,7 @@ function App() {
       async (
         preferredKey = null
       ) => {
-        if (
-          !session
-        ) {
+        if (!session) {
           return;
         }
 
@@ -894,15 +922,12 @@ function App() {
               {
                 ascending:
                   false,
-
                 nullsFirst:
                   false,
               }
             );
 
-        if (
-          error
-        ) {
+        if (error) {
           console.error(
             "Ticket load error:",
             error
@@ -918,9 +943,7 @@ function App() {
         const rows =
           data || [];
 
-        setTickets(
-          rows
-        );
+        setTickets(rows);
 
         setSelectedKey(
           (
@@ -944,6 +967,14 @@ function App() {
             }
 
             return (
+              rows.find(
+                (
+                  ticket
+                ) =>
+                  ticket.status !==
+                  "Closed"
+              )
+                ?.ticket_key ||
               rows[0]
                 ?.ticket_key ||
               null
@@ -961,14 +992,92 @@ function App() {
     );
 
   useEffect(() => {
-    if (
-      session
-    ) {
+    if (session) {
       loadTickets();
     }
   }, [
     session,
     loadTickets,
+  ]);
+
+  // ====================================================
+  // BRAND SWITCH
+  // ====================================================
+
+  useEffect(() => {
+    if (
+      tickets.length ===
+      0
+    ) {
+      setSelectedKey(
+        null
+      );
+      return;
+    }
+
+    const brandTickets =
+      brandFilter ===
+      "all"
+        ? tickets
+        : tickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.source ===
+              brandFilter
+          );
+
+    if (
+      brandTickets.length ===
+      0
+    ) {
+      setSelectedKey(
+        null
+      );
+      return;
+    }
+
+    setSelectedKey(
+      (
+        current
+      ) => {
+        const currentValid =
+          current &&
+          brandTickets.some(
+            (
+              ticket
+            ) =>
+              ticket.ticket_key ===
+              current
+          );
+
+        if (
+          currentValid
+        ) {
+          return current;
+        }
+
+        const firstActive =
+          brandTickets.find(
+            (
+              ticket
+            ) =>
+              ticket.status !==
+              "Closed"
+          );
+
+        return (
+          firstActive
+            ?.ticket_key ||
+          brandTickets[0]
+            ?.ticket_key ||
+          null
+        );
+      }
+    );
+  }, [
+    brandFilter,
+    tickets,
   ]);
 
   const selected =
@@ -1001,10 +1110,7 @@ function App() {
           !session ||
           !ticketKey
         ) {
-          setThreads(
-            []
-          );
-
+          setThreads([]);
           return;
         }
 
@@ -1033,21 +1139,16 @@ function App() {
               }
             );
 
-        if (
-          error
-        ) {
+        if (error) {
           console.error(
             "Thread load error:",
             error
           );
 
-          setThreads(
-            []
-          );
+          setThreads([]);
         } else {
           setThreads(
-            data ||
-            []
+            data || []
           );
         }
 
@@ -1067,6 +1168,8 @@ function App() {
       loadThreads(
         selectedKey
       );
+    } else {
+      setThreads([]);
     }
   }, [
     selectedKey,
@@ -1086,10 +1189,7 @@ function App() {
           !session ||
           !source
         ) {
-          setAgents(
-            []
-          );
-
+          setAgents([]);
           return;
         }
 
@@ -1124,21 +1224,16 @@ function App() {
               }
             );
 
-        if (
-          error
-        ) {
+        if (error) {
           console.error(
             "Agent load error:",
             error
           );
 
-          setAgents(
-            []
-          );
+          setAgents([]);
         } else {
           setAgents(
-            data ||
-            []
+            data || []
           );
         }
 
@@ -1164,10 +1259,7 @@ function App() {
           !session ||
           !ticketKey
         ) {
-          setTags(
-            []
-          );
-
+          setTags([]);
           return;
         }
 
@@ -1198,21 +1290,16 @@ function App() {
               }
             );
 
-        if (
-          error
-        ) {
+        if (error) {
           console.error(
             "Tag load error:",
             error
           );
 
-          setTags(
-            []
-          );
+          setTags([]);
         } else {
           setTags(
-            data ||
-            []
+            data || []
           );
         }
 
@@ -1234,10 +1321,7 @@ function App() {
           !session ||
           !source
         ) {
-          setTagCatalog(
-            []
-          );
-
+          setTagCatalog([]);
           return;
         }
 
@@ -1268,21 +1352,16 @@ function App() {
               }
             );
 
-        if (
-          error
-        ) {
+        if (error) {
           console.error(
             "Tag catalog error:",
             error
           );
 
-          setTagCatalog(
-            []
-          );
+          setTagCatalog([]);
         } else {
           setTagCatalog(
-            data ||
-            []
+            data || []
           );
         }
       },
@@ -1303,13 +1382,8 @@ function App() {
         selected.source
       );
     } else {
-      setAgents(
-        []
-      );
-
-      setTagCatalog(
-        []
-      );
+      setAgents([]);
+      setTagCatalog([]);
     }
   }, [
     selected?.source,
@@ -1324,6 +1398,8 @@ function App() {
       loadTags(
         selectedKey
       );
+    } else {
+      setTags([]);
     }
 
     setTagInput("");
@@ -1341,9 +1417,7 @@ function App() {
   // ====================================================
 
   useEffect(() => {
-    if (
-      !session
-    ) {
+    if (!session) {
       return;
     }
 
@@ -1355,14 +1429,9 @@ function App() {
         .on(
           "postgres_changes",
           {
-            event:
-              "*",
-
-            schema:
-              "public",
-
-            table:
-              "tickets",
+            event: "*",
+            schema: "public",
+            table: "tickets",
           },
           () => {
             loadTickets();
@@ -1371,12 +1440,8 @@ function App() {
         .on(
           "postgres_changes",
           {
-            event:
-              "*",
-
-            schema:
-              "public",
-
+            event: "*",
+            schema: "public",
             table:
               "ticket_threads",
           },
@@ -1402,12 +1467,8 @@ function App() {
         .on(
           "postgres_changes",
           {
-            event:
-              "*",
-
-            schema:
-              "public",
-
+            event: "*",
+            schema: "public",
             table:
               "ticket_tags",
           },
@@ -1447,48 +1508,51 @@ function App() {
   ]);
 
   // ====================================================
-  // COMPOSER RECIPIENTS
+  // THREAD ORDER
   // ====================================================
 
-  const latestThread =
-    useMemo(() => {
-      if (
-        threads.length ===
-        0
-      ) {
-        return null;
-      }
+  const newestThreads =
+    useMemo(
+      () =>
+        [...threads].sort(
+          (
+            a,
+            b
+          ) =>
+            new Date(
+              b.created_at_zoho ||
+                0
+            ).getTime() -
+            new Date(
+              a.created_at_zoho ||
+                0
+            ).getTime()
+        ),
+      [
+        threads,
+      ]
+    );
 
-      return (
-        threads[
-          threads.length -
-          1
-        ] ||
-        null
-      );
-    }, [
-      threads,
-    ]);
+  const latestThread =
+    newestThreads[0] ||
+    null;
+
+  // ====================================================
+  // FROM EMAIL
+  // ====================================================
 
   const detectedFromEmail =
     useMemo(() => {
       const outbound =
-        [...threads]
-          .reverse()
-          .find(
-            (
+        newestThreads.find(
+          (
+            thread
+          ) =>
+            isOutboundThread(
               thread
-            ) =>
-              String(
-                thread.direction ||
-                  ""
-              )
-                .toLowerCase()
-                .includes(
-                  "out"
-                ) &&
-              thread.from_email
-          );
+            ) &&
+            thread.from_email
+        );
 
       return (
         outbound
@@ -1496,39 +1560,85 @@ function App() {
         "Configured Zoho support address"
       );
     }, [
-      threads,
+      newestThreads,
     ]);
 
-  function calculateReplyAllCc() {
-    if (
-      !selected
-    ) {
+  // ====================================================
+  // REPLY HELPERS
+  // ====================================================
+
+  function getReplyTarget(
+    thread
+  ) {
+    if (!selected) {
       return "";
     }
+
+    if (
+      !thread
+    ) {
+      return (
+        selected.contact_email ||
+        ""
+      );
+    }
+
+    if (
+      isOutboundThread(
+        thread
+      )
+    ) {
+      return (
+        selected.contact_email ||
+        splitAddresses(
+          thread.to_email
+        )[0] ||
+        ""
+      );
+    }
+
+    return (
+      thread.from_email ||
+      selected.contact_email ||
+      ""
+    );
+  }
+
+  function calculateReplyAllCc(
+    thread =
+      latestThread,
+    toAddress =
+      null
+  ) {
+    if (!selected) {
+      return "";
+    }
+
+    const targetTo =
+      toAddress ||
+      getReplyTarget(
+        thread
+      );
 
     const candidates =
       [
         ...splitAddresses(
-          latestThread
+          thread
             ?.from_email
         ),
-
         ...splitAddresses(
-          latestThread
+          thread
             ?.to_email
         ),
-
         ...splitAddresses(
-          latestThread
-            ?.cc
+          thread?.cc
         ),
       ];
 
     const excluded =
       new Set(
         [
-          selected
-            .contact_email,
+          targetTo,
           detectedFromEmail,
           session
             ?.user
@@ -1553,9 +1663,7 @@ function App() {
             )
           )
       )
-      .join(
-        ", "
-      );
+      .join(", ");
   }
 
   const resetComposer =
@@ -1570,37 +1678,17 @@ function App() {
         ""
       );
 
-      setRecipientCc(
-        ""
-      );
+      setRecipientCc("");
+      setRecipientBcc("");
 
-      setRecipientBcc(
-        ""
-      );
+      setShowCc(false);
+      setShowBcc(false);
 
-      setShowCc(
-        false
-      );
+      setEditorHtml("");
+      setPendingFiles([]);
 
-      setShowBcc(
-        false
-      );
-
-      setEditorHtml(
-        ""
-      );
-
-      setPendingFiles(
-        []
-      );
-
-      setComposerNotice(
-        ""
-      );
-
-      setUploadProgress(
-        ""
-      );
+      setComposerNotice("");
+      setUploadProgress("");
 
       if (
         editorRef.current
@@ -1619,98 +1707,109 @@ function App() {
     resetComposer,
   ]);
 
-  function changeReplyMode(
-    mode
-  ) {
-    setReplyMode(
-      mode
-    );
+  function scrollToComposer() {
+    window.setTimeout(
+      () => {
+        composerRef
+          .current
+          ?.scrollIntoView({
+            behavior:
+              "smooth",
+            block:
+              "start",
+          });
 
+        window.setTimeout(
+          () => {
+            editorRef
+              .current
+              ?.focus();
+          },
+          300
+        );
+      },
+      20
+    );
+  }
+
+  function configureComposer(
+    mode,
+    thread =
+      null
+  ) {
+    setReplyMode(mode);
     setShowReplyModeMenu(
       false
     );
-
-    setComposerNotice(
-      ""
-    );
+    setComposerNotice("");
 
     if (
       mode ===
       "reply"
     ) {
-      setRecipientTo(
-        selected
-          ?.contact_email ||
-        ""
-      );
+      const to =
+        getReplyTarget(
+          thread
+        );
 
-      setRecipientCc(
-        ""
-      );
+      setRecipientTo(to);
+      setRecipientCc("");
+      setRecipientBcc("");
 
-      setRecipientBcc(
-        ""
-      );
-
-      setShowCc(
-        false
-      );
-
-      setShowBcc(
-        false
-      );
+      setShowCc(false);
+      setShowBcc(false);
     }
 
     if (
       mode ===
       "reply_all"
     ) {
-      setRecipientTo(
-        selected
-          ?.contact_email ||
-        ""
-      );
+      const to =
+        getReplyTarget(
+          thread
+        );
 
-      const replyAllCc =
-        calculateReplyAllCc();
+      const cc =
+        calculateReplyAllCc(
+          thread ||
+            latestThread,
+          to
+        );
 
-      setRecipientCc(
-        replyAllCc
-      );
+      setRecipientTo(to);
+      setRecipientCc(cc);
+      setRecipientBcc("");
 
-      setShowCc(
-        true
-      );
+      setShowCc(true);
+      setShowBcc(false);
     }
 
     if (
       mode ===
       "forward"
     ) {
-      setRecipientTo(
-        ""
-      );
+      setRecipientTo("");
+      setRecipientCc("");
+      setRecipientBcc("");
 
-      setRecipientCc(
-        ""
-      );
-
-      setRecipientBcc(
-        ""
-      );
-
-      setShowCc(
-        false
-      );
-
-      setShowBcc(
-        false
-      );
+      setShowCc(false);
+      setShowBcc(false);
     }
+
+    scrollToComposer();
+  }
+
+  function changeReplyMode(
+    mode
+  ) {
+    configureComposer(
+      mode,
+      latestThread
+    );
   }
 
   // ====================================================
-  // RICH TEXT COMMANDS
+  // RICH TEXT
   // ====================================================
 
   function focusEditor() {
@@ -1745,9 +1844,7 @@ function App() {
         "Enter the link URL:"
       );
 
-    if (
-      !url
-    ) {
+    if (!url) {
       return;
     }
 
@@ -1758,7 +1855,7 @@ function App() {
   }
 
   // ====================================================
-  // ATTACHMENTS
+  // FILES
   // ====================================================
 
   function addFiles(
@@ -1843,9 +1940,7 @@ function App() {
         .session
         ?.access_token;
 
-    if (
-      !token
-    ) {
+    if (!token) {
       throw new Error(
         "Your session expired. Please sign in again."
       );
@@ -1869,8 +1964,7 @@ function App() {
       await fetch(
         `${SUPABASE_URL}/functions/v1/upload-zoho-attachment`,
         {
-          method:
-            "POST",
+          method: "POST",
 
           headers: {
             Authorization:
@@ -1888,8 +1982,7 @@ function App() {
     const raw =
       await response.text();
 
-    let data =
-      {};
+    let data = {};
 
     try {
       data =
@@ -1919,7 +2012,7 @@ function App() {
   }
 
   // ====================================================
-  // SEND MESSAGE
+  // SEND
   // ====================================================
 
   async function sendMessage(
@@ -1940,17 +2033,12 @@ function App() {
       editorHtml;
 
     const plainText =
-      stripHtml(
-        html
-      );
+      stripHtml(html);
 
-    if (
-      !plainText
-    ) {
+    if (!plainText) {
       setComposerNotice(
         "Write a message before sending."
       );
-
       return;
     }
 
@@ -1963,21 +2051,12 @@ function App() {
           ? "Add at least one forwarding recipient."
           : "A recipient is required."
       );
-
       return;
     }
 
-    setComposerBusy(
-      true
-    );
-
-    setComposerNotice(
-      ""
-    );
-
-    setShowSendMenu(
-      false
-    );
+    setComposerBusy(true);
+    setComposerNotice("");
+    setShowSendMenu(false);
 
     try {
       const uploaded =
@@ -2098,9 +2177,7 @@ function App() {
         successText
       );
 
-      setEditorHtml(
-        ""
-      );
+      setEditorHtml("");
 
       if (
         editorRef.current
@@ -2109,13 +2186,8 @@ function App() {
           "";
       }
 
-      setPendingFiles(
-        []
-      );
-
-      setUploadProgress(
-        ""
-      );
+      setPendingFiles([]);
+      setUploadProgress("");
 
       await loadThreads(
         selected.ticket_key
@@ -2127,18 +2199,14 @@ function App() {
 
       setTimeout(
         () => {
-          setComposerNotice(
-            ""
-          );
+          setComposerNotice("");
         },
         2500
       );
     } catch (
       error
     ) {
-      setUploadProgress(
-        ""
-      );
+      setUploadProgress("");
 
       setComposerNotice(
         error instanceof
@@ -2147,14 +2215,12 @@ function App() {
           : "Could not send the message."
       );
     } finally {
-      setComposerBusy(
-        false
-      );
+      setComposerBusy(false);
     }
   }
 
   // ====================================================
-  // UPDATE TICKET FIELD
+  // UPDATE TICKET
   // ====================================================
 
   async function updateTicketField(
@@ -2168,13 +2234,8 @@ function App() {
       return;
     }
 
-    setUpdateBusy(
-      true
-    );
-
-    setUpdateNotice(
-      ""
-    );
+    setUpdateBusy(true);
+    setUpdateNotice("");
 
     let finalValue =
       value;
@@ -2224,10 +2285,7 @@ function App() {
         }`
       );
 
-      setUpdateBusy(
-        false
-      );
-
+      setUpdateBusy(false);
       return;
     }
 
@@ -2241,20 +2299,16 @@ function App() {
 
     setTimeout(
       () => {
-        setUpdateNotice(
-          ""
-        );
+        setUpdateNotice("");
       },
       1800
     );
 
-    setUpdateBusy(
-      false
-    );
+    setUpdateBusy(false);
   }
 
   // ====================================================
-  // TAG AUTOCOMPLETE
+  // TAGS
   // ====================================================
 
   const suggestedTags =
@@ -2264,9 +2318,7 @@ function App() {
           .trim()
           .toLowerCase();
 
-      if (
-        !needle
-      ) {
+      if (!needle) {
         return [];
       }
 
@@ -2329,9 +2381,7 @@ function App() {
           .trim()
           .toLowerCase();
 
-      if (
-        !needle
-      ) {
+      if (!needle) {
         return false;
       }
 
@@ -2374,33 +2424,20 @@ function App() {
           String(
             tag.name ||
               ""
-          )
-            .toLowerCase() ===
-          cleanName
-            .toLowerCase()
+          ).toLowerCase() ===
+          cleanName.toLowerCase()
       );
 
-    if (
-      duplicate
-    ) {
+    if (duplicate) {
       setTagNotice(
         "This ticket already has that tag."
       );
-
       return;
     }
 
-    setTagBusy(
-      true
-    );
-
-    setTagNotice(
-      ""
-    );
-
-    setShowTagSuggestions(
-      false
-    );
+    setTagBusy(true);
+    setTagNotice("");
+    setShowTagSuggestions(false);
 
     const {
       data,
@@ -2436,16 +2473,11 @@ function App() {
         }`
       );
 
-      setTagBusy(
-        false
-      );
-
+      setTagBusy(false);
       return;
     }
 
-    setTagInput(
-      ""
-    );
+    setTagInput("");
 
     setTagNotice(
       exactTagMatch
@@ -2463,16 +2495,12 @@ function App() {
 
     setTimeout(
       () => {
-        setTagNotice(
-          ""
-        );
+        setTagNotice("");
       },
       1800
     );
 
-    setTagBusy(
-      false
-    );
+    setTagBusy(false);
   }
 
   async function addTag(
@@ -2496,13 +2524,8 @@ function App() {
       return;
     }
 
-    setTagBusy(
-      true
-    );
-
-    setTagNotice(
-      ""
-    );
+    setTagBusy(true);
+    setTagNotice("");
 
     const {
       data,
@@ -2541,10 +2564,7 @@ function App() {
         }`
       );
 
-      setTagBusy(
-        false
-      );
-
+      setTagBusy(false);
       return;
     }
 
@@ -2558,16 +2578,12 @@ function App() {
 
     setTimeout(
       () => {
-        setTagNotice(
-          ""
-        );
+        setTagNotice("");
       },
       1800
     );
 
-    setTagBusy(
-      false
-    );
+    setTagBusy(false);
   }
 
   // ====================================================
@@ -2577,9 +2593,7 @@ function App() {
   const filteredTickets =
     useMemo(() => {
       let rows =
-        [
-          ...tickets,
-        ];
+        [...tickets];
 
       if (
         brandFilter !==
@@ -2768,12 +2782,8 @@ function App() {
                   ticket.source,
                   ticket.description,
                 ]
-                  .filter(
-                    Boolean
-                  )
-                  .join(
-                    " "
-                  )
+                  .filter(Boolean)
+                  .join(" ")
                   .toLowerCase();
 
               return haystack
@@ -2793,124 +2803,143 @@ function App() {
       session,
     ]);
 
-  const counts =
-  useMemo(() => {
-    const userEmail =
-      session
-        ?.user
-        ?.email
-        ?.toLowerCase();
+  // ====================================================
+  // BRAND-AWARE COUNTS
+  // ====================================================
 
-    const countTickets =
-      brandFilter ===
-      "all"
-        ? tickets
-        : tickets.filter(
+  const counts =
+    useMemo(() => {
+      const userEmail =
+        session
+          ?.user
+          ?.email
+          ?.toLowerCase();
+
+      const countTickets =
+        brandFilter ===
+        "all"
+          ? tickets
+          : tickets.filter(
+              (
+                ticket
+              ) =>
+                ticket.source ===
+                brandFilter
+            );
+
+      return {
+        active:
+          countTickets.filter(
             (
               ticket
             ) =>
-              ticket.source ===
-              brandFilter
-          );
-
-    return {
-      active:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status !==
-            "Closed"
-        ).length,
-
-      mine:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status !==
-              "Closed" &&
-            String(
-              ticket.assignee_email ||
-                ""
-            ).toLowerCase() ===
-              userEmail
-        ).length,
-
-      open:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status ===
-            "Open"
-        ).length,
-
-      inprogress:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status ===
-            "In Progress"
-        ).length,
-
-      onhold:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status ===
-            "On Hold"
-        ).length,
-
-      waiting:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status ===
-            "Waiting"
-        ).length,
-
-      escalated:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status ===
-            "Escalated"
-        ).length,
-
-      closed:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            ticket.status ===
-            "Closed"
-        ).length,
-
-      overdue:
-        countTickets.filter(
-          isOverdue
-        ).length,
-
-      unassigned:
-        countTickets.filter(
-          (
-            ticket
-          ) =>
-            !ticket.assignee_id &&
-            ticket.status !==
+              ticket.status !==
               "Closed"
-        ).length,
-    };
-  }, [
-    tickets,
-    session,
-    brandFilter,
-  ]);
+          ).length,
+
+        mine:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status !==
+                "Closed" &&
+              String(
+                ticket.assignee_email ||
+                  ""
+              ).toLowerCase() ===
+                userEmail
+          ).length,
+
+        open:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status ===
+              "Open"
+          ).length,
+
+        inprogress:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status ===
+              "In Progress"
+          ).length,
+
+        onhold:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status ===
+              "On Hold"
+          ).length,
+
+        waiting:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status ===
+              "Waiting"
+          ).length,
+
+        escalated:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status ===
+              "Escalated"
+          ).length,
+
+        closed:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              ticket.status ===
+              "Closed"
+          ).length,
+
+        overdue:
+          countTickets.filter(
+            isOverdue
+          ).length,
+
+        unassigned:
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              !ticket.assignee_id &&
+              ticket.status !==
+                "Closed"
+          ).length,
+      };
+    }, [
+      tickets,
+      session,
+      brandFilter,
+    ]);
+
+  // ====================================================
+  // BRAND BUTTON
+  // ====================================================
+
+  function switchBrand(
+    value
+  ) {
+    setBrandFilter(value);
+    setSearch("");
+  }
+
+  // ====================================================
+  // SIGN OUT
+  // ====================================================
 
   async function signOut() {
     await supabase
@@ -2932,9 +2961,7 @@ function App() {
     );
   }
 
-  if (
-    !session
-  ) {
+  if (!session) {
     return (
       <Login
         onSignedIn={
@@ -2969,16 +2996,22 @@ function App() {
         <div className="sidebar-header">
 
           <div className="app-mark">
-            CSG
+            <span className="app-mark-icon">
+              ▲
+            </span>
+
+            <span className="app-mark-text">
+              CSG
+            </span>
           </div>
 
-          <div>
+          <div className="app-name-wrap">
             <div className="app-title">
               Ticket Hub
             </div>
 
             <div className="app-subtitle">
-              Marketing
+              Marketing Operations
             </div>
           </div>
         </div>
@@ -3019,18 +3052,14 @@ function App() {
               ]
             ) => (
               <button
-                key={
-                  id
-                }
+                key={id}
                 className={`nav-item ${
                   filter === id
                     ? "active"
                     : ""
                 }`}
                 onClick={() =>
-                  setFilter(
-                    id
-                  )
+                  setFilter(id)
                 }
               >
                 <span>
@@ -3091,9 +3120,7 @@ function App() {
               ]
             ) => (
               <button
-                key={
-                  id
-                }
+                key={id}
                 className={`nav-item ${
                   id ===
                   "closed"
@@ -3105,9 +3132,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() =>
-                  setFilter(
-                    id
-                  )
+                  setFilter(id)
                 }
               >
                 <span>
@@ -3132,52 +3157,51 @@ function App() {
             [
               "all",
               "All brands",
-              "all-dot",
             ],
             [
               "Qualicare",
               "Qualicare",
-              "qualicare-dot",
             ],
             [
               "Tutor Doctor",
               "Tutor Doctor",
-              "tutordoctor-dot",
             ],
             [
               "Code Wiz",
               "Code Wiz",
-              "codewiz-dot",
             ],
           ].map(
             (
               [
                 value,
                 label,
-                dot,
               ]
             ) => (
               <button
-                key={
+                key={value}
+                className={`brand-nav brand-nav-${brandSlug(
                   value
-                }
-                className={`brand-nav ${
+                )} ${
                   brandFilter ===
                   value
                     ? "active"
                     : ""
                 }`}
                 onClick={() =>
-                  setBrandFilter(
+                  switchBrand(
                     value
                   )
                 }
               >
                 <span
-                  className={`brand-dot ${dot}`}
+                  className={`brand-dot brand-dot-${brandSlug(
+                    value
+                  )}`}
                 />
 
-                {label}
+                <span>
+                  {label}
+                </span>
               </button>
             )
           )}
@@ -3185,21 +3209,32 @@ function App() {
 
         <div className="sidebar-footer">
 
-          <div className="user-email">
-            {
-              session.user
-                ?.email
-            }
+          <div className="user-avatar">
+            {session.user
+              ?.email
+              ?.charAt(0)
+              ?.toUpperCase() ||
+              "U"}
           </div>
 
-          <button
-            className="sign-out-button"
-            onClick={
-              signOut
-            }
-          >
-            Sign out
-          </button>
+          <div className="sidebar-user-info">
+
+            <div className="user-email">
+              {
+                session.user
+                  ?.email
+              }
+            </div>
+
+            <button
+              className="sign-out-button"
+              onClick={
+                signOut
+              }
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -3213,14 +3248,22 @@ function App() {
 
           <div>
             <h1>
-              Tickets
+              {brandFilter ===
+              "all"
+                ? "Tickets"
+                : brandFilter}
             </h1>
 
             <p>
               {
                 filteredTickets.length
               }{" "}
-              tickets
+              ticket
+              {filteredTickets.length ===
+              1
+                ? ""
+                : "s"}{" "}
+              in this view
             </p>
           </div>
         </div>
@@ -3231,9 +3274,7 @@ function App() {
             className="search-input"
             type="search"
             placeholder="Search tickets…"
-            value={
-              search
-            }
+            value={search}
             onChange={(
               event
             ) =>
@@ -3272,7 +3313,9 @@ function App() {
                 key={
                   ticket.ticket_key
                 }
-                className={`ticket-row ${
+                className={`ticket-row ${brandClass(
+                  ticket.source
+                )} ${
                   selectedKey ===
                   ticket.ticket_key
                     ? "selected"
@@ -3284,7 +3327,6 @@ function App() {
                   )
                 }
               >
-
                 <div className="ticket-row-top">
 
                   <BrandBadge
@@ -3347,26 +3389,41 @@ function App() {
       </section>
 
       {/* ================================================= */}
-      {/* CONVERSATION */}
+      {/* TICKET WORKSPACE */}
       {/* ================================================= */}
 
-      <main className="conversation-column">
+      <main
+        className={`conversation-column ${
+          selected
+            ? brandClass(
+                selected.source
+              )
+            : ""
+        }`}
+      >
 
         {!selected ? (
           <div className="conversation-empty">
+            <div className="conversation-empty-card">
+              <div className="conversation-empty-icon">
+                ✉
+              </div>
 
-            <div>
               <h2>
-                Select a ticket
+                No ticket selected
               </h2>
 
               <p>
-                Choose a ticket to view its conversation.
+                Choose a ticket from the list to view its conversation.
               </p>
             </div>
           </div>
         ) : (
           <>
+            {/* ============================================= */}
+            {/* HEADER */}
+            {/* ============================================= */}
+
             <header className="conversation-header">
 
               <div className="conversation-heading">
@@ -3379,12 +3436,18 @@ function App() {
                     }
                   />
 
-                  <span>
-                    #
+                  <span className="header-ticket-number">
+                    Ticket #
                     {
                       selected.ticket_number
                     }
                   </span>
+
+                  <StatusBadge
+                    status={
+                      selected.status
+                    }
+                  />
                 </div>
 
                 <h2>
@@ -3393,11 +3456,19 @@ function App() {
                 </h2>
 
                 <div className="conversation-requester">
-                  {selected.contact_name ||
-                    "Unknown requester"}
 
-                  {selected.contact_email &&
-                    ` · ${selected.contact_email}`}
+                  <span className="requester-name">
+                    {selected.contact_name ||
+                      "Unknown requester"}
+                  </span>
+
+                  {selected.contact_email && (
+                    <span>
+                      {
+                        selected.contact_email
+                      }
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -3410,46 +3481,1005 @@ function App() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Open in Zoho ↗
+                  Open in Zoho
+                  <span>
+                    ↗
+                  </span>
                 </a>
               )}
             </header>
 
-            <div className="conversation-scroll">
+            {/* ============================================= */}
+            {/* COMPOSER AT TOP */}
+            {/* ============================================= */}
 
-              {selected.description && (
-                <article className="original-message">
+            <div
+              ref={
+                composerRef
+              }
+              className="composer-area"
+            >
+              <div className="composer-area-heading">
 
-                  <div className="message-header">
-
-                    <div>
-                      <div className="message-author">
-                        {selected.contact_name ||
-                          selected.contact_email ||
-                          "Requester"}
-                      </div>
-
-                      <div className="message-type">
-                        Original request
-                      </div>
-                    </div>
-
-                    <span className="message-time">
-                      {formatDateTime(
-                        selected.created_at_zoho
-                      )}
-                    </span>
+                <div>
+                  <div className="composer-heading-title">
+                    Respond to ticket
                   </div>
 
-                  <div
-                    className="message-body"
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        selected.description,
+                  <div className="composer-heading-subtitle">
+                    Reply, reply to everyone or forward this conversation.
+                  </div>
+                </div>
+              </div>
+
+              <div className="rich-composer">
+
+                {/* MODE */}
+
+                <div className="composer-mode-row">
+
+                  <div className="composer-dropdown-wrap">
+
+                    <button
+                      type="button"
+                      className="composer-mode-button"
+                      onClick={() =>
+                        setShowReplyModeMenu(
+                          (
+                            current
+                          ) =>
+                            !current
+                        )
+                      }
+                    >
+                      <span className="composer-mode-icon">
+                        {replyMode ===
+                        "forward"
+                          ? "↗"
+                          : replyMode ===
+                            "reply_all"
+                          ? "↩↩"
+                          : "↩"}
+                      </span>
+
+                      <span>
+                        {replyMode ===
+                        "reply"
+                          ? "Reply"
+                          : replyMode ===
+                            "reply_all"
+                          ? "Reply All"
+                          : "Forward"}
+                      </span>
+
+                      <span className="dropdown-chevron">
+                        ▾
+                      </span>
+                    </button>
+
+                    {showReplyModeMenu && (
+                      <div className="composer-dropdown-menu">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeReplyMode(
+                              "reply"
+                            )
+                          }
+                        >
+                          <span className="dropdown-action-icon">
+                            ↩
+                          </span>
+
+                          <span className="dropdown-action-copy">
+                            <strong>
+                              Reply
+                            </strong>
+
+                            <small>
+                              Reply to the requester
+                            </small>
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeReplyMode(
+                              "reply_all"
+                            )
+                          }
+                        >
+                          <span className="dropdown-action-icon">
+                            ↩↩
+                          </span>
+
+                          <span className="dropdown-action-copy">
+                            <strong>
+                              Reply All
+                            </strong>
+
+                            <small>
+                              Include everyone on the conversation
+                            </small>
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeReplyMode(
+                              "forward"
+                            )
+                          }
+                        >
+                          <span className="dropdown-action-icon">
+                            ↗
+                          </span>
+
+                          <span className="dropdown-action-copy">
+                            <strong>
+                              Forward
+                            </strong>
+
+                            <small>
+                              Send the conversation to someone else
+                            </small>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="composer-top-actions">
+
+                    {!showCc && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowCc(
+                            true
+                          )
+                        }
+                      >
+                        + Cc
+                      </button>
+                    )}
+
+                    {!showBcc && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowBcc(
+                            true
+                          )
+                        }
+                      >
+                        + Bcc
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* RECIPIENTS */}
+
+                <div className="recipient-section">
+
+                  <div className="recipient-row">
+                    <div className="recipient-label">
+                      From
+                    </div>
+
+                    <div className="recipient-readonly">
+                      {detectedFromEmail}
+                    </div>
+                  </div>
+
+                  <div className="recipient-row">
+                    <div className="recipient-label">
+                      To
+                    </div>
+
+                    <input
+                      type="text"
+                      className="recipient-input"
+                      value={
+                        recipientTo
+                      }
+                      placeholder={
+                        replyMode ===
+                        "forward"
+                          ? "Enter recipient email…"
+                          : "Recipient"
+                      }
+                      disabled={
+                        composerBusy
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setRecipientTo(
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+                  </div>
+
+                  {showCc && (
+                    <div className="recipient-row">
+                      <div className="recipient-label">
+                        Cc
+                      </div>
+
+                      <input
+                        type="text"
+                        className="recipient-input"
+                        value={
+                          recipientCc
+                        }
+                        placeholder="Add CC recipients…"
+                        disabled={
+                          composerBusy
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setRecipientCc(
+                            event
+                              .target
+                              .value
+                          )
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        className="recipient-remove"
+                        onClick={() => {
+                          setRecipientCc(
+                            ""
+                          );
+                          setShowCc(
+                            false
+                          );
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+
+                  {showBcc && (
+                    <div className="recipient-row">
+                      <div className="recipient-label">
+                        Bcc
+                      </div>
+
+                      <input
+                        type="text"
+                        className="recipient-input"
+                        value={
+                          recipientBcc
+                        }
+                        placeholder="Add BCC recipients…"
+                        disabled={
+                          composerBusy
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setRecipientBcc(
+                            event
+                              .target
+                              .value
+                          )
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        className="recipient-remove"
+                        onClick={() => {
+                          setRecipientBcc(
+                            ""
+                          );
+                          setShowBcc(
+                            false
+                          );
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* TOOLBAR */}
+
+                <div className="rich-toolbar">
+
+                  <button
+                    type="button"
+                    title="Undo"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "undo"
+                      );
                     }}
-                  />
-                </article>
-              )}
+                  >
+                    ↶
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Redo"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "redo"
+                      );
+                    }}
+                  >
+                    ↷
+                  </button>
+
+                  <div className="toolbar-divider" />
+
+                  <button
+                    type="button"
+                    className="toolbar-bold"
+                    title="Bold"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "bold"
+                      );
+                    }}
+                  >
+                    B
+                  </button>
+
+                  <button
+                    type="button"
+                    className="toolbar-italic"
+                    title="Italic"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "italic"
+                      );
+                    }}
+                  >
+                    I
+                  </button>
+
+                  <button
+                    type="button"
+                    className="toolbar-underline"
+                    title="Underline"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "underline"
+                      );
+                    }}
+                  >
+                    U
+                  </button>
+
+                  <button
+                    type="button"
+                    className="toolbar-strike"
+                    title="Strikethrough"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "strikeThrough"
+                      );
+                    }}
+                  >
+                    S
+                  </button>
+
+                  <div className="toolbar-divider" />
+
+                  <select
+                    className="toolbar-select"
+                    title="Font size"
+                    defaultValue="3"
+                    onChange={(
+                      event
+                    ) =>
+                      runEditorCommand(
+                        "fontSize",
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                  >
+                    <option value="2">
+                      Small
+                    </option>
+
+                    <option value="3">
+                      Normal
+                    </option>
+
+                    <option value="4">
+                      Large
+                    </option>
+
+                    <option value="5">
+                      Larger
+                    </option>
+                  </select>
+
+                  <label
+                    className="toolbar-color"
+                    title="Text color"
+                  >
+                    A
+
+                    <input
+                      type="color"
+                      defaultValue="#202a44"
+                      onChange={(
+                        event
+                      ) =>
+                        runEditorCommand(
+                          "foreColor",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label
+                    className="toolbar-highlight"
+                    title="Highlight"
+                  >
+                    ▬
+
+                    <input
+                      type="color"
+                      defaultValue="#d9e2e9"
+                      onChange={(
+                        event
+                      ) =>
+                        runEditorCommand(
+                          "hiliteColor",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+                  </label>
+
+                  <div className="toolbar-divider" />
+
+                  <button
+                    type="button"
+                    title="Align left"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "justifyLeft"
+                      );
+                    }}
+                  >
+                    ≡
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Align center"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "justifyCenter"
+                      );
+                    }}
+                  >
+                    ≣
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Align right"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "justifyRight"
+                      );
+                    }}
+                  >
+                    ☷
+                  </button>
+
+                  <div className="toolbar-divider" />
+
+                  <button
+                    type="button"
+                    title="Bulleted list"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "insertUnorderedList"
+                      );
+                    }}
+                  >
+                    •≡
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Numbered list"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "insertOrderedList"
+                      );
+                    }}
+                  >
+                    1≡
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Outdent"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "outdent"
+                      );
+                    }}
+                  >
+                    ⇤
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Indent"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "indent"
+                      );
+                    }}
+                  >
+                    ⇥
+                  </button>
+
+                  <div className="toolbar-divider" />
+
+                  <button
+                    type="button"
+                    title="Insert link"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      addLink();
+                    }}
+                  >
+                    🔗
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Remove formatting"
+                    onMouseDown={(
+                      event
+                    ) => {
+                      event.preventDefault();
+                      runEditorCommand(
+                        "removeFormat"
+                      );
+                    }}
+                  >
+                    Tx
+                  </button>
+                </div>
+
+                {/* EDITOR */}
+
+                <div
+                  ref={
+                    editorRef
+                  }
+                  className="rich-editor"
+                  contentEditable={
+                    !composerBusy
+                  }
+                  suppressContentEditableWarning
+                  data-placeholder={
+                    replyMode ===
+                    "forward"
+                      ? "Add a message to your forwarded email…"
+                      : "Write your reply…"
+                  }
+                  onInput={(
+                    event
+                  ) =>
+                    setEditorHtml(
+                      event
+                        .currentTarget
+                        .innerHTML
+                    )
+                  }
+                />
+
+                {/* FILES */}
+
+                {pendingFiles.length >
+                  0 && (
+                  <div className="pending-attachments">
+
+                    {pendingFiles.map(
+                      (
+                        file,
+                        index
+                      ) => (
+                        <div
+                          className="pending-attachment"
+                          key={`${file.name}-${file.size}-${file.lastModified}`}
+                        >
+
+                          <div className="pending-file-icon">
+                            {file.type
+                              ?.startsWith(
+                                "image/"
+                              )
+                              ? "🖼"
+                              : "📎"}
+                          </div>
+
+                          <div className="pending-file-meta">
+
+                            <div className="pending-file-name">
+                              {
+                                file.name
+                              }
+                            </div>
+
+                            <div className="pending-file-size">
+                              {formatFileSize(
+                                file.size
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="pending-file-remove"
+                            disabled={
+                              composerBusy
+                            }
+                            onClick={() =>
+                              removePendingFile(
+                                index
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* FOOTER */}
+
+                <div className="rich-composer-footer">
+
+                  <div className="composer-footer-left">
+
+                    <input
+                      ref={
+                        fileInputRef
+                      }
+                      type="file"
+                      multiple
+                      className="hidden-file-input"
+                      onChange={(
+                        event
+                      ) => {
+                        addFiles(
+                          event
+                            .target
+                            .files
+                        );
+
+                        event.target.value =
+                          "";
+                      }}
+                    />
+
+                    <input
+                      ref={
+                        imageInputRef
+                      }
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden-file-input"
+                      onChange={(
+                        event
+                      ) => {
+                        addFiles(
+                          event
+                            .target
+                            .files
+                        );
+
+                        event.target.value =
+                          "";
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      className="composer-icon-button"
+                      title="Attach files"
+                      disabled={
+                        composerBusy
+                      }
+                      onClick={() =>
+                        fileInputRef
+                          .current
+                          ?.click()
+                      }
+                    >
+                      📎
+                      <span>
+                        Attach
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="composer-icon-button"
+                      title="Attach images"
+                      disabled={
+                        composerBusy
+                      }
+                      onClick={() =>
+                        imageInputRef
+                          .current
+                          ?.click()
+                      }
+                    >
+                      🖼
+                      <span>
+                        Image
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="close-ticket-button"
+                      disabled={
+                        composerBusy ||
+                        selected.status ===
+                          "Closed"
+                      }
+                      onClick={() =>
+                        updateTicketField(
+                          "status",
+                          "Closed"
+                        )
+                      }
+                    >
+                      Close ticket
+                    </button>
+
+                    {(uploadProgress ||
+                      composerNotice) && (
+                      <div
+                        className={`composer-status ${
+                          composerNotice
+                            ?.toLowerCase()
+                            .includes(
+                              "could"
+                            ) ||
+                          composerNotice
+                            ?.toLowerCase()
+                            .includes(
+                              "required"
+                            ) ||
+                          composerNotice
+                            ?.toLowerCase()
+                            .includes(
+                              "expired"
+                            )
+                            ? "error"
+                            : ""
+                        }`}
+                      >
+                        {uploadProgress ||
+                          composerNotice}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="send-split">
+
+                    <button
+                      type="button"
+                      className="send-main-button"
+                      disabled={
+                        composerBusy
+                      }
+                      onClick={() =>
+                        sendMessage(
+                          "send"
+                        )
+                      }
+                    >
+                      {composerBusy
+                        ? "Sending…"
+                        : "Send"}
+                    </button>
+
+                    <div className="send-menu-wrap">
+
+                      <button
+                        type="button"
+                        className="send-menu-button"
+                        disabled={
+                          composerBusy
+                        }
+                        onClick={() =>
+                          setShowSendMenu(
+                            (
+                              current
+                            ) =>
+                              !current
+                          )
+                        }
+                      >
+                        ▾
+                      </button>
+
+                      {showSendMenu && (
+                        <div className="send-menu">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              sendMessage(
+                                "send"
+                              )
+                            }
+                          >
+                            <strong>
+                              Send
+                            </strong>
+
+                            <span>
+                              Keep the current ticket status
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              sendMessage(
+                                "send_close"
+                              )
+                            }
+                          >
+                            <strong>
+                              Send & Close
+                            </strong>
+
+                            <span>
+                              Send and close this ticket
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              sendMessage(
+                                "send_waiting"
+                              )
+                            }
+                          >
+                            <strong>
+                              Send & Waiting
+                            </strong>
+
+                            <span>
+                              Send and mark as Waiting
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              sendMessage(
+                                "send_on_hold"
+                              )
+                            }
+                          >
+                            <strong>
+                              Send & On Hold
+                            </strong>
+
+                            <span>
+                              Send and put this ticket on hold
+                            </span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ============================================= */}
+            {/* CONVERSATION */}
+            {/* ============================================= */}
+
+            <div className="conversation-scroll">
+
+              <div className="conversation-section-heading">
+
+                <div>
+                  <h3>
+                    Conversation
+                  </h3>
+
+                  <p>
+                    Newest message first
+                  </p>
+                </div>
+
+                <div className="thread-count">
+                  {threads.length}{" "}
+                  {threads.length ===
+                  1
+                    ? "thread"
+                    : "threads"}
+                </div>
+              </div>
 
               {loadingThreads && (
                 <div className="loading-threads">
@@ -3458,19 +4488,14 @@ function App() {
               )}
 
               {!loadingThreads &&
-                threads.map(
+                newestThreads.map(
                   (
                     thread
                   ) => {
                     const outbound =
-                      String(
-                        thread.direction ||
-                          ""
-                      )
-                        .toLowerCase()
-                        .includes(
-                          "out"
-                        );
+                      isOutboundThread(
+                        thread
+                      );
 
                     const attachments =
                       Array.isArray(
@@ -3491,33 +4516,127 @@ function App() {
                             : "inbound"
                         }`}
                       >
-
                         <div className="message-header">
 
-                          <div>
-                            <div className="message-author">
-                              {thread.author_name ||
+                          <div className="message-author-area">
+
+                            <div
+                              className={`message-avatar ${
+                                outbound
+                                  ? "team-avatar"
+                                  : "customer-avatar"
+                              }`}
+                            >
+                              {(
+                                thread.author_name ||
                                 thread.author_email ||
-                                (outbound
-                                  ? "Team"
-                                  : "Requester")}
+                                "?"
+                              )
+                                .charAt(0)
+                                .toUpperCase()}
                             </div>
 
-                            {thread.author_email && (
-                              <div className="message-email">
-                                {
-                                  thread.author_email
-                                }
+                            <div>
+                              <div className="message-author">
+                                {thread.author_name ||
+                                  thread.author_email ||
+                                  (outbound
+                                    ? "Team"
+                                    : "Requester")}
                               </div>
-                            )}
+
+                              <div className="message-direction">
+                                {outbound
+                                  ? "Team reply"
+                                  : "Customer message"}
+                              </div>
+                            </div>
                           </div>
 
-                          <span className="message-time">
-                            {formatDateTime(
-                              thread.created_at_zoho
-                            )}
-                          </span>
+                          <div className="message-header-right">
+
+                            <span className="message-time">
+                              {formatDateTime(
+                                thread.created_at_zoho
+                              )}
+                            </span>
+
+                            <div className="thread-actions">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  configureComposer(
+                                    "reply",
+                                    thread
+                                  )
+                                }
+                              >
+                                ↩ Reply
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  configureComposer(
+                                    "reply_all",
+                                    thread
+                                  )
+                                }
+                              >
+                                Reply all
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  configureComposer(
+                                    "forward",
+                                    thread
+                                  )
+                                }
+                              >
+                                Forward
+                              </button>
+                            </div>
+                          </div>
                         </div>
+
+                        {hasRecipientInfo(
+                          thread
+                        ) && (
+                          <div className="message-recipient-box">
+
+                            <RecipientLine
+                              label="From"
+                              value={
+                                thread.from_email ||
+                                thread.author_email
+                              }
+                            />
+
+                            <RecipientLine
+                              label="To"
+                              value={
+                                thread.to_email
+                              }
+                            />
+
+                            <RecipientLine
+                              label="Cc"
+                              value={
+                                thread.cc
+                              }
+                            />
+
+                            <RecipientLine
+                              label="Bcc"
+                              value={
+                                thread.bcc
+                              }
+                            />
+                          </div>
+                        )}
 
                         {thread.content_html ? (
                           <div
@@ -3539,972 +4658,128 @@ function App() {
                           0 && (
                           <div className="existing-attachments">
 
-                            {attachments.map(
-                              (
-                                attachment,
-                                index
-                              ) => (
-                                <div
-                                  className="existing-attachment"
-                                  key={
-                                    attachment.id ||
-                                    `${attachment.name}-${index}`
-                                  }
-                                >
-                                  <span className="attachment-icon">
-                                    📎
-                                  </span>
+                            <div className="attachment-section-label">
+                              Attachments
+                            </div>
 
-                                  <span className="existing-attachment-name">
-                                    {attachment.name ||
-                                      "Attachment"}
-                                  </span>
+                            <div className="existing-attachment-list">
 
-                                  {attachment.size && (
-                                    <span className="existing-attachment-size">
-                                      {formatFileSize(
-                                        attachment.size
+                              {attachments.map(
+                                (
+                                  attachment,
+                                  index
+                                ) => (
+                                  <div
+                                    className="existing-attachment"
+                                    key={
+                                      attachment.id ||
+                                      `${attachment.name}-${index}`
+                                    }
+                                  >
+                                    <span className="attachment-icon">
+                                      {String(
+                                        attachment.content_type ||
+                                          ""
+                                      ).startsWith(
+                                        "image/"
+                                      )
+                                        ? "🖼"
+                                        : "📎"}
+                                    </span>
+
+                                    <span className="existing-attachment-copy">
+
+                                      <span className="existing-attachment-name">
+                                        {attachment.name ||
+                                          "Attachment"}
+                                      </span>
+
+                                      {attachment.size && (
+                                        <span className="existing-attachment-size">
+                                          {formatFileSize(
+                                            attachment.size
+                                          )}
+                                        </span>
                                       )}
                                     </span>
-                                  )}
-                                </div>
-                              )
-                            )}
+                                  </div>
+                                )
+                              )}
+                            </div>
                           </div>
                         )}
                       </article>
                     );
                   }
                 )}
-            </div>
 
-            {/* ================================================= */}
-            {/* RICH COMPOSER */}
-            {/* ================================================= */}
+              {/* ORIGINAL REQUEST LAST */}
 
-            <div className="rich-composer">
+              {selected.description && (
+                <article className="original-message">
 
-              {/* MODE */}
+                  <div className="original-request-label">
+                    Original request
+                  </div>
 
-              <div className="composer-mode-row">
+                  <div className="message-header">
 
-                <div className="composer-dropdown-wrap">
+                    <div className="message-author-area">
 
-                  <button
-                    type="button"
-                    className="composer-mode-button"
-                    onClick={() =>
-                      setShowReplyModeMenu(
-                        (
-                          current
-                        ) =>
-                          !current
-                      )
-                    }
-                  >
-                    {replyMode ===
-                    "reply"
-                      ? "Reply"
-                      : replyMode ===
-                        "reply_all"
-                      ? "Reply All"
-                      : "Forward"}
-
-                    <span className="dropdown-chevron">
-                      ▾
-                    </span>
-                  </button>
-
-                  {showReplyModeMenu && (
-                    <div className="composer-dropdown-menu">
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          changeReplyMode(
-                            "reply"
-                          )
-                        }
-                      >
-                        <strong>
-                          Reply
-                        </strong>
-
-                        <span>
-                          Reply to the requester
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          changeReplyMode(
-                            "reply_all"
-                          )
-                        }
-                      >
-                        <strong>
-                          Reply All
-                        </strong>
-
-                        <span>
-                          Include other participants
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          changeReplyMode(
-                            "forward"
-                          )
-                        }
-                      >
-                        <strong>
-                          Forward
-                        </strong>
-
-                        <span>
-                          Send this conversation to someone else
-                        </span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="composer-top-actions">
-
-                  {!showCc && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowCc(
-                          true
+                      <div className="message-avatar customer-avatar">
+                        {(
+                          selected.contact_name ||
+                          selected.contact_email ||
+                          "?"
                         )
-                      }
-                    >
-                      Cc
-                    </button>
-                  )}
-
-                  {!showBcc && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowBcc(
-                          true
-                        )
-                      }
-                    >
-                      Bcc
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* RECIPIENTS */}
-
-              <div className="recipient-section">
-
-                <div className="recipient-row">
-
-                  <div className="recipient-label">
-                    From
-                  </div>
-
-                  <div className="recipient-readonly">
-                    {detectedFromEmail}
-                  </div>
-                </div>
-
-                <div className="recipient-row">
-
-                  <div className="recipient-label">
-                    To
-                  </div>
-
-                  <input
-                    type="text"
-                    className="recipient-input"
-                    value={
-                      recipientTo
-                    }
-                    placeholder={
-                      replyMode ===
-                      "forward"
-                        ? "Enter recipient email…"
-                        : "Recipient"
-                    }
-                    disabled={
-                      composerBusy
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setRecipientTo(
-                        event
-                          .target
-                          .value
-                      )
-                    }
-                  />
-                </div>
-
-                {showCc && (
-                  <div className="recipient-row">
-
-                    <div className="recipient-label">
-                      Cc
-                    </div>
-
-                    <input
-                      type="text"
-                      className="recipient-input"
-                      value={
-                        recipientCc
-                      }
-                      placeholder="Add CC recipients…"
-                      disabled={
-                        composerBusy
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setRecipientCc(
-                          event
-                            .target
-                            .value
-                        )
-                      }
-                    />
-
-                    <button
-                      type="button"
-                      className="recipient-remove"
-                      onClick={() => {
-                        setRecipientCc(
-                          ""
-                        );
-
-                        setShowCc(
-                          false
-                        );
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-
-                {showBcc && (
-                  <div className="recipient-row">
-
-                    <div className="recipient-label">
-                      Bcc
-                    </div>
-
-                    <input
-                      type="text"
-                      className="recipient-input"
-                      value={
-                        recipientBcc
-                      }
-                      placeholder="Add BCC recipients…"
-                      disabled={
-                        composerBusy
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setRecipientBcc(
-                          event
-                            .target
-                            .value
-                        )
-                      }
-                    />
-
-                    <button
-                      type="button"
-                      className="recipient-remove"
-                      onClick={() => {
-                        setRecipientBcc(
-                          ""
-                        );
-
-                        setShowBcc(
-                          false
-                        );
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* TOOLBAR */}
-
-              <div className="rich-toolbar">
-
-                <button
-                  type="button"
-                  title="Undo"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "undo"
-                    );
-                  }}
-                >
-                  ↶
-                </button>
-
-                <button
-                  type="button"
-                  title="Redo"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "redo"
-                    );
-                  }}
-                >
-                  ↷
-                </button>
-
-                <div className="toolbar-divider" />
-
-                <button
-                  type="button"
-                  className="toolbar-bold"
-                  title="Bold"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "bold"
-                    );
-                  }}
-                >
-                  B
-                </button>
-
-                <button
-                  type="button"
-                  className="toolbar-italic"
-                  title="Italic"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "italic"
-                    );
-                  }}
-                >
-                  I
-                </button>
-
-                <button
-                  type="button"
-                  className="toolbar-underline"
-                  title="Underline"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "underline"
-                    );
-                  }}
-                >
-                  U
-                </button>
-
-                <button
-                  type="button"
-                  className="toolbar-strike"
-                  title="Strikethrough"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "strikeThrough"
-                    );
-                  }}
-                >
-                  S
-                </button>
-
-                <div className="toolbar-divider" />
-
-                <select
-                  className="toolbar-select"
-                  title="Font size"
-                  defaultValue="3"
-                  onChange={(
-                    event
-                  ) =>
-                    runEditorCommand(
-                      "fontSize",
-                      event
-                        .target
-                        .value
-                    )
-                  }
-                >
-                  <option value="2">
-                    Small
-                  </option>
-
-                  <option value="3">
-                    Normal
-                  </option>
-
-                  <option value="4">
-                    Large
-                  </option>
-
-                  <option value="5">
-                    Larger
-                  </option>
-                </select>
-
-                <label
-                  className="toolbar-color"
-                  title="Text color"
-                >
-                  A
-
-                  <input
-                    type="color"
-                    defaultValue="#333333"
-                    onChange={(
-                      event
-                    ) =>
-                      runEditorCommand(
-                        "foreColor",
-                        event
-                          .target
-                          .value
-                      )
-                    }
-                  />
-                </label>
-
-                <label
-                  className="toolbar-highlight"
-                  title="Highlight"
-                >
-                  ▬
-
-                  <input
-                    type="color"
-                    defaultValue="#fff2a8"
-                    onChange={(
-                      event
-                    ) =>
-                      runEditorCommand(
-                        "hiliteColor",
-                        event
-                          .target
-                          .value
-                      )
-                    }
-                  />
-                </label>
-
-                <div className="toolbar-divider" />
-
-                <button
-                  type="button"
-                  title="Align left"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "justifyLeft"
-                    );
-                  }}
-                >
-                  ≡
-                </button>
-
-                <button
-                  type="button"
-                  title="Align center"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "justifyCenter"
-                    );
-                  }}
-                >
-                  ≣
-                </button>
-
-                <button
-                  type="button"
-                  title="Align right"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "justifyRight"
-                    );
-                  }}
-                >
-                  ☷
-                </button>
-
-                <div className="toolbar-divider" />
-
-                <button
-                  type="button"
-                  title="Bulleted list"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "insertUnorderedList"
-                    );
-                  }}
-                >
-                  •≡
-                </button>
-
-                <button
-                  type="button"
-                  title="Numbered list"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "insertOrderedList"
-                    );
-                  }}
-                >
-                  1≡
-                </button>
-
-                <button
-                  type="button"
-                  title="Outdent"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "outdent"
-                    );
-                  }}
-                >
-                  ⇤
-                </button>
-
-                <button
-                  type="button"
-                  title="Indent"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "indent"
-                    );
-                  }}
-                >
-                  ⇥
-                </button>
-
-                <div className="toolbar-divider" />
-
-                <button
-                  type="button"
-                  title="Insert link"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    addLink();
-                  }}
-                >
-                  🔗
-                </button>
-
-                <button
-                  type="button"
-                  title="Remove formatting"
-                  onMouseDown={(
-                    event
-                  ) => {
-                    event.preventDefault();
-
-                    runEditorCommand(
-                      "removeFormat"
-                    );
-                  }}
-                >
-                  Tx
-                </button>
-              </div>
-
-              {/* EDITOR */}
-
-              <div
-                ref={
-                  editorRef
-                }
-                className="rich-editor"
-                contentEditable={
-                  !composerBusy
-                }
-                suppressContentEditableWarning
-                data-placeholder={
-                  replyMode ===
-                  "forward"
-                    ? "Add a message to your forwarded email…"
-                    : "Write your reply…"
-                }
-                onInput={(
-                  event
-                ) =>
-                  setEditorHtml(
-                    event
-                      .currentTarget
-                      .innerHTML
-                  )
-                }
-              />
-
-              {/* ATTACHMENTS */}
-
-              {pendingFiles.length >
-                0 && (
-                <div className="pending-attachments">
-
-                  {pendingFiles.map(
-                    (
-                      file,
-                      index
-                    ) => (
-                      <div
-                        className="pending-attachment"
-                        key={`${file.name}-${file.size}-${file.lastModified}`}
-                      >
-
-                        <div className="pending-file-icon">
-                          {file.type
-                            ?.startsWith(
-                              "image/"
-                            )
-                            ? "🖼"
-                            : "📎"}
-                        </div>
-
-                        <div className="pending-file-meta">
-
-                          <div className="pending-file-name">
-                            {
-                              file.name
-                            }
-                          </div>
-
-                          <div className="pending-file-size">
-                            {formatFileSize(
-                              file.size
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="pending-file-remove"
-                          disabled={
-                            composerBusy
-                          }
-                          onClick={() =>
-                            removePendingFile(
-                              index
-                            )
-                          }
-                        >
-                          ×
-                        </button>
+                          .charAt(0)
+                          .toUpperCase()}
                       </div>
-                    )
+
+                      <div>
+                        <div className="message-author">
+                          {selected.contact_name ||
+                            selected.contact_email ||
+                            "Requester"}
+                        </div>
+
+                        <div className="message-direction">
+                          Ticket created
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="message-time">
+                      {formatDateTime(
+                        selected.created_at_zoho
+                      )}
+                    </span>
+                  </div>
+
+                  {selected.contact_email && (
+                    <div className="message-recipient-box">
+
+                      <RecipientLine
+                        label="From"
+                        value={
+                          selected.contact_email
+                        }
+                      />
+                    </div>
                   )}
-                </div>
+
+                  <div
+                    className="message-body"
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        selected.description,
+                    }}
+                  />
+                </article>
               )}
 
-              {/* FOOTER */}
-
-              <div className="rich-composer-footer">
-
-                <div className="composer-footer-left">
-
-                  <input
-                    ref={
-                      fileInputRef
-                    }
-                    type="file"
-                    multiple
-                    className="hidden-file-input"
-                    onChange={(
-                      event
-                    ) => {
-                      addFiles(
-                        event
-                          .target
-                          .files
-                      );
-
-                      event.target.value =
-                        "";
-                    }}
-                  />
-
-                  <input
-                    ref={
-                      imageInputRef
-                    }
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden-file-input"
-                    onChange={(
-                      event
-                    ) => {
-                      addFiles(
-                        event
-                          .target
-                          .files
-                      );
-
-                      event.target.value =
-                        "";
-                    }}
-                  />
-
-                  <button
-                    type="button"
-                    className="composer-icon-button"
-                    title="Attach files"
-                    disabled={
-                      composerBusy
-                    }
-                    onClick={() =>
-                      fileInputRef
-                        .current
-                        ?.click()
-                    }
-                  >
-                    📎
-                  </button>
-
-                  <button
-                    type="button"
-                    className="composer-icon-button"
-                    title="Attach images"
-                    disabled={
-                      composerBusy
-                    }
-                    onClick={() =>
-                      imageInputRef
-                        .current
-                        ?.click()
-                    }
-                  >
-                    🖼
-                  </button>
-
-                  <button
-                    type="button"
-                    className="close-ticket-button"
-                    disabled={
-                      composerBusy ||
-                      selected.status ===
-                        "Closed"
-                    }
-                    onClick={() =>
-                      updateTicketField(
-                        "status",
-                        "Closed"
-                      )
-                    }
-                  >
-                    Close ticket
-                  </button>
-
-                  {(uploadProgress ||
-                    composerNotice) && (
-                    <div
-                      className={`composer-status ${
-                        composerNotice
-                          ?.toLowerCase()
-                          .includes(
-                            "could"
-                          ) ||
-                        composerNotice
-                          ?.toLowerCase()
-                          .includes(
-                            "required"
-                          ) ||
-                        composerNotice
-                          ?.toLowerCase()
-                          .includes(
-                            "expired"
-                          )
-                          ? "error"
-                          : ""
-                      }`}
-                    >
-                      {uploadProgress ||
-                        composerNotice}
-                    </div>
-                  )}
-                </div>
-
-                <div className="send-split">
-
-                  <button
-                    type="button"
-                    className="send-main-button"
-                    disabled={
-                      composerBusy
-                    }
-                    onClick={() =>
-                      sendMessage(
-                        "send"
-                      )
-                    }
-                  >
-                    {composerBusy
-                      ? "Sending…"
-                      : "Send"}
-                  </button>
-
-                  <div className="send-menu-wrap">
-
-                    <button
-                      type="button"
-                      className="send-menu-button"
-                      disabled={
-                        composerBusy
-                      }
-                      onClick={() =>
-                        setShowSendMenu(
-                          (
-                            current
-                          ) =>
-                            !current
-                        )
-                      }
-                    >
-                      ▾
-                    </button>
-
-                    {showSendMenu && (
-                      <div className="send-menu">
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            sendMessage(
-                              "send"
-                            )
-                          }
-                        >
-                          <strong>
-                            Send
-                          </strong>
-
-                          <span>
-                            Send and keep current status
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            sendMessage(
-                              "send_close"
-                            )
-                          }
-                        >
-                          <strong>
-                            Send & Close
-                          </strong>
-
-                          <span>
-                            Send reply and close ticket
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            sendMessage(
-                              "send_waiting"
-                            )
-                          }
-                        >
-                          <strong>
-                            Send & Waiting
-                          </strong>
-
-                          <span>
-                            Send reply and set status to Waiting
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            sendMessage(
-                              "send_on_hold"
-                            )
-                          }
-                        >
-                          <strong>
-                            Send & On Hold
-                          </strong>
-
-                          <span>
-                            Send reply and set status to On Hold
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="conversation-end">
+                Start of conversation
               </div>
             </div>
           </>
@@ -4524,15 +4799,21 @@ function App() {
         ) : (
           <>
             <div className="details-header">
-              <h3>
-                Ticket details
-              </h3>
+
+              <div>
+                <h3>
+                  Ticket details
+                </h3>
+
+                <p>
+                  Manage this ticket
+                </p>
+              </div>
             </div>
 
             <div className="details-content">
 
               <Detail label="Brand">
-
                 <BrandBadge
                   source={
                     selected.source
@@ -4647,6 +4928,7 @@ function App() {
                           {agent.name ||
                             agent.email ||
                             "Unnamed agent"}
+
                           {agent.email
                             ? ` — ${agent.email}`
                             : ""}
@@ -4665,8 +4947,6 @@ function App() {
                 )}
               </Detail>
 
-              {/* TAGS */}
-
               <Detail label="Tags">
 
                 {loadingTags ? (
@@ -4675,7 +4955,6 @@ function App() {
                   </div>
                 ) : (
                   <>
-
                     <div className="tag-list">
 
                       {tags.length ===
@@ -4695,7 +4974,6 @@ function App() {
                             }
                             className="ticket-tag"
                           >
-
                             <span>
                               {
                                 tag.name
@@ -4822,7 +5100,7 @@ function App() {
                                   </span>
 
                                   <span>
-                                    Create new tag{" "}
+                                    Create{" "}
                                     <strong>
                                       “
                                       {
@@ -4888,7 +5166,6 @@ function App() {
                     )
                   }
                 >
-
                   <option value="">
                     No priority
                   </option>
