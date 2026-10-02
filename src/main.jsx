@@ -48,6 +48,33 @@ const BRAND_STATUSES = {
   ],
 };
 
+const CODEWIZ_TICKET_OWNERS = [
+  {
+    name: "Manuela Cruz",
+    email: "mcruz@clearsummitgroup.com",
+  },
+  {
+    name: "Daniela Alvarez",
+    email: "dalvarez@clearsummitgroup.com",
+  },
+  {
+    name: "Brandy Blackburn",
+    email: "bblackburn@tutordoctor.org",
+  },
+  {
+    name: "Fauziyah Salaudeen",
+    email: "fsalaudeen@qualicare.com",
+  },
+  {
+    name: "Eduarda Servat",
+    email: "eservat@clearsummitgroup.com",
+  },
+  {
+    name: "Michelle Morris",
+    email: "mmorris@clearsummitgroup.com",
+  },
+];
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -181,6 +208,63 @@ function brandClass(source) {
   return `brand-${brandSlug(
     source
   )}`;
+}
+
+function getTicketOwnerName(ticket) {
+  if (!ticket) {
+    return "";
+  }
+
+  if (
+    ticket.source ===
+    "Code Wiz"
+  ) {
+    return (
+      ticket.codewiz_agent_name ||
+      ""
+    );
+  }
+
+  return (
+    ticket.assignee_name ||
+    ""
+  );
+}
+
+function getTicketOwnerEmail(ticket) {
+  if (!ticket) {
+    return "";
+  }
+
+  if (
+    ticket.source ===
+    "Code Wiz"
+  ) {
+    return (
+      ticket.codewiz_agent_email ||
+      ""
+    );
+  }
+
+  return (
+    ticket.assignee_email ||
+    ""
+  );
+}
+
+function isTicketUnassigned(ticket) {
+  if (!ticket) {
+    return true;
+  }
+
+  if (
+    ticket.source ===
+    "Code Wiz"
+  ) {
+    return !ticket.codewiz_agent_name;
+  }
+
+  return !ticket.assignee_id;
 }
 
 function statusClass(status) {
@@ -3349,7 +3433,9 @@ function App() {
             (
               ticket
             ) =>
-              !ticket.assignee_id &&
+              isTicketUnassigned(
+                ticket
+              ) &&
               ticket.status !==
                 "Closed"
           );
@@ -3371,7 +3457,9 @@ function App() {
               ticket
             ) =>
               String(
-                ticket.assignee_email ||
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
                   ""
               ).toLowerCase() ===
                 userEmail &&
@@ -3401,6 +3489,8 @@ function App() {
                   ticket.contact_email,
                   ticket.assignee_name,
                   ticket.assignee_email,
+                  ticket.codewiz_agent_name,
+                  ticket.codewiz_agent_email,
                   ticket.status,
                   ticket.source,
                   ticket.description,
@@ -3515,7 +3605,9 @@ function App() {
               ticket.status !==
                 "Closed" &&
               String(
-                ticket.assignee_email ||
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
                   ""
               ).toLowerCase() ===
                 userEmail
@@ -3585,7 +3677,9 @@ function App() {
             (
               ticket
             ) =>
-              !ticket.assignee_id &&
+              isTicketUnassigned(
+                ticket
+              ) &&
               ticket.status !==
                 "Closed"
           ).length,
@@ -4387,7 +4481,9 @@ function App() {
                   />
 
                   <span className="ticket-assignee">
-                    {ticket.assignee_name ||
+                    {getTicketOwnerName(
+                      ticket
+                    ) ||
                       "Unassigned"}
                   </span>
                 </div>
@@ -5769,71 +5865,257 @@ function App() {
                 </select>
               </Detail>
 
-              <Detail label="Ticket Owner">
+              {selected.source ===
+              "Code Wiz" ? (
+                <>
+                  <Detail label="Department">
 
-                {loadingAgents ? (
-                  <div className="agent-loading">
-                    Loading agents…
-                  </div>
-                ) : (
-                  <select
-                    className="detail-control owner-select"
-                    value={
-                      selected.assignee_id ||
-                      ""
-                    }
-                    disabled={
-                      updateBusy
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      updateTicketField(
-                        "assigneeId",
-                        event
-                          .target
-                          .value ||
-                          null
-                      )
-                    }
-                  >
-                    <option value="">
-                      Unassigned
-                    </option>
-
-                    {agents.map(
-                      (
-                        agent
-                      ) => (
-                        <option
-                          key={
-                            agent.zoho_agent_id
-                          }
-                          value={
-                            agent.zoho_agent_id
-                          }
-                        >
-                          {agent.name ||
-                            agent.email ||
-                            "Unnamed agent"}
-
-                          {agent.email
-                            ? ` — ${agent.email}`
-                            : ""}
+                    {loadingAgents ? (
+                      <div className="agent-loading">
+                        Loading departments…
+                      </div>
+                    ) : (
+                      <select
+                        className="detail-control owner-select"
+                        value={
+                          selected.assignee_id ||
+                          ""
+                        }
+                        disabled={
+                          updateBusy
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateTicketField(
+                            "assigneeId",
+                            event
+                              .target
+                              .value ||
+                              null
+                          )
+                        }
+                      >
+                        <option value="">
+                          Unassigned
                         </option>
-                      )
-                    )}
-                  </select>
-                )}
 
-                {selected.assignee_email && (
-                  <div className="owner-current-email">
-                    {
-                      selected.assignee_email
-                    }
-                  </div>
-                )}
-              </Detail>
+                        {selected.assignee_id &&
+                          !agents.some(
+                            (
+                              agent
+                            ) =>
+                              agent.zoho_agent_id ===
+                              selected.assignee_id
+                          ) && (
+                            <option
+                              value={
+                                selected.assignee_id
+                              }
+                            >
+                              {selected.assignee_name ||
+                                selected.assignee_email ||
+                                "Current Zoho owner"}
+
+                              {selected.assignee_email
+                                ? ` — ${selected.assignee_email}`
+                                : ""}
+                            </option>
+                          )}
+
+                        {agents.map(
+                          (
+                            agent
+                          ) => (
+                            <option
+                              key={
+                                agent.zoho_agent_id
+                              }
+                              value={
+                                agent.zoho_agent_id
+                              }
+                            >
+                              {agent.name ||
+                                agent.email ||
+                                "Unnamed department"}
+
+                              {agent.email
+                                ? ` — ${agent.email}`
+                                : ""}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    )}
+
+                    {selected.assignee_email && (
+                      <div className="owner-current-email">
+                        {
+                          selected.assignee_email
+                        }
+                      </div>
+                    )}
+                  </Detail>
+
+                  <Detail label="Ticket Owner">
+                    <select
+                      className="detail-control owner-select"
+                      value={
+                        selected.codewiz_agent_name ||
+                        ""
+                      }
+                      disabled={
+                        updateBusy
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateTicketField(
+                          "codewizAgentName",
+                          event
+                            .target
+                            .value ||
+                            null
+                        )
+                      }
+                    >
+                      <option value="">
+                        Unassigned
+                      </option>
+
+                      {selected.codewiz_agent_name &&
+                        !CODEWIZ_TICKET_OWNERS.some(
+                          (
+                            owner
+                          ) =>
+                            owner.name ===
+                            selected.codewiz_agent_name
+                        ) && (
+                          <option
+                            value={
+                              selected.codewiz_agent_name
+                            }
+                          >
+                            {
+                              selected.codewiz_agent_name
+                            }
+                          </option>
+                        )}
+
+                      {CODEWIZ_TICKET_OWNERS.map(
+                        (
+                          owner
+                        ) => (
+                          <option
+                            key={
+                              owner.email
+                            }
+                            value={
+                              owner.name
+                            }
+                          >
+                            {owner.name}
+                            {` — ${owner.email}`}
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    {selected.codewiz_agent_email && (
+                      <div className="owner-current-email">
+                        {
+                          selected.codewiz_agent_email
+                        }
+                      </div>
+                    )}
+                  </Detail>
+                </>
+              ) : (
+                <Detail label="Ticket Owner">
+
+                  {loadingAgents ? (
+                    <div className="agent-loading">
+                      Loading agents…
+                    </div>
+                  ) : (
+                    <select
+                      className="detail-control owner-select"
+                      value={
+                        selected.assignee_id ||
+                        ""
+                      }
+                      disabled={
+                        updateBusy
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateTicketField(
+                          "assigneeId",
+                          event
+                            .target
+                            .value ||
+                            null
+                        )
+                      }
+                    >
+                      <option value="">
+                        Unassigned
+                      </option>
+
+                      {selected.assignee_id &&
+                        !agents.some(
+                          (
+                            agent
+                          ) =>
+                            agent.zoho_agent_id ===
+                            selected.assignee_id
+                        ) && (
+                          <option
+                            value={
+                              selected.assignee_id
+                            }
+                          >
+                            {selected.assignee_name ||
+                              selected.assignee_email ||
+                              "Current Zoho owner"}
+                          </option>
+                        )}
+
+                      {agents.map(
+                        (
+                          agent
+                        ) => (
+                          <option
+                            key={
+                              agent.zoho_agent_id
+                            }
+                            value={
+                              agent.zoho_agent_id
+                            }
+                          >
+                            {agent.name ||
+                              agent.email ||
+                              "Unnamed agent"}
+
+                            {agent.email
+                              ? ` — ${agent.email}`
+                              : ""}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  )}
+
+                  {selected.assignee_email && (
+                    <div className="owner-current-email">
+                      {
+                        selected.assignee_email
+                      }
+                    </div>
+                  )}
+                </Detail>
+              )}
 
               <Detail label="Tags">
 
