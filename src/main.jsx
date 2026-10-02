@@ -840,6 +840,24 @@ function App() {
     useState(false);
 
   const [
+    zohoTierOptions,
+    setZohoTierOptions,
+  ] =
+    useState([]);
+
+  const [
+    loadingTierOptions,
+    setLoadingTierOptions,
+  ] =
+    useState(false);
+
+  const [
+    tierMetadataNotice,
+    setTierMetadataNotice,
+  ] =
+    useState("");
+
+  const [
     filter,
     setFilter,
   ] =
@@ -868,6 +886,78 @@ function App() {
     setUpdateNotice,
   ] =
     useState("");
+
+  // ====================================================
+  // ZOHO FIELD METADATA
+  // ====================================================
+
+  const loadTierMetadata =
+    useCallback(
+      async (
+        source
+      ) => {
+        if (
+          !session ||
+          !source
+        ) {
+          setZohoTierOptions([]);
+          setTierMetadataNotice("");
+          return;
+        }
+
+        setLoadingTierOptions(
+          true
+        );
+        setTierMetadataNotice("");
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .functions
+            .invoke(
+              "get-zoho-ticket-metadata",
+              {
+                body: {
+                  source,
+                },
+              }
+            );
+
+        if (
+          error ||
+          !data?.success
+        ) {
+          console.error(
+            "Tier metadata error:",
+            error || data
+          );
+
+          setZohoTierOptions([]);
+          setTierMetadataNotice(
+            data?.error ||
+              error?.message ||
+              "Could not load Zoho tier options."
+          );
+        } else {
+          setZohoTierOptions(
+            Array.isArray(
+              data.tier_options
+            )
+              ? data.tier_options
+              : []
+          );
+        }
+
+        setLoadingTierOptions(
+          false
+        );
+      },
+      [
+        session,
+      ]
+    );
 
   // ====================================================
   // TAGS
@@ -1611,14 +1701,21 @@ function App() {
       loadTagCatalog(
         selected.source
       );
+
+      loadTierMetadata(
+        selected.source
+      );
     } else {
       setAgents([]);
       setTagCatalog([]);
+      setZohoTierOptions([]);
+      setTierMetadataNotice("");
     }
   }, [
     selected?.source,
     loadAgents,
     loadTagCatalog,
+    loadTierMetadata,
   ]);
 
   useEffect(() => {
@@ -3070,10 +3167,6 @@ function App() {
                 needle
               );
           }
-        )
-        .slice(
-          0,
-          20
         );
     }, [
       tagCatalog,
@@ -3303,30 +3396,25 @@ function App() {
   const tierOptions =
     useMemo(() => {
       const values =
-        new Set();
+        new Set(
+          (
+            zohoTierOptions ||
+            []
+          )
+            .map((value) =>
+              String(
+                value ||
+                  ""
+              ).trim()
+            )
+            .filter(Boolean)
+        );
 
-      for (
-        const ticket of
-        tickets
-      ) {
-        if (
-          ticket.source !==
-          selected?.source
-        ) {
-          continue;
-        }
-
-        const value =
-          String(
-            ticket.tier_level ||
-              ""
-          ).trim();
-
-        if (value) {
-          values.add(value);
-        }
-      }
-
+      /*
+        Keep the ticket's current value visible even if
+        it is a legacy value that is no longer in Zoho's
+        current picklist configuration.
+      */
       if (
         selected?.tier_level
       ) {
@@ -3339,19 +3427,9 @@ function App() {
 
       return Array.from(
         values
-      ).sort((a, b) =>
-        a.localeCompare(
-          b,
-          undefined,
-          {
-            numeric: true,
-            sensitivity: "base",
-          }
-        )
       );
     }, [
-      tickets,
-      selected?.source,
+      zohoTierOptions,
       selected?.tier_level,
     ]);
 
@@ -6274,12 +6352,18 @@ function App() {
                         />
 
                         {showTagSuggestions && (
-                            <div className="tag-suggestions">
+                            <div
+                              className="tag-suggestions"
+                              style={{
+                                maxHeight: "320px",
+                                overflowY: "auto",
+                              }}
+                            >
 
                               {!tagInput.trim() &&
                                 suggestedTags.length > 0 && (
                                   <div className="tag-suggestions-title">
-                                    Existing tags
+                                    Existing tags ({suggestedTags.length})
                                   </div>
                                 )}
 
@@ -6349,40 +6433,54 @@ function App() {
               </Detail>
 
               <Detail label="Tier">
-                <select
-                  className="detail-control"
-                  value={
-                    selected.tier_level ||
-                    ""
-                  }
-                  disabled={
-                    updateBusy
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    updateTicketField(
-                      "tierLevel",
-                      event.target.value ||
-                        null
-                    )
-                  }
-                >
-                  <option value="">
-                    No tier
-                  </option>
-
-                  {tierOptions.map(
-                    (tier) => (
-                      <option
-                        key={tier}
-                        value={tier}
-                      >
-                        {tier}
+                {loadingTierOptions ? (
+                  <div className="agent-loading">
+                    Loading tiers…
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      className="detail-control"
+                      value={
+                        selected.tier_level ||
+                        ""
+                      }
+                      disabled={
+                        updateBusy
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateTicketField(
+                          "tierLevel",
+                          event.target.value ||
+                            null
+                        )
+                      }
+                    >
+                      <option value="">
+                        No tier
                       </option>
-                    )
-                  )}
-                </select>
+
+                      {tierOptions.map(
+                        (tier) => (
+                          <option
+                            key={tier}
+                            value={tier}
+                          >
+                            {tier}
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    {tierMetadataNotice && (
+                      <div className="owner-current-email">
+                        {tierMetadataNotice}
+                      </div>
+                    )}
+                  </>
+                )}
               </Detail>
 
               <Detail label="Priority">
