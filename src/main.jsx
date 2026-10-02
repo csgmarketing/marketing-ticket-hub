@@ -1,650 +1,2071 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { createClient } from "@supabase/supabase-js";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import ReactDOM from "react-dom/client";
+
+import {
+  createClient,
+} from "@supabase/supabase-js";
+
 import "./styles.css";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.");
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }
+  ).format(date);
 }
 
-const supabase = createClient(SUPABASE_URL || "", SUPABASE_ANON_KEY || "");
-
-const brandClass = (source = "") =>
-  source.toLowerCase().replace(/\s+/g, "-");
-
-const initials = (name = "") =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "?";
-
-const cleanText = (value = "") =>
-  String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const formatDate = (value) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
-  }).format(d);
-};
-
-const formatDateTime = (value) => {
+function formatDateTime(value) {
   if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(d);
-};
 
-const isClosedStatus = (status = "") =>
-  ["closed", "resolved", "completed"].includes(status.toLowerCase());
+  const date = new Date(value);
 
-const isWaitingStatus = (status = "") =>
-  ["on hold", "waiting", "pending"].some((x) =>
-    status.toLowerCase().includes(x)
-  );
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
 
-function Login() {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }
+  ).format(date);
+}
 
-  async function sendMagicLink(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    setBusy(false);
-    if (error) setError(error.message);
-    else setSent(true);
+function dateInputValue(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(
+      2,
+      "0"
+    );
+
+  return `${year}-${month}-${day}`;
+}
+
+function isOverdue(ticket) {
+  if (!ticket?.due_date) {
+    return false;
+  }
+
+  if (
+    ticket.status === "Closed"
+  ) {
+    return false;
   }
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="logo-mark">M</div>
-        <h1>Marketing Ticket Hub</h1>
-        <p>One inbox for Qualicare, Tutor Doctor and Code Wiz.</p>
-        {sent ? (
-          <div className="success-box">
-            Check your inbox for a secure sign-in link.
-          </div>
-        ) : (
-          <form onSubmit={sendMagicLink}>
-            <label>Work email</label>
-            <input
-              type="email"
-              required
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <button className="primary full" disabled={busy}>
-              {busy ? "Sending…" : "Email me a sign-in link"}
-            </button>
-            {error && <div className="error-text">{error}</div>}
-          </form>
-        )}
+    new Date(
+      ticket.due_date
+    ).getTime() <
+    Date.now()
+  );
+}
+
+function brandClass(source) {
+  switch (source) {
+    case "Qualicare":
+      return "brand-qualicare";
+
+    case "Tutor Doctor":
+      return "brand-tutordoctor";
+
+    case "Code Wiz":
+      return "brand-codewiz";
+
+    default:
+      return "";
+  }
+}
+
+function statusClass(status) {
+  const value =
+    String(
+      status || ""
+    )
+      .toLowerCase()
+      .replaceAll(
+        " ",
+        "-"
+      );
+
+  return `status-${value}`;
+}
+
+function getTicketSummary(
+  ticket
+) {
+  return (
+    ticket.email_summary ||
+    ticket.description ||
+    ""
+  )
+    .replace(
+      /<[^>]*>?/gm,
+      ""
+    )
+    .trim();
+}
+
+// ======================================================
+// SMALL COMPONENTS
+// ======================================================
+
+function BrandBadge({
+  source,
+}) {
+  return (
+    <span
+      className={`brand-badge ${brandClass(
+        source
+      )}`}
+    >
+      {source ||
+        "Unknown"}
+    </span>
+  );
+}
+
+function StatusBadge({
+  status,
+}) {
+  return (
+    <span
+      className={`status-badge ${statusClass(
+        status
+      )}`}
+    >
+      {status ||
+        "Unknown"}
+    </span>
+  );
+}
+
+function Detail({
+  label,
+  children,
+}) {
+  return (
+    <div className="detail-row">
+      <div className="detail-label">
+        {label}
+      </div>
+
+      <div className="detail-value">
+        {children}
       </div>
     </div>
   );
 }
 
-function App() {
-  const [session, setSession] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [tickets, setTickets] = useState([]);
-  const [threads, setThreads] = useState([]);
-  const [selectedKey, setSelectedKey] = useState(null);
-  const [filter, setFilter] = useState("all");
-  const [brand, setBrand] = useState("all");
-  const [search, setSearch] = useState("");
-  const [loadingTickets, setLoadingTickets] = useState(true);
-  const [loadingThreads, setLoadingThreads] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [replyBusy, setReplyBusy] = useState(false);
-  const [replyNotice, setReplyNotice] = useState("");
-  const [dataError, setDataError] = useState("");
+// ======================================================
+// LOGIN SCREEN
+// ======================================================
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session || null);
-      setAuthReady(true);
-    });
+function Login({
+  onSignedIn,
+}) {
+  const [email, setEmail] =
+    useState("");
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      setAuthReady(true);
-    });
+  const [busy, setBusy] =
+    useState(false);
 
-    return () => listener.subscription.unsubscribe();
-  }, []);
+  const [
+    message,
+    setMessage,
+  ] =
+    useState("");
 
-  async function loadTickets() {
-    setLoadingTickets(true);
-    setDataError("");
+  async function signIn(
+    event
+  ) {
+    event.preventDefault();
 
-    const { data, error } = await supabase
-      .from("tickets")
-      .select("*")
-      .eq("is_deleted", false)
-      .eq("is_trashed", false)
-      .order("updated_at_zoho", { ascending: false, nullsFirst: false })
-      .limit(500);
-
-    if (error) {
-      setDataError(error.message);
-      setTickets([]);
-    } else {
-      setTickets(data || []);
-      setSelectedKey((current) => {
-        if (current && (data || []).some((t) => t.ticket_key === current)) {
-          return current;
-        }
-        return data?.[0]?.ticket_key || null;
-      });
-    }
-    setLoadingTickets(false);
-  }
-
-  async function loadThreads(ticketKey) {
-    if (!ticketKey) {
-      setThreads([]);
+    if (!email.trim()) {
       return;
     }
-    setLoadingThreads(true);
-    const { data, error } = await supabase
-      .from("ticket_threads")
-      .select("*")
-      .eq("ticket_key", ticketKey)
-      .order("created_at_zoho", { ascending: true, nullsFirst: false });
 
-    if (!error) setThreads(data || []);
-    setLoadingThreads(false);
-  }
+    setBusy(true);
+    setMessage("");
 
-  useEffect(() => {
-    if (session) loadTickets();
-  }, [session]);
+    const {
+      error,
+    } =
+      await supabase.auth.signInWithOtp(
+        {
+          email:
+            email.trim(),
 
-  useEffect(() => {
-    if (selectedKey && session) loadThreads(selectedKey);
-  }, [selectedKey, session]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    const channel = supabase
-      .channel("marketing-ticket-hub-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tickets" },
-        () => loadTickets()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "ticket_threads" },
-        (payload) => {
-          const key = payload.new?.ticket_key || payload.old?.ticket_key;
-          if (key && key === selectedKey) loadThreads(selectedKey);
+          options: {
+            emailRedirectTo:
+              window.location.origin,
+          },
         }
-      )
-      .subscribe();
+      );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session, selectedKey]);
-
-  const selected = useMemo(
-    () => tickets.find((t) => t.ticket_key === selectedKey) || null,
-    [tickets, selectedKey]
-  );
-
-  const counts = useMemo(() => {
-    const now = Date.now();
-    return {
-      all: tickets.length,
-      open: tickets.filter((t) => !isClosedStatus(t.status || "")).length,
-      waiting: tickets.filter((t) => isWaitingStatus(t.status || "")).length,
-      overdue: tickets.filter((t) => {
-        if (!t.due_date || isClosedStatus(t.status || "")) return false;
-        return new Date(t.due_date).getTime() < now;
-      }).length,
-      unassigned: tickets.filter((t) => !t.assignee_name).length,
-    };
-  }, [tickets]);
-
-  const visibleTickets = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return tickets.filter((t) => {
-      if (brand !== "all" && t.source !== brand) return false;
-
-      if (filter === "open" && isClosedStatus(t.status || "")) return false;
-      if (filter === "waiting" && !isWaitingStatus(t.status || "")) return false;
-      if (
-        filter === "overdue" &&
-        !(
-          t.due_date &&
-          !isClosedStatus(t.status || "") &&
-          new Date(t.due_date).getTime() < Date.now()
-        )
-      )
-        return false;
-      if (filter === "unassigned" && t.assignee_name) return false;
-
-      if (!q) return true;
-      return [
-        t.subject,
-        t.contact_name,
-        t.contact_email,
-        t.ticket_number,
-        t.assignee_name,
-        t.status,
-        t.source,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [tickets, filter, brand, search]);
-
-  async function sendReply() {
-    if (!selected || !replyText.trim() || replyBusy) return;
-    setReplyBusy(true);
-    setReplyNotice("");
-
-    const { data, error } = await supabase.functions.invoke(
-      "reply-to-zoho-ticket",
-      {
-        body: {
-          ticket_key: selected.ticket_key,
-          content: replyText.trim(),
-        },
-      }
-    );
-
-    if (error || !data?.success) {
-      setReplyNotice(
-        `Could not send: ${error?.message || data?.error || "Unknown error"}`
+    if (error) {
+      setMessage(
+        error.message
       );
     } else {
-      setReplyText("");
-      setReplyNotice("Reply sent through Zoho.");
-      setTimeout(() => {
-        loadThreads(selected.ticket_key);
-        loadTickets();
-      }, 800);
+      setMessage(
+        "Check your email for the sign-in link."
+      );
     }
 
-    setReplyBusy(false);
+    setBusy(false);
   }
 
-  if (!authReady) return <div className="boot">Loading…</div>;
-  if (!session) return <Login />;
+  useEffect(() => {
+    const {
+      data: listener,
+    } =
+      supabase.auth.onAuthStateChange(
+        (
+          event,
+          session
+        ) => {
+          if (
+            session &&
+            (
+              event ===
+                "SIGNED_IN" ||
+              event ===
+                "INITIAL_SESSION"
+            )
+          ) {
+            onSignedIn(
+              session
+            );
+          }
+        }
+      );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, [
+    onSignedIn,
+  ]);
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-logo">
+          CSG
+        </div>
+
+        <h1>
+          Marketing Ticket
+          Hub
+        </h1>
+
+        <p>
+          Qualicare, Tutor
+          Doctor and Code
+          Wiz tickets in one
+          place.
+        </p>
+
+        <form
+          onSubmit={
+            signIn
+          }
+        >
+          <label>
+            Work email
+          </label>
+
+          <input
+            type="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(
+              event
+            ) =>
+              setEmail(
+                event
+                  .target
+                  .value
+              )
+            }
+          />
+
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={busy}
+          >
+            {busy
+              ? "Sending…"
+              : "Sign in with email"}
+          </button>
+
+          {message && (
+            <div className="login-message">
+              {message}
+            </div>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================
+// MAIN APP
+// ======================================================
+
+function App() {
+  const [
+    session,
+    setSession,
+  ] =
+    useState(null);
+
+  const [
+    authLoading,
+    setAuthLoading,
+  ] =
+    useState(true);
+
+  const [
+    tickets,
+    setTickets,
+  ] =
+    useState([]);
+
+  const [
+    threads,
+    setThreads,
+  ] =
+    useState([]);
+
+  const [
+    selectedKey,
+    setSelectedKey,
+  ] =
+    useState(null);
+
+  const [
+    loadingTickets,
+    setLoadingTickets,
+  ] =
+    useState(false);
+
+  const [
+    loadingThreads,
+    setLoadingThreads,
+  ] =
+    useState(false);
+
+  const [
+    filter,
+    setFilter,
+  ] =
+    useState("all");
+
+  const [
+    brandFilter,
+    setBrandFilter,
+  ] =
+    useState("all");
+
+  const [
+    search,
+    setSearch,
+  ] =
+    useState("");
+
+  // Reply composer
+
+  const [
+    replyText,
+    setReplyText,
+  ] =
+    useState("");
+
+  const [
+    replyBusy,
+    setReplyBusy,
+  ] =
+    useState(false);
+
+  const [
+    replyNotice,
+    setReplyNotice,
+  ] =
+    useState("");
+
+  // Ticket editing
+
+  const [
+    updateBusy,
+    setUpdateBusy,
+  ] =
+    useState(false);
+
+  const [
+    updateNotice,
+    setUpdateNotice,
+  ] =
+    useState("");
+
+  // ====================================================
+  // AUTH
+  // ====================================================
+
+  useEffect(() => {
+    async function loadSession() {
+      const {
+        data,
+      } =
+        await supabase.auth.getSession();
+
+      setSession(
+        data.session
+      );
+
+      setAuthLoading(
+        false
+      );
+    }
+
+    loadSession();
+
+    const {
+      data: listener,
+    } =
+      supabase.auth.onAuthStateChange(
+        (
+          _event,
+          nextSession
+        ) => {
+          setSession(
+            nextSession
+          );
+        }
+      );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // ====================================================
+  // LOAD TICKETS
+  // ====================================================
+
+  const loadTickets =
+    useCallback(
+      async (
+        preferredKey = null
+      ) => {
+        if (!session) {
+          return;
+        }
+
+        setLoadingTickets(
+          true
+        );
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "tickets"
+            )
+            .select("*")
+            .eq(
+              "is_deleted",
+              false
+            )
+            .eq(
+              "is_trashed",
+              false
+            )
+            .order(
+              "updated_at_zoho",
+              {
+                ascending:
+                  false,
+                nullsFirst:
+                  false,
+              }
+            );
+
+        if (error) {
+          console.error(
+            "Ticket load error:",
+            error
+          );
+
+          setLoadingTickets(
+            false
+          );
+
+          return;
+        }
+
+        const rows =
+          data || [];
+
+        setTickets(
+          rows
+        );
+
+        setSelectedKey(
+          (
+            current
+          ) => {
+            const desired =
+              preferredKey ||
+              current;
+
+            if (
+              desired &&
+              rows.some(
+                (
+                  ticket
+                ) =>
+                  ticket.ticket_key ===
+                  desired
+              )
+            ) {
+              return desired;
+            }
+
+            return (
+              rows[0]
+                ?.ticket_key ||
+              null
+            );
+          }
+        );
+
+        setLoadingTickets(
+          false
+        );
+      },
+      [session]
+    );
+
+  useEffect(() => {
+    if (session) {
+      loadTickets();
+    }
+  }, [
+    session,
+    loadTickets,
+  ]);
+
+  const selected =
+    useMemo(
+      () =>
+        tickets.find(
+          (ticket) =>
+            ticket.ticket_key ===
+            selectedKey
+        ) || null,
+      [
+        tickets,
+        selectedKey,
+      ]
+    );
+
+  // ====================================================
+  // LOAD THREADS
+  // ====================================================
+
+  const loadThreads =
+    useCallback(
+      async (
+        ticketKey
+      ) => {
+        if (
+          !session ||
+          !ticketKey
+        ) {
+          setThreads(
+            []
+          );
+          return;
+        }
+
+        setLoadingThreads(
+          true
+        );
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "ticket_threads"
+            )
+            .select("*")
+            .eq(
+              "ticket_key",
+              ticketKey
+            )
+            .order(
+              "created_at_zoho",
+              {
+                ascending:
+                  true,
+              }
+            );
+
+        if (error) {
+          console.error(
+            "Thread load error:",
+            error
+          );
+
+          setThreads(
+            []
+          );
+        } else {
+          setThreads(
+            data || []
+          );
+        }
+
+        setLoadingThreads(
+          false
+        );
+      },
+      [session]
+    );
+
+  useEffect(() => {
+    if (
+      selectedKey
+    ) {
+      loadThreads(
+        selectedKey
+      );
+    }
+  }, [
+    selectedKey,
+    loadThreads,
+  ]);
+
+  // ====================================================
+  // REALTIME
+  // ====================================================
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const channel =
+      supabase
+        .channel(
+          "ticket-hub-live"
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema:
+              "public",
+            table:
+              "tickets",
+          },
+          () => {
+            loadTickets();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema:
+              "public",
+            table:
+              "ticket_threads",
+          },
+          (
+            payload
+          ) => {
+            const ticketKey =
+              payload.new
+                ?.ticket_key ||
+              payload.old
+                ?.ticket_key;
+
+            if (
+              ticketKey &&
+              ticketKey ===
+                selectedKey
+            ) {
+              loadThreads(
+                selectedKey
+              );
+            }
+          }
+        )
+        .subscribe();
+
+    return () => {
+      supabase.removeChannel(
+        channel
+      );
+    };
+  }, [
+    session,
+    selectedKey,
+    loadTickets,
+    loadThreads,
+  ]);
+
+  // ====================================================
+  // FILTERS
+  // ====================================================
+
+  const filteredTickets =
+    useMemo(() => {
+      let rows = [
+        ...tickets,
+      ];
+
+      if (
+        brandFilter !==
+        "all"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.source ===
+              brandFilter
+          );
+      }
+
+      if (
+        filter ===
+        "open"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              ticket.status !==
+              "Closed"
+          );
+      }
+
+      if (
+        filter ===
+        "waiting"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              [
+                "On Hold",
+                "Waiting",
+                "Pending",
+              ].includes(
+                ticket.status
+              )
+          );
+      }
+
+      if (
+        filter ===
+        "overdue"
+      ) {
+        rows =
+          rows.filter(
+            isOverdue
+          );
+      }
+
+      if (
+        filter ===
+        "unassigned"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              !ticket.assignee_name &&
+              !ticket.assignee_email
+          );
+      }
+
+      if (
+        search.trim()
+      ) {
+        const needle =
+          search
+            .trim()
+            .toLowerCase();
+
+        rows =
+          rows.filter(
+            (ticket) => {
+              const haystack =
+                [
+                  ticket.subject,
+                  ticket.ticket_number,
+                  ticket.contact_name,
+                  ticket.contact_email,
+                  ticket.assignee_name,
+                  ticket.assignee_email,
+                  ticket.status,
+                  ticket.source,
+                  ticket.description,
+                ]
+                  .filter(
+                    Boolean
+                  )
+                  .join(
+                    " "
+                  )
+                  .toLowerCase();
+
+              return haystack.includes(
+                needle
+              );
+            }
+          );
+      }
+
+      return rows;
+    }, [
+      tickets,
+      filter,
+      brandFilter,
+      search,
+    ]);
+
+  const counts =
+    useMemo(() => {
+      return {
+        all:
+          tickets.length,
+
+        open:
+          tickets.filter(
+            (ticket) =>
+              ticket.status !==
+              "Closed"
+          ).length,
+
+        waiting:
+          tickets.filter(
+            (ticket) =>
+              [
+                "On Hold",
+                "Waiting",
+                "Pending",
+              ].includes(
+                ticket.status
+              )
+          ).length,
+
+        overdue:
+          tickets.filter(
+            isOverdue
+          ).length,
+
+        unassigned:
+          tickets.filter(
+            (ticket) =>
+              !ticket.assignee_name &&
+              !ticket.assignee_email
+          ).length,
+      };
+    }, [
+      tickets,
+    ]);
+
+  // ====================================================
+  // UPDATE STATUS / PRIORITY / DUE DATE
+  // ====================================================
+
+  async function updateTicketField(
+    field,
+    value
+  ) {
+    if (
+      !selected ||
+      updateBusy
+    ) {
+      return;
+    }
+
+    setUpdateBusy(
+      true
+    );
+
+    setUpdateNotice(
+      ""
+    );
+
+    let finalValue =
+      value;
+
+    if (
+      field ===
+      "dueDate"
+    ) {
+      if (!value) {
+        finalValue =
+          null;
+      } else {
+        // Use midday locally to avoid accidental date shifts.
+        finalValue =
+          new Date(
+            `${value}T12:00:00`
+          ).toISOString();
+      }
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.functions.invoke(
+        "update-zoho-ticket",
+        {
+          body: {
+            ticket_key:
+              selected.ticket_key,
+
+            changes: {
+              [field]:
+                finalValue,
+            },
+          },
+        }
+      );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      console.error(
+        "Ticket update error:",
+        error ||
+          data
+      );
+
+      setUpdateNotice(
+        `Could not update: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setUpdateBusy(
+        false
+      );
+
+      return;
+    }
+
+    setUpdateNotice(
+      "Saved"
+    );
+
+    await loadTickets(
+      selected.ticket_key
+    );
+
+    window.setTimeout(
+      () => {
+        setUpdateNotice(
+          ""
+        );
+      },
+      1800
+    );
+
+    setUpdateBusy(
+      false
+    );
+  }
+
+  // ====================================================
+  // REPLY
+  // ====================================================
+
+  async function sendReply() {
+    if (
+      !selected ||
+      !replyText.trim() ||
+      replyBusy
+    ) {
+      return;
+    }
+
+    setReplyBusy(
+      true
+    );
+
+    setReplyNotice(
+      ""
+    );
+
+    const textToSend =
+      replyText.trim();
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.functions.invoke(
+        "reply-to-zoho-ticket",
+        {
+          body: {
+            ticket_key:
+              selected.ticket_key,
+
+            content:
+              textToSend,
+          },
+        }
+      );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      console.error(
+        "Reply error:",
+        error ||
+          data
+      );
+
+      setReplyNotice(
+        `Could not send: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setReplyBusy(
+        false
+      );
+
+      return;
+    }
+
+    setReplyText(
+      ""
+    );
+
+    setReplyNotice(
+      "Reply sent"
+    );
+
+    await loadThreads(
+      selected.ticket_key
+    );
+
+    await loadTickets(
+      selected.ticket_key
+    );
+
+    window.setTimeout(
+      () => {
+        setReplyNotice(
+          ""
+        );
+      },
+      2000
+    );
+
+    setReplyBusy(
+      false
+    );
+  }
+
+  // ====================================================
+  // SIGN OUT
+  // ====================================================
+
+  async function signOut() {
+    await supabase.auth.signOut();
+  }
+
+  // ====================================================
+  // AUTH STATES
+  // ====================================================
+
+  if (
+    authLoading
+  ) {
+    return (
+      <div className="full-page-loading">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <Login
+        onSignedIn={
+          setSession
+        }
+      />
+    );
+  }
+
+  // ====================================================
+  // UI
+  // ====================================================
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-title">
-          <div className="logo-mark small">M</div>
+
+      {/* ============================================= */}
+      {/* LEFT NAVIGATION */}
+      {/* ============================================= */}
+
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="app-mark">
+            CSG
+          </div>
+
           <div>
-            <strong>Marketing Ticket Hub</strong>
-            <span>Unified inbox</span>
+            <div className="app-title">
+              Ticket Hub
+            </div>
+
+            <div className="app-subtitle">
+              Marketing
+            </div>
+          </div>
+        </div>
+
+        <div className="sidebar-section">
+          <div className="sidebar-label">
+            INBOX
+          </div>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "all"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "all"
+              )
+            }
+          >
+            <span>
+              All tickets
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.all
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "open"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "open"
+              )
+            }
+          >
+            <span>
+              Open
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.open
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "waiting"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "waiting"
+              )
+            }
+          >
+            <span>
+              Waiting
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.waiting
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "overdue"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "overdue"
+              )
+            }
+          >
+            <span>
+              Overdue
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.overdue
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${
+              filter ===
+              "unassigned"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(
+                "unassigned"
+              )
+            }
+          >
+            <span>
+              Unassigned
+            </span>
+
+            <span className="nav-count">
+              {
+                counts.unassigned
+              }
+            </span>
+          </button>
+        </div>
+
+        <div className="sidebar-section">
+          <div className="sidebar-label">
+            BRANDS
+          </div>
+
+          <button
+            className={`brand-nav ${
+              brandFilter ===
+              "all"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setBrandFilter(
+                "all"
+              )
+            }
+          >
+            <span className="brand-dot all-dot" />
+
+            All brands
+          </button>
+
+          <button
+            className={`brand-nav ${
+              brandFilter ===
+              "Qualicare"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setBrandFilter(
+                "Qualicare"
+              )
+            }
+          >
+            <span className="brand-dot qualicare-dot" />
+
+            Qualicare
+          </button>
+
+          <button
+            className={`brand-nav ${
+              brandFilter ===
+              "Tutor Doctor"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setBrandFilter(
+                "Tutor Doctor"
+              )
+            }
+          >
+            <span className="brand-dot tutordoctor-dot" />
+
+            Tutor Doctor
+          </button>
+
+          <button
+            className={`brand-nav ${
+              brandFilter ===
+              "Code Wiz"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setBrandFilter(
+                "Code Wiz"
+              )
+            }
+          >
+            <span className="brand-dot codewiz-dot" />
+
+            Code Wiz
+          </button>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="user-email">
+            {
+              session.user
+                ?.email
+            }
+          </div>
+
+          <button
+            className="sign-out-button"
+            onClick={
+              signOut
+            }
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* ============================================= */}
+      {/* TICKET LIST */}
+      {/* ============================================= */}
+
+      <section className="ticket-column">
+        <div className="ticket-column-header">
+          <div>
+            <h1>
+              Tickets
+            </h1>
+
+            <p>
+              {
+                filteredTickets.length
+              }{" "}
+              tickets
+            </p>
           </div>
         </div>
 
         <div className="search-wrap">
-          <span>⌕</span>
           <input
+            className="search-input"
+            type="search"
+            placeholder="Search tickets…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tickets, people, subjects…"
+            onChange={(
+              event
+            ) =>
+              setSearch(
+                event
+                  .target
+                  .value
+              )
+            }
           />
         </div>
 
-        <div className="user-menu">
-          <div className="avatar">{initials(session.user?.email || "U")}</div>
-          <div className="user-copy">
-            <strong>{session.user?.email?.split("@")[0]}</strong>
-            <button onClick={() => supabase.auth.signOut()}>Sign out</button>
-          </div>
-        </div>
-      </header>
-
-      <main className="workspace">
-        <aside className="sidebar">
-          <div className="sidebar-section">
-            <div className="sidebar-label">Inbox</div>
-            {[
-              ["all", "All tickets", counts.all],
-              ["open", "Open", counts.open],
-              ["waiting", "Waiting", counts.waiting],
-              ["overdue", "Overdue", counts.overdue],
-              ["unassigned", "Unassigned", counts.unassigned],
-            ].map(([key, label, count]) => (
-              <button
-                key={key}
-                className={`nav-row ${filter === key ? "active" : ""}`}
-                onClick={() => setFilter(key)}
-              >
-                <span>{label}</span>
-                <b>{count}</b>
-              </button>
-            ))}
-          </div>
-
-          <div className="sidebar-section">
-            <div className="sidebar-label">Brands</div>
-            {["all", "Qualicare", "Tutor Doctor", "Code Wiz"].map((value) => (
-              <button
-                key={value}
-                className={`brand-filter ${brand === value ? "active" : ""}`}
-                onClick={() => setBrand(value)}
-              >
-                <span
-                  className={`brand-dot ${
-                    value === "all" ? "all" : brandClass(value)
-                  }`}
-                />
-                {value === "all" ? "All brands" : value}
-              </button>
-            ))}
-          </div>
-
-          <div className="sidebar-footer">
-            Live data from Supabase
-            <span className="live-dot" />
-          </div>
-        </aside>
-
-        <section className="ticket-list-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>{filter === "all" ? "All tickets" : filter[0].toUpperCase() + filter.slice(1)}</h2>
-              <span>{visibleTickets.length} shown</span>
-            </div>
-            <button className="icon-button" onClick={loadTickets} title="Refresh">
-              ↻
-            </button>
-          </div>
-
-          <div className="ticket-list">
-            {loadingTickets ? (
-              <div className="empty-state">Loading tickets…</div>
-            ) : dataError ? (
-              <div className="empty-state error">{dataError}</div>
-            ) : visibleTickets.length === 0 ? (
-              <div className="empty-state">No tickets match this view.</div>
-            ) : (
-              visibleTickets.map((ticket) => (
-                <button
-                  key={ticket.ticket_key}
-                  className={`ticket-row ${
-                    selectedKey === ticket.ticket_key ? "selected" : ""
-                  }`}
-                  onClick={() => setSelectedKey(ticket.ticket_key)}
-                >
-                  <div className="ticket-row-top">
-                    <span className={`brand-pill ${brandClass(ticket.source)}`}>
-                      {ticket.source}
-                    </span>
-                    <span className="ticket-time">
-                      {formatDate(ticket.updated_at_zoho)}
-                    </span>
-                  </div>
-                  <div className="ticket-subject">
-                    {ticket.subject || "Untitled ticket"}
-                  </div>
-                  <div className="ticket-preview">
-                    {ticket.email_summary ||
-                      cleanText(ticket.description).slice(0, 120) ||
-                      "No message preview"}
-                  </div>
-                  <div className="ticket-meta">
-                    <span>
-                      {ticket.contact_name ||
-                        ticket.contact_email ||
-                        "Unknown requester"}
-                    </span>
-                    <span className="dot-separator">·</span>
-                    <span>{ticket.status || "No status"}</span>
-                    {ticket.assignee_name && (
-                      <>
-                        <span className="dot-separator">·</span>
-                        <span>{ticket.assignee_name}</span>
-                      </>
-                    )}
-                  </div>
-                </button>
-              ))
+        <div className="ticket-list">
+          {loadingTickets &&
+            tickets.length ===
+              0 && (
+              <div className="empty-state">
+                Loading tickets…
+              </div>
             )}
-          </div>
-        </section>
 
-        <section className="conversation-panel">
-          {!selected ? (
-            <div className="empty-conversation">
-              Select a ticket to open the conversation.
-            </div>
-          ) : (
-            <>
-              <div className="conversation-header">
-                <div>
-                  <div className="eyebrow">
-                    <span className={`brand-pill ${brandClass(selected.source)}`}>
-                      {selected.source}
-                    </span>
-                    <span>#{selected.ticket_number || "—"}</span>
-                  </div>
-                  <h1>{selected.subject || "Untitled ticket"}</h1>
-                  <p>
-                    {selected.contact_name || "Unknown requester"}
-                    {selected.contact_email
-                      ? ` · ${selected.contact_email}`
-                      : ""}
-                  </p>
+          {!loadingTickets &&
+            filteredTickets.length ===
+              0 && (
+              <div className="empty-state">
+                No tickets match
+                this filter.
+              </div>
+            )}
+
+          {filteredTickets.map(
+            (ticket) => (
+              <button
+                key={
+                  ticket.ticket_key
+                }
+                className={`ticket-row ${
+                  selectedKey ===
+                  ticket.ticket_key
+                    ? "selected"
+                    : ""
+                }`}
+                onClick={() =>
+                  setSelectedKey(
+                    ticket.ticket_key
+                  )
+                }
+              >
+                <div className="ticket-row-top">
+                  <BrandBadge
+                    source={
+                      ticket.source
+                    }
+                  />
+
+                  <span className="ticket-number">
+                    #
+                    {
+                      ticket.ticket_number
+                    }
+                  </span>
                 </div>
-                {selected.ticket_url && (
-                  <a
-                    className="secondary-button"
-                    href={selected.ticket_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open in Zoho ↗
-                  </a>
+
+                <div className="ticket-subject">
+                  {ticket.subject ||
+                    "Untitled ticket"}
+                </div>
+
+                <div className="ticket-summary">
+                  {getTicketSummary(
+                    ticket
+                  ) ||
+                    "No preview available"}
+                </div>
+
+                <div className="ticket-requester">
+                  {ticket.contact_name ||
+                    ticket.contact_email ||
+                    "Unknown requester"}
+                </div>
+
+                <div className="ticket-row-bottom">
+                  <StatusBadge
+                    status={
+                      ticket.status
+                    }
+                  />
+
+                  <span className="ticket-assignee">
+                    {ticket.assignee_name ||
+                      "Unassigned"}
+                  </span>
+                </div>
+
+                {isOverdue(
+                  ticket
+                ) && (
+                  <div className="overdue-label">
+                    Overdue
+                  </div>
                 )}
+              </button>
+            )
+          )}
+        </div>
+      </section>
+
+      {/* ============================================= */}
+      {/* CONVERSATION */}
+      {/* ============================================= */}
+
+      <main className="conversation-column">
+        {!selected ? (
+          <div className="conversation-empty">
+            <div>
+              <h2>
+                Select a
+                ticket
+              </h2>
+
+              <p>
+                Choose a ticket
+                to view its
+                conversation.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <header className="conversation-header">
+              <div className="conversation-heading">
+                <div className="conversation-meta">
+                  <BrandBadge
+                    source={
+                      selected.source
+                    }
+                  />
+
+                  <span>
+                    #
+                    {
+                      selected.ticket_number
+                    }
+                  </span>
+                </div>
+
+                <h2>
+                  {selected.subject ||
+                    "Untitled ticket"}
+                </h2>
+
+                <div className="conversation-requester">
+                  {selected.contact_name ||
+                    "Unknown requester"}
+
+                  {selected.contact_email &&
+                    ` · ${selected.contact_email}`}
+                </div>
               </div>
 
-              <div className="thread-scroll">
-                {selected.description && (
-                  <article className="message inbound description-message">
-                    <div className="message-head">
-                      <div className="message-avatar">
-                        {initials(selected.contact_name || selected.contact_email)}
-                      </div>
-                      <div>
-                        <strong>
-                          {selected.contact_name ||
-                            selected.contact_email ||
-                            "Requester"}
-                        </strong>
-                        <span>Original request</span>
-                      </div>
-                    </div>
-                    <div className="message-body preserve">
-                      {selected.description}
-                    </div>
-                  </article>
-                )}
+              {selected.ticket_url && (
+                <a
+                  className="zoho-link"
+                  href={
+                    selected.ticket_url
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open in Zoho ↗
+                </a>
+              )}
+            </header>
 
-                {loadingThreads ? (
-                  <div className="empty-state">Loading conversation…</div>
-                ) : threads.length === 0 ? (
-                  <div className="conversation-note">
-                    No conversation threads yet. You can start the conversation
-                    below.
+            <div className="conversation-scroll">
+
+              {selected.description && (
+                <article className="original-message">
+                  <div className="message-header">
+                    <div>
+                      <div className="message-author">
+                        {selected.contact_name ||
+                          selected.contact_email ||
+                          "Requester"}
+                      </div>
+
+                      <div className="message-type">
+                        Original
+                        request
+                      </div>
+                    </div>
+
+                    <span className="message-time">
+                      {formatDateTime(
+                        selected.created_at_zoho
+                      )}
+                    </span>
                   </div>
-                ) : (
-                  threads.map((thread) => {
+
+                  <div
+                    className="message-body"
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        selected.description,
+                    }}
+                  />
+                </article>
+              )}
+
+              {loadingThreads && (
+                <div className="loading-threads">
+                  Loading
+                  conversation…
+                </div>
+              )}
+
+              {!loadingThreads &&
+                threads.map(
+                  (
+                    thread
+                  ) => {
                     const outbound =
-                      (thread.direction || "").toLowerCase() === "out";
+                      String(
+                        thread.direction ||
+                          ""
+                      )
+                        .toLowerCase()
+                        .includes(
+                          "out"
+                        );
+
                     return (
                       <article
-                        key={thread.thread_key}
-                        className={`message ${outbound ? "outbound" : "inbound"}`}
+                        key={
+                          thread.thread_key ||
+                          thread.id
+                        }
+                        className={`thread-message ${
+                          outbound
+                            ? "outbound"
+                            : "inbound"
+                        }`}
                       >
-                        <div className="message-head">
-                          <div className="message-avatar">
-                            {initials(
-                              thread.author_name ||
-                                thread.author_email ||
-                                (outbound ? "Team" : "Contact")
-                            )}
-                          </div>
+                        <div className="message-header">
                           <div>
-                            <strong>
+                            <div className="message-author">
                               {thread.author_name ||
                                 thread.author_email ||
-                                (outbound ? "Marketing team" : "Requester")}
-                            </strong>
-                            <span>{formatDateTime(thread.created_at_zoho)}</span>
+                                (outbound
+                                  ? "Team"
+                                  : "Requester")}
+                            </div>
+
+                            {thread.author_email && (
+                              <div className="message-email">
+                                {
+                                  thread.author_email
+                                }
+                              </div>
+                            )}
                           </div>
-                          <span className="direction-label">
-                            {outbound ? "Sent" : "Received"}
+
+                          <span className="message-time">
+                            {formatDateTime(
+                              thread.created_at_zoho
+                            )}
                           </span>
                         </div>
-                        <div className="message-body preserve">
-                          {thread.content_text ||
-                            thread.summary ||
-                            "Message content unavailable"}
-                        </div>
+
+                        {thread.content_html ? (
+                          <div
+                            className="message-body"
+                            dangerouslySetInnerHTML={{
+                              __html:
+                                thread.content_html,
+                            }}
+                          />
+                        ) : (
+                          <div className="message-body text-message">
+                            {thread.content_text ||
+                              thread.summary ||
+                              ""}
+                          </div>
+                        )}
                       </article>
                     );
-                  })
-                )}
-              </div>
-
-              <div className="composer">
-                <div className="composer-top">
-                  <strong>Reply</strong>
-                  <span>
-                    Sending through {selected.source} Zoho Desk
-                  </span>
-                </div>
-                <textarea
-                  value={replyText}
-                  onChange={(e) => {
-                    setReplyText(e.target.value);
-                    setReplyNotice("");
-                  }}
-                  placeholder={
-                    selected.contact_email
-                      ? `Reply to ${selected.contact_name || selected.contact_email}…`
-                      : "This ticket has no contact email."
                   }
-                  disabled={!selected.contact_email || replyBusy}
-                />
-                <div className="composer-actions">
-                  <span className={`reply-notice ${replyNotice.startsWith("Could") ? "error" : ""}`}>
-                    {replyNotice}
-                  </span>
-                  <button
-                    className="primary"
-                    onClick={sendReply}
-                    disabled={
-                      !selected.contact_email ||
-                      !replyText.trim() ||
-                      replyBusy
-                    }
-                  >
-                    {replyBusy ? "Sending…" : "Send reply"}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </section>
+                )}
+            </div>
 
-        <aside className="details-panel">
-          {!selected ? null : (
-            <>
-              <div className="details-heading">Ticket details</div>
+            {/* ======================================= */}
+            {/* REPLY COMPOSER */}
+            {/* ======================================= */}
+
+            <div className="composer">
+              <div className="composer-toolbar">
+                <button className="composer-mode">
+                  Reply
+                </button>
+              </div>
+
+              <textarea
+                placeholder="Write a reply…"
+                value={
+                  replyText
+                }
+                onChange={(
+                  event
+                ) =>
+                  setReplyText(
+                    event
+                      .target
+                      .value
+                  )
+                }
+                disabled={
+                  replyBusy
+                }
+              />
+
+              <div className="composer-footer">
+                <div
+                  className={`composer-notice ${
+                    replyNotice.startsWith(
+                      "Could"
+                    )
+                      ? "error"
+                      : ""
+                  }`}
+                >
+                  {
+                    replyNotice
+                  }
+                </div>
+
+                <button
+                  className="send-button"
+                  disabled={
+                    replyBusy ||
+                    !replyText.trim()
+                  }
+                  onClick={
+                    sendReply
+                  }
+                >
+                  {replyBusy
+                    ? "Sending…"
+                    : "Send reply"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* ============================================= */}
+      {/* DETAILS */}
+      {/* ============================================= */}
+
+      <aside className="details-column">
+        {!selected ? (
+          <div className="details-empty">
+            Ticket details
+          </div>
+        ) : (
+          <>
+            <div className="details-header">
+              <h3>
+                Ticket details
+              </h3>
+            </div>
+
+            <div className="details-content">
 
               <Detail label="Brand">
-                <span className={`brand-pill ${brandClass(selected.source)}`}>
-                  {selected.source}
-                </span>
+                <BrandBadge
+                  source={
+                    selected.source
+                  }
+                />
               </Detail>
-              <Detail label="Status">{selected.status || "—"}</Detail>
+
+              <Detail label="Status">
+                <select
+                  className="detail-control"
+                  value={
+                    selected.status ||
+                    ""
+                  }
+                  disabled={
+                    updateBusy
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateTicketField(
+                      "status",
+                      event
+                        .target
+                        .value
+                    )
+                  }
+                >
+                  {selected.status &&
+                    ![
+                      "Open",
+                      "On Hold",
+                      "Closed",
+                    ].includes(
+                      selected.status
+                    ) && (
+                      <option
+                        value={
+                          selected.status
+                        }
+                      >
+                        {
+                          selected.status
+                        }
+                      </option>
+                    )}
+
+                  <option value="Open">
+                    Open
+                  </option>
+
+                  <option value="On Hold">
+                    On Hold
+                  </option>
+
+                  <option value="Closed">
+                    Closed
+                  </option>
+                </select>
+              </Detail>
+
               <Detail label="Assignee">
-                {selected.assignee_name || "Unassigned"}
-                {selected.assignee_email && (
-                  <small>{selected.assignee_email}</small>
-                )}
+                <div className="read-only-detail">
+                  {selected.assignee_name ||
+                    selected.assignee_email ||
+                    "Unassigned"}
+                </div>
+
+                <div className="coming-next">
+                  Editable next
+                </div>
               </Detail>
-              <Detail label="Tier">{selected.tier_level || "—"}</Detail>
-              <Detail label="Priority">{selected.priority || "—"}</Detail>
-              <Detail label="Due date">{formatDate(selected.due_date)}</Detail>
-              <Detail label="Created">
-                {formatDate(selected.created_at_zoho)}
+
+              <Detail label="Tier">
+                <div className="read-only-detail">
+                  {selected.tier_level ||
+                    "—"}
+                </div>
               </Detail>
-              <Detail label="Last updated">
-                {formatDateTime(selected.updated_at_zoho) || "—"}
+
+              <Detail label="Priority">
+                <select
+                  className="detail-control"
+                  value={
+                    selected.priority ||
+                    ""
+                  }
+                  disabled={
+                    updateBusy
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateTicketField(
+                      "priority",
+                      event
+                        .target
+                        .value ||
+                        null
+                    )
+                  }
+                >
+                  <option value="">
+                    No priority
+                  </option>
+
+                  <option value="Low">
+                    Low
+                  </option>
+
+                  <option value="Medium">
+                    Medium
+                  </option>
+
+                  <option value="High">
+                    High
+                  </option>
+                </select>
               </Detail>
-              <Detail label="Ticket">
-                #{selected.ticket_number || "—"}
+
+              <Detail label="Due date">
+                <input
+                  className="detail-control"
+                  type="date"
+                  value={dateInputValue(
+                    selected.due_date
+                  )}
+                  disabled={
+                    updateBusy
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateTicketField(
+                      "dueDate",
+                      event
+                        .target
+                        .value
+                    )
+                  }
+                />
               </Detail>
+
+              {(updateBusy ||
+                updateNotice) && (
+                <div
+                  className={`update-notice ${
+                    updateNotice.startsWith(
+                      "Could"
+                    )
+                      ? "error"
+                      : ""
+                  }`}
+                >
+                  {updateBusy
+                    ? "Saving…"
+                    : updateNotice}
+                </div>
+              )}
 
               <div className="details-divider" />
 
-              <div className="requester-card">
-                <div className="avatar large">
-                  {initials(selected.contact_name || selected.contact_email)}
+              <Detail label="Requester">
+                <div className="requester-detail">
+                  <strong>
+                    {selected.contact_name ||
+                      "—"}
+                  </strong>
+
+                  {selected.contact_email && (
+                    <span>
+                      {
+                        selected.contact_email
+                      }
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <strong>{selected.contact_name || "Unknown requester"}</strong>
-                  <span>{selected.contact_email || "No email"}</span>
-                </div>
-              </div>
-            </>
-          )}
-        </aside>
-      </main>
+              </Detail>
+
+              <Detail label="Department">
+                {selected.department ||
+                  "—"}
+              </Detail>
+
+              <Detail label="Layout">
+                {selected.layout_name ||
+                  "—"}
+              </Detail>
+
+              <Detail label="Created">
+                {formatDate(
+                  selected.created_at_zoho
+                )}
+              </Detail>
+
+              <Detail label="Last updated">
+                {formatDate(
+                  selected.updated_at_zoho
+                )}
+              </Detail>
+
+              <Detail label="Ticket ID">
+                <span className="technical-value">
+                  {
+                    selected.zoho_ticket_id
+                  }
+                </span>
+              </Detail>
+            </div>
+          </>
+        )}
+      </aside>
     </div>
   );
 }
 
-function Detail({ label, children }) {
-  return (
-    <div className="detail-row">
-      <span>{label}</span>
-      <div>{children}</div>
-    </div>
-  );
-}
+// ======================================================
+// RENDER
+// ======================================================
 
-createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(
+  document.getElementById(
+    "root"
+  )
+).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
