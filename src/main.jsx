@@ -8,28 +8,15 @@ import React, {
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
-
 import "./styles.css";
 
-// ======================================================
-// SUPABASE
-// ======================================================
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL;
-
-const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-const supabase =
-  createClient(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
-  );
-
-// ======================================================
-// CONFIG
-// ======================================================
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
 
 const BRAND_STATUSES = {
   Qualicare: [
@@ -39,7 +26,6 @@ const BRAND_STATUSES = {
     "Waiting",
     "Closed",
   ],
-
   "Tutor Doctor": [
     "Open",
     "In Progress",
@@ -48,7 +34,6 @@ const BRAND_STATUSES = {
     "Waiting",
     "Closed",
   ],
-
   "Code Wiz": [
     "Open",
     "In Progress",
@@ -66,143 +51,76 @@ const BRAND_STATUSES = {
 function formatDate(value) {
   if (!value) return "—";
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }
-  ).format(date);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }
 
 function formatDateTime(value) {
   if (!value) return "";
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "";
-  }
-
-  return new Intl.DateTimeFormat(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }
-  ).format(date);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function dateInputValue(value) {
   if (!value) return "";
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "";
-  }
+  const year = date.getFullYear();
 
-  const year =
-    date.getFullYear();
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
 
-  const month =
-    String(
-      date.getMonth() + 1
-    ).padStart(2, "0");
-
-  const day =
-    String(
-      date.getDate()
-    ).padStart(2, "0");
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
 function isOverdue(ticket) {
-  if (!ticket?.due_date) {
-    return false;
-  }
-
-  if (
-    ticket.status ===
-    "Closed"
-  ) {
-    return false;
-  }
+  if (!ticket?.due_date) return false;
+  if (ticket.status === "Closed") return false;
 
   return (
-    new Date(
-      ticket.due_date
-    ).getTime() <
+    new Date(ticket.due_date).getTime() <
     Date.now()
   );
 }
 
 function brandSlug(source) {
-  if (
-    source ===
-    "Qualicare"
-  ) {
-    return "qualicare";
-  }
-
-  if (
-    source ===
-    "Tutor Doctor"
-  ) {
-    return "tutordoctor";
-  }
-
-  if (
-    source ===
-    "Code Wiz"
-  ) {
-    return "codewiz";
-  }
+  if (source === "Qualicare") return "qualicare";
+  if (source === "Tutor Doctor") return "tutordoctor";
+  if (source === "Code Wiz") return "codewiz";
 
   return "unknown";
 }
 
 function brandClass(source) {
-  return `brand-${brandSlug(
-    source
-  )}`;
+  return `brand-${brandSlug(source)}`;
 }
 
 function statusClass(status) {
-  return `status-${String(
-    status || ""
-  )
+  return `status-${String(status || "")
     .toLowerCase()
-    .replaceAll(
-      " ",
-      "-"
-    )}`;
+    .replaceAll(" ", "-")}`;
 }
 
 function getTicketSummary(ticket) {
@@ -211,25 +129,15 @@ function getTicketSummary(ticket) {
     ticket.description ||
     ""
   )
-    .replace(
-      /<[^>]*>?/gm,
-      ""
-    )
+    .replace(/<[^>]*>?/gm, "")
     .trim();
 }
 
 function stripHtml(html) {
-  if (!html) {
-    return "";
-  }
+  if (!html) return "";
 
-  const div =
-    document.createElement(
-      "div"
-    );
-
-  div.innerHTML =
-    html;
+  const div = document.createElement("div");
+  div.innerHTML = html;
 
   return (
     div.textContent ||
@@ -238,18 +146,20 @@ function stripHtml(html) {
   ).trim();
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function extractEmail(value) {
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
-  const text =
-    String(value).trim();
-
-  const match =
-    text.match(
-      /<([^>]+)>/
-    );
+  const text = String(value).trim();
+  const match = text.match(/<([^>]+)>/);
 
   return (
     match?.[1] ||
@@ -260,39 +170,22 @@ function extractEmail(value) {
 }
 
 function splitAddresses(value) {
-  if (!value) {
-    return [];
-  }
+  if (!value) return [];
 
   return String(value)
-    .split(
-      /[,;]+/
-    )
-    .map(
-      (item) =>
-        item.trim()
-    )
+    .split(/[,;]+/)
+    .map((item) => item.trim())
     .filter(Boolean);
 }
 
 function uniqueAddresses(values) {
-  const seen =
-    new Set();
+  const seen = new Set();
+  const output = [];
 
-  const output =
-    [];
+  for (const value of values) {
+    const email = extractEmail(value);
 
-  for (
-    const value of
-    values
-  ) {
-    const email =
-      extractEmail(value);
-
-    if (
-      !email ||
-      seen.has(email)
-    ) {
+    if (!email || seen.has(email)) {
       continue;
     }
 
@@ -311,16 +204,11 @@ function formatFileSize(bytes) {
     return "";
   }
 
-  if (
-    bytes < 1024
-  ) {
+  if (bytes < 1024) {
     return `${bytes} B`;
   }
 
-  if (
-    bytes <
-    1024 * 1024
-  ) {
+  if (bytes < 1024 * 1024) {
     return `${(
       bytes / 1024
     ).toFixed(1)} KB`;
@@ -328,26 +216,18 @@ function formatFileSize(bytes) {
 
   return `${(
     bytes /
-    (
-      1024 *
-      1024
-    )
+    (1024 * 1024)
   ).toFixed(1)} MB`;
 }
 
 function isOutboundThread(thread) {
-  const direction =
-    String(
-      thread?.direction ||
-      ""
-    ).toLowerCase();
+  const direction = String(
+    thread?.direction || ""
+  ).toLowerCase();
 
   return (
-    direction.includes(
-      "out"
-    ) ||
-    direction ===
-      "outbound"
+    direction.includes("out") ||
+    direction === "outbound"
   );
 }
 
@@ -361,35 +241,29 @@ function hasRecipientInfo(thread) {
 }
 
 // ======================================================
-// COMPONENTS
+// SMALL COMPONENTS
 // ======================================================
 
-function BrandBadge({
-  source,
-}) {
+function BrandBadge({ source }) {
   return (
     <span
       className={`brand-badge ${brandClass(
         source
       )}`}
     >
-      {source ||
-        "Unknown"}
+      {source || "Unknown"}
     </span>
   );
 }
 
-function StatusBadge({
-  status,
-}) {
+function StatusBadge({ status }) {
   return (
     <span
       className={`status-badge ${statusClass(
         status
       )}`}
     >
-      {status ||
-        "Unknown"}
+      {status || "Unknown"}
     </span>
   );
 }
@@ -415,9 +289,7 @@ function RecipientLine({
   label,
   value,
 }) {
-  if (!value) {
-    return null;
-  }
+  if (!value) return null;
 
   return (
     <div className="message-recipient-line">
@@ -439,57 +311,35 @@ function RecipientLine({
 function Login({
   onSignedIn,
 }) {
-  const [
-    email,
-    setEmail,
-  ] =
+  const [email, setEmail] =
     useState("");
 
-  const [
-    busy,
-    setBusy,
-  ] =
+  const [busy, setBusy] =
     useState(false);
 
-  const [
-    message,
-    setMessage,
-  ] =
+  const [message, setMessage] =
     useState("");
 
-  async function signIn(
-    event
-  ) {
+  async function signIn(event) {
     event.preventDefault();
 
-    if (
-      !email.trim()
-    ) {
-      return;
-    }
+    if (!email.trim()) return;
 
     setBusy(true);
     setMessage("");
 
-    const {
-      error,
-    } =
-      await supabase.auth.signInWithOtp(
-        {
-          email:
-            email.trim(),
+    const { error } =
+      await supabase.auth.signInWithOtp({
+        email: email.trim(),
 
-          options: {
-            emailRedirectTo:
-              window.location.origin,
-          },
-        }
-      );
+        options: {
+          emailRedirectTo:
+            window.location.origin,
+        },
+      });
 
     if (error) {
-      setMessage(
-        error.message
-      );
+      setMessage(error.message);
     } else {
       setMessage(
         "Check your email for the sign-in link."
@@ -500,39 +350,25 @@ function Login({
   }
 
   useEffect(() => {
-    const {
-      data:
-        listener,
-    } =
+    const { data: listener } =
       supabase.auth.onAuthStateChange(
-        (
-          event,
-          session
-        ) => {
+        (event, session) => {
           if (
             session &&
             (
-              event ===
-                "SIGNED_IN" ||
-              event ===
-                "INITIAL_SESSION"
+              event === "SIGNED_IN" ||
+              event === "INITIAL_SESSION"
             )
           ) {
-            onSignedIn(
-              session
-            );
+            onSignedIn(session);
           }
         }
       );
 
     return () => {
-      listener
-        .subscription
-        .unsubscribe();
+      listener.subscription.unsubscribe();
     };
-  }, [
-    onSignedIn,
-  ]);
+  }, [onSignedIn]);
 
   return (
     <div className="login-page">
@@ -557,11 +393,7 @@ function Login({
           Tutor Doctor and Code Wiz.
         </p>
 
-        <form
-          onSubmit={
-            signIn
-          }
-        >
+        <form onSubmit={signIn}>
           <label>
             Work email
           </label>
@@ -570,13 +402,9 @@ function Login({
             type="email"
             placeholder="you@company.com"
             value={email}
-            onChange={(
-              event
-            ) =>
+            onChange={(event) =>
               setEmail(
-                event
-                  .target
-                  .value
+                event.target.value
               )
             }
           />
@@ -584,9 +412,7 @@ function Login({
           <button
             type="submit"
             className="primary-button"
-            disabled={
-              busy
-            }
+            disabled={busy}
           >
             {busy
               ? "Sending…"
@@ -621,107 +447,106 @@ function App() {
   const imageInputRef =
     useRef(null);
 
+  const commentFileInputRef =
+    useRef(null);
+
+  const commentInputRef =
+    useRef(null);
+
   const [
     session,
     setSession,
-  ] =
-    useState(null);
+  ] = useState(null);
 
   const [
     authLoading,
     setAuthLoading,
-  ] =
-    useState(true);
+  ] = useState(true);
 
   const [
     tickets,
     setTickets,
-  ] =
-    useState([]);
+  ] = useState([]);
 
   const [
     threads,
     setThreads,
-  ] =
-    useState([]);
+  ] = useState([]);
+
+  const [
+    comments,
+    setComments,
+  ] = useState([]);
 
   const [
     agents,
     setAgents,
-  ] =
-    useState([]);
+  ] = useState([]);
 
   const [
     tags,
     setTags,
-  ] =
-    useState([]);
+  ] = useState([]);
 
   const [
     tagCatalog,
     setTagCatalog,
-  ] =
-    useState([]);
+  ] = useState([]);
 
   const [
     selectedKey,
     setSelectedKey,
-  ] =
-    useState(null);
+  ] = useState(null);
 
   const [
     loadingTickets,
     setLoadingTickets,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     loadingThreads,
     setLoadingThreads,
-  ] =
-    useState(false);
+  ] = useState(false);
+
+  const [
+    loadingComments,
+    setLoadingComments,
+  ] = useState(false);
 
   const [
     loadingAgents,
     setLoadingAgents,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     loadingTags,
     setLoadingTags,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     filter,
     setFilter,
-  ] =
-    useState("all");
+  ] = useState("all");
 
   const [
     brandFilter,
     setBrandFilter,
-  ] =
-    useState("all");
+  ] = useState("all");
 
   const [
     search,
     setSearch,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     updateBusy,
     setUpdateBusy,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     updateNotice,
     setUpdateNotice,
-  ] =
-    useState("");
+  ] = useState("");
 
   // ====================================================
   // TAG STATE
@@ -730,110 +555,135 @@ function App() {
   const [
     tagInput,
     setTagInput,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     tagBusy,
     setTagBusy,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     tagNotice,
     setTagNotice,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     showTagSuggestions,
     setShowTagSuggestions,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   // ====================================================
-  // COMPOSER STATE
+  // EMAIL COMPOSER
   // ====================================================
 
   const [
     replyMode,
     setReplyMode,
-  ] =
-    useState(
-      "reply"
-    );
+  ] = useState("reply");
 
   const [
     showReplyModeMenu,
     setShowReplyModeMenu,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     showSendMenu,
     setShowSendMenu,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     showCc,
     setShowCc,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     showBcc,
     setShowBcc,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     recipientTo,
     setRecipientTo,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     recipientCc,
     setRecipientCc,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     recipientBcc,
     setRecipientBcc,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     editorHtml,
     setEditorHtml,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     composerBusy,
     setComposerBusy,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     composerNotice,
     setComposerNotice,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     pendingFiles,
     setPendingFiles,
-  ] =
-    useState([]);
+  ] = useState([]);
 
   const [
     uploadProgress,
     setUploadProgress,
-  ] =
-    useState("");
+  ] = useState("");
+
+  // ====================================================
+  // COMMENT STATE
+  // ====================================================
+
+  const [
+    commentText,
+    setCommentText,
+  ] = useState("");
+
+  const [
+    commentPublic,
+    setCommentPublic,
+  ] = useState(false);
+
+  const [
+    commentMentions,
+    setCommentMentions,
+  ] = useState([]);
+
+  const [
+    mentionQuery,
+    setMentionQuery,
+  ] = useState("");
+
+  const [
+    showMentionSuggestions,
+    setShowMentionSuggestions,
+  ] = useState(false);
+
+  const [
+    commentFiles,
+    setCommentFiles,
+  ] = useState([]);
+
+  const [
+    commentBusy,
+    setCommentBusy,
+  ] = useState(false);
+
+  const [
+    commentNotice,
+    setCommentNotice,
+  ] = useState("");
 
   // ====================================================
   // AUTH
@@ -841,45 +691,27 @@ function App() {
 
   useEffect(() => {
     async function loadSession() {
-      const {
-        data,
-      } =
-        await supabase
-          .auth
-          .getSession();
+      const { data } =
+        await supabase.auth.getSession();
 
-      setSession(
-        data.session
-      );
-
-      setAuthLoading(
-        false
-      );
+      setSession(data.session);
+      setAuthLoading(false);
     }
 
     loadSession();
 
-    const {
-      data:
-        listener,
-    } =
-      supabase
-        .auth
-        .onAuthStateChange(
-          (
-            _event,
-            nextSession
-          ) => {
-            setSession(
-              nextSession
-            );
-          }
-        );
+    const { data: listener } =
+      supabase.auth.onAuthStateChange(
+        (
+          _event,
+          nextSession
+        ) => {
+          setSession(nextSession);
+        }
+      );
 
     return () => {
-      listener
-        .subscription
-        .unsubscribe();
+      listener.subscription.unsubscribe();
     };
   }, []);
 
@@ -892,22 +724,16 @@ function App() {
       async (
         preferredKey = null
       ) => {
-        if (!session) {
-          return;
-        }
+        if (!session) return;
 
-        setLoadingTickets(
-          true
-        );
+        setLoadingTickets(true);
 
         const {
           data,
           error,
         } =
           await supabase
-            .from(
-              "tickets"
-            )
+            .from("tickets")
             .select("*")
             .eq(
               "is_deleted",
@@ -933,10 +759,7 @@ function App() {
             error
           );
 
-          setLoadingTickets(
-            false
-          );
-
+          setLoadingTickets(false);
           return;
         }
 
@@ -946,9 +769,7 @@ function App() {
         setTickets(rows);
 
         setSelectedKey(
-          (
-            current
-          ) => {
+          (current) => {
             const desired =
               preferredKey ||
               current;
@@ -956,9 +777,7 @@ function App() {
             if (
               desired &&
               rows.some(
-                (
-                  ticket
-                ) =>
+                (ticket) =>
                   ticket.ticket_key ===
                   desired
               )
@@ -968,9 +787,7 @@ function App() {
 
             return (
               rows.find(
-                (
-                  ticket
-                ) =>
+                (ticket) =>
                   ticket.status !==
                   "Closed"
               )
@@ -982,13 +799,9 @@ function App() {
           }
         );
 
-        setLoadingTickets(
-          false
-        );
+        setLoadingTickets(false);
       },
-      [
-        session,
-      ]
+      [session]
     );
 
   useEffect(() => {
@@ -1000,29 +813,20 @@ function App() {
     loadTickets,
   ]);
 
-  // ====================================================
-  // BRAND SWITCH
-  // ====================================================
-
   useEffect(() => {
     if (
       tickets.length ===
       0
     ) {
-      setSelectedKey(
-        null
-      );
+      setSelectedKey(null);
       return;
     }
 
     const brandTickets =
-      brandFilter ===
-      "all"
+      brandFilter === "all"
         ? tickets
         : tickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.source ===
               brandFilter
           );
@@ -1031,37 +835,27 @@ function App() {
       brandTickets.length ===
       0
     ) {
-      setSelectedKey(
-        null
-      );
+      setSelectedKey(null);
       return;
     }
 
     setSelectedKey(
-      (
-        current
-      ) => {
+      (current) => {
         const currentValid =
           current &&
           brandTickets.some(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.ticket_key ===
               current
           );
 
-        if (
-          currentValid
-        ) {
+        if (currentValid) {
           return current;
         }
 
         const firstActive =
           brandTickets.find(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status !==
               "Closed"
           );
@@ -1084,13 +878,10 @@ function App() {
     useMemo(
       () =>
         tickets.find(
-          (
-            ticket
-          ) =>
+          (ticket) =>
             ticket.ticket_key ===
             selectedKey
-        ) ||
-        null,
+        ) || null,
       [
         tickets,
         selectedKey,
@@ -1114,9 +905,7 @@ function App() {
           return;
         }
 
-        setLoadingThreads(
-          true
-        );
+        setLoadingThreads(true);
 
         const {
           data,
@@ -1152,19 +941,13 @@ function App() {
           );
         }
 
-        setLoadingThreads(
-          false
-        );
+        setLoadingThreads(false);
       },
-      [
-        session,
-      ]
+      [session]
     );
 
   useEffect(() => {
-    if (
-      selectedKey
-    ) {
+    if (selectedKey) {
       loadThreads(
         selectedKey
       );
@@ -1174,6 +957,111 @@ function App() {
   }, [
     selectedKey,
     loadThreads,
+  ]);
+
+  // ====================================================
+  // COMMENTS
+  // ====================================================
+
+  const loadComments =
+    useCallback(
+      async (
+        ticketKey,
+        syncFirst = false
+      ) => {
+        if (
+          !session ||
+          !ticketKey
+        ) {
+          setComments([]);
+          return;
+        }
+
+        setLoadingComments(true);
+
+        if (syncFirst) {
+          try {
+            await supabase.functions.invoke(
+              "manage-zoho-ticket-comments",
+              {
+                body: {
+                  ticket_key:
+                    ticketKey,
+
+                  action:
+                    "sync",
+                },
+              }
+            );
+          } catch (error) {
+            console.warn(
+              "Comment sync failed:",
+              error
+            );
+          }
+        }
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "ticket_comments"
+            )
+            .select("*")
+            .eq(
+              "ticket_key",
+              ticketKey
+            )
+            .order(
+              "commented_at_zoho",
+              {
+                ascending:
+                  false,
+              }
+            );
+
+        if (error) {
+          console.error(
+            "Comment load error:",
+            error
+          );
+
+          setComments([]);
+        } else {
+          setComments(
+            data || []
+          );
+        }
+
+        setLoadingComments(false);
+      },
+      [session]
+    );
+
+  useEffect(() => {
+    if (selectedKey) {
+      loadComments(
+        selectedKey,
+        true
+      );
+    } else {
+      setComments([]);
+    }
+
+    setCommentText("");
+    setCommentPublic(false);
+    setCommentMentions([]);
+    setCommentFiles([]);
+    setCommentNotice("");
+    setMentionQuery("");
+    setShowMentionSuggestions(
+      false
+    );
+  }, [
+    selectedKey,
+    loadComments,
   ]);
 
   // ====================================================
@@ -1193,9 +1081,7 @@ function App() {
           return;
         }
 
-        setLoadingAgents(
-          true
-        );
+        setLoadingAgents(true);
 
         const {
           data,
@@ -1206,7 +1092,7 @@ function App() {
               "zoho_agents"
             )
             .select(
-              "zoho_agent_id, name, email, active, source"
+              "zoho_agent_id, zuid, name, email, active, source"
             )
             .eq(
               "source",
@@ -1237,13 +1123,9 @@ function App() {
           );
         }
 
-        setLoadingAgents(
-          false
-        );
+        setLoadingAgents(false);
       },
-      [
-        session,
-      ]
+      [session]
     );
 
   // ====================================================
@@ -1263,9 +1145,7 @@ function App() {
           return;
         }
 
-        setLoadingTags(
-          true
-        );
+        setLoadingTags(true);
 
         const {
           data,
@@ -1303,13 +1183,9 @@ function App() {
           );
         }
 
-        setLoadingTags(
-          false
-        );
+        setLoadingTags(false);
       },
-      [
-        session,
-      ]
+      [session]
     );
 
   const loadTagCatalog =
@@ -1365,9 +1241,7 @@ function App() {
           );
         }
       },
-      [
-        session,
-      ]
+      [session]
     );
 
   useEffect(() => {
@@ -1392,9 +1266,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (
-      selectedKey
-    ) {
+    if (selectedKey) {
       loadTags(
         selectedKey
       );
@@ -1404,6 +1276,7 @@ function App() {
 
     setTagInput("");
     setTagNotice("");
+
     setShowTagSuggestions(
       false
     );
@@ -1417,9 +1290,7 @@ function App() {
   // ====================================================
 
   useEffect(() => {
-    if (!session) {
-      return;
-    }
+    if (!session) return;
 
     const channel =
       supabase
@@ -1445,9 +1316,7 @@ function App() {
             table:
               "ticket_threads",
           },
-          (
-            payload
-          ) => {
+          (payload) => {
             const key =
               payload.new
                 ?.ticket_key ||
@@ -1470,11 +1339,35 @@ function App() {
             event: "*",
             schema: "public",
             table:
+              "ticket_comments",
+          },
+          (payload) => {
+            const key =
+              payload.new
+                ?.ticket_key ||
+              payload.old
+                ?.ticket_key;
+
+            if (
+              key ===
+              selectedKey
+            ) {
+              loadComments(
+                selectedKey,
+                false
+              );
+            }
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
               "ticket_tags",
           },
-          (
-            payload
-          ) => {
+          (payload) => {
             const key =
               payload.new
                 ?.ticket_key ||
@@ -1504,6 +1397,7 @@ function App() {
     selectedKey,
     loadTickets,
     loadThreads,
+    loadComments,
     loadTags,
   ]);
 
@@ -1515,10 +1409,7 @@ function App() {
     useMemo(
       () =>
         [...threads].sort(
-          (
-            a,
-            b
-          ) =>
+          (a, b) =>
             new Date(
               b.created_at_zoho ||
                 0
@@ -1528,9 +1419,7 @@ function App() {
                 0
             ).getTime()
         ),
-      [
-        threads,
-      ]
+      [threads]
     );
 
   const latestThread =
@@ -1538,16 +1427,14 @@ function App() {
     null;
 
   // ====================================================
-  // FROM EMAIL
+  // EMAIL FROM ADDRESS
   // ====================================================
 
   const detectedFromEmail =
     useMemo(() => {
       const outbound =
         newestThreads.find(
-          (
-            thread
-          ) =>
+          (thread) =>
             isOutboundThread(
               thread
             ) &&
@@ -1570,13 +1457,9 @@ function App() {
   function getReplyTarget(
     thread
   ) {
-    if (!selected) {
-      return "";
-    }
+    if (!selected) return "";
 
-    if (
-      !thread
-    ) {
+    if (!thread) {
       return (
         selected.contact_email ||
         ""
@@ -1604,8 +1487,15 @@ function App() {
     );
   }
 
+  /*
+    IMPORTANT:
+    Reply All now checks ALL threads in the ticket.
+
+    This captures every current CC / participant
+    we've seen in the email conversation.
+  */
   function calculateReplyAllCc(
-    thread =
+    targetThread =
       latestThread,
     toAddress =
       null
@@ -1617,23 +1507,28 @@ function App() {
     const targetTo =
       toAddress ||
       getReplyTarget(
-        thread
+        targetThread
       );
 
     const candidates =
-      [
+      [];
+
+    for (
+      const thread of
+      threads
+    ) {
+      candidates.push(
         ...splitAddresses(
-          thread
-            ?.from_email
+          thread.from_email
         ),
         ...splitAddresses(
-          thread
-            ?.to_email
+          thread.to_email
         ),
         ...splitAddresses(
-          thread?.cc
-        ),
-      ];
+          thread.cc
+        )
+      );
+    }
 
     const excluded =
       new Set(
@@ -1645,18 +1540,14 @@ function App() {
             ?.email,
         ]
           .filter(Boolean)
-          .map(
-            extractEmail
-          )
+          .map(extractEmail)
       );
 
     return uniqueAddresses(
       candidates
     )
       .filter(
-        (
-          value
-        ) =>
+        (value) =>
           !excluded.has(
             extractEmail(
               value
@@ -1668,9 +1559,7 @@ function App() {
 
   const resetComposer =
     useCallback(() => {
-      setReplyMode(
-        "reply"
-      );
+      setReplyMode("reply");
 
       setRecipientTo(
         selected
@@ -1725,7 +1614,7 @@ function App() {
               .current
               ?.focus();
           },
-          300
+          250
         );
       },
       20
@@ -1734,19 +1623,13 @@ function App() {
 
   function configureComposer(
     mode,
-    thread =
-      null
+    thread = null
   ) {
     setReplyMode(mode);
-    setShowReplyModeMenu(
-      false
-    );
+    setShowReplyModeMenu(false);
     setComposerNotice("");
 
-    if (
-      mode ===
-      "reply"
-    ) {
+    if (mode === "reply") {
       const to =
         getReplyTarget(
           thread
@@ -1813,9 +1696,7 @@ function App() {
   // ====================================================
 
   function focusEditor() {
-    editorRef
-      .current
-      ?.focus();
+    editorRef.current?.focus();
   }
 
   function runEditorCommand(
@@ -1844,9 +1725,7 @@ function App() {
         "Enter the link URL:"
       );
 
-    if (!url) {
-      return;
-    }
+    if (!url) return;
 
     runEditorCommand(
       "createLink",
@@ -1855,7 +1734,7 @@ function App() {
   }
 
   // ====================================================
-  // FILES
+  // ATTACHMENTS
   // ====================================================
 
   function addFiles(
@@ -1863,36 +1742,26 @@ function App() {
   ) {
     const files =
       Array.from(
-        fileList ||
-        []
+        fileList || []
       );
 
-    if (
-      files.length ===
-      0
-    ) {
+    if (!files.length) {
       return;
     }
 
     setPendingFiles(
-      (
-        current
-      ) => {
+      (current) => {
         const existing =
           new Set(
             current.map(
-              (
-                item
-              ) =>
+              (item) =>
                 `${item.name}-${item.size}-${item.lastModified}`
             )
           );
 
         const additions =
           files.filter(
-            (
-              file
-            ) =>
+            (file) =>
               !existing.has(
                 `${file.name}-${file.size}-${file.lastModified}`
               )
@@ -1910,9 +1779,7 @@ function App() {
     index
   ) {
     setPendingFiles(
-      (
-        current
-      ) =>
+      (current) =>
         current.filter(
           (
             _,
@@ -1921,6 +1788,37 @@ function App() {
             itemIndex !==
             index
         )
+    );
+  }
+
+  function addCommentFiles(
+    fileList
+  ) {
+    const files =
+      Array.from(
+        fileList || []
+      );
+
+    setCommentFiles(
+      (current) => {
+        const existing =
+          new Set(
+            current.map(
+              (item) =>
+                `${item.name}-${item.size}-${item.lastModified}`
+            )
+          );
+
+        return [
+          ...current,
+          ...files.filter(
+            (file) =>
+              !existing.has(
+                `${file.name}-${file.size}-${file.lastModified}`
+              )
+          ),
+        ];
+      }
     );
   }
 
@@ -1987,9 +1885,7 @@ function App() {
     try {
       data =
         raw
-          ? JSON.parse(
-              raw
-            )
+          ? JSON.parse(raw)
           : {};
     } catch {
       data = {
@@ -2007,17 +1903,15 @@ function App() {
       );
     }
 
-    return data
-      .attachment;
+    return data.attachment;
   }
 
   // ====================================================
-  // SEND
+  // SEND EMAIL
   // ====================================================
 
   async function sendMessage(
-    sendAction =
-      "send"
+    sendAction = "send"
   ) {
     if (
       !selected ||
@@ -2027,15 +1921,13 @@ function App() {
     }
 
     const html =
-      editorRef
-        .current
+      editorRef.current
         ?.innerHTML ||
       editorHtml;
 
-    const plainText =
-      stripHtml(html);
-
-    if (!plainText) {
+    if (
+      !stripHtml(html)
+    ) {
       setComposerNotice(
         "Write a message before sending."
       );
@@ -2059,8 +1951,7 @@ function App() {
     setShowSendMenu(false);
 
     try {
-      const uploaded =
-        [];
+      const uploaded = [];
 
       for (
         let index = 0;
@@ -2069,9 +1960,7 @@ function App() {
         index++
       ) {
         const file =
-          pendingFiles[
-            index
-          ];
+          pendingFiles[index];
 
         setUploadProgress(
           `Uploading ${index + 1} of ${pendingFiles.length}: ${file.name}`
@@ -2126,9 +2015,7 @@ function App() {
 
                 attachment_ids:
                   uploaded.map(
-                    (
-                      attachment
-                    ) =>
+                    (attachment) =>
                       attachment.id
                   ),
               },
@@ -2196,26 +2083,313 @@ function App() {
       await loadTickets(
         selected.ticket_key
       );
-
-      setTimeout(
-        () => {
-          setComposerNotice("");
-        },
-        2500
-      );
-    } catch (
-      error
-    ) {
+    } catch (error) {
       setUploadProgress("");
 
       setComposerNotice(
-        error instanceof
-        Error
+        error instanceof Error
           ? error.message
           : "Could not send the message."
       );
     } finally {
       setComposerBusy(false);
+    }
+  }
+
+  // ====================================================
+  // COMMENTS + @MENTIONS
+  // ====================================================
+
+  const mentionSuggestions =
+    useMemo(() => {
+      if (
+        !showMentionSuggestions
+      ) {
+        return [];
+      }
+
+      const needle =
+        mentionQuery
+          .trim()
+          .toLowerCase();
+
+      return agents
+        .filter(
+          (agent) =>
+            agent.zuid
+        )
+        .filter(
+          (agent) => {
+            if (!needle) {
+              return true;
+            }
+
+            return `${agent.name || ""} ${agent.email || ""}`
+              .toLowerCase()
+              .includes(
+                needle
+              );
+          }
+        )
+        .slice(0, 8);
+    }, [
+      agents,
+      mentionQuery,
+      showMentionSuggestions,
+    ]);
+
+  function handleCommentChange(
+    value
+  ) {
+    setCommentText(value);
+
+    const match =
+      value.match(
+        /@([^@\n]*)$/
+      );
+
+    if (match) {
+      setMentionQuery(
+        match[1]
+      );
+
+      setShowMentionSuggestions(
+        true
+      );
+    } else {
+      setMentionQuery("");
+      setShowMentionSuggestions(
+        false
+      );
+    }
+  }
+
+  function selectMention(
+    agent
+  ) {
+    const atIndex =
+      commentText.lastIndexOf(
+        "@"
+      );
+
+    if (
+      atIndex === -1
+    ) {
+      return;
+    }
+
+    const display =
+      agent.name ||
+      agent.email ||
+      "Agent";
+
+    const before =
+      commentText.slice(
+        0,
+        atIndex
+      );
+
+    const nextText =
+      `${before}@${display} `;
+
+    setCommentText(
+      nextText
+    );
+
+    setCommentMentions(
+      (current) => {
+        if (
+          current.some(
+            (item) =>
+              item.zoho_agent_id ===
+              agent.zoho_agent_id
+          )
+        ) {
+          return current;
+        }
+
+        return [
+          ...current,
+          {
+            zoho_agent_id:
+              agent.zoho_agent_id,
+
+            name:
+              display,
+
+            email:
+              agent.email,
+
+            zuid:
+              agent.zuid,
+          },
+        ];
+      }
+    );
+
+    setMentionQuery("");
+    setShowMentionSuggestions(
+      false
+    );
+
+    window.setTimeout(
+      () => {
+        commentInputRef
+          .current
+          ?.focus();
+      },
+      20
+    );
+  }
+
+  async function submitComment() {
+    if (
+      !selected ||
+      commentBusy
+    ) {
+      return;
+    }
+
+    if (
+      !commentText.trim()
+    ) {
+      setCommentNotice(
+        "Write a comment first."
+      );
+      return;
+    }
+
+    setCommentBusy(true);
+    setCommentNotice("");
+
+    try {
+      const uploaded = [];
+
+      for (
+        const file of
+        commentFiles
+      ) {
+        const attachment =
+          await uploadAttachment(
+            file
+          );
+
+        uploaded.push(
+          attachment
+        );
+      }
+
+      /*
+        Convert visible @Name into the placeholder
+        expected by the backend.
+      */
+
+      let transformed =
+        commentText;
+
+      for (
+        const mention of
+        commentMentions
+      ) {
+        const visible =
+          `@${mention.name}`;
+
+        transformed =
+          transformed
+            .split(visible)
+            .join(
+              `[[MENTION:${mention.zoho_agent_id}]]`
+            );
+      }
+
+      const contentHtml =
+        escapeHtml(
+          transformed
+        ).replace(
+          /\n/g,
+          "<br>"
+        );
+
+      const {
+        data,
+        error,
+      } =
+        await supabase
+          .functions
+          .invoke(
+            "manage-zoho-ticket-comments",
+            {
+              body: {
+                ticket_key:
+                  selected.ticket_key,
+
+                action:
+                  "add",
+
+                is_public:
+                  commentPublic,
+
+                content_html:
+                  contentHtml,
+
+                mentions:
+                  commentMentions.map(
+                    (mention) => ({
+                      zoho_agent_id:
+                        mention.zoho_agent_id,
+                    })
+                  ),
+
+                attachment_ids:
+                  uploaded.map(
+                    (attachment) =>
+                      attachment.id
+                  ),
+              },
+            }
+          );
+
+      if (
+        error ||
+        !data?.success
+      ) {
+        throw new Error(
+          data?.error ||
+          error?.message ||
+          "Could not add the comment."
+        );
+      }
+
+      setCommentText("");
+      setCommentMentions([]);
+      setCommentFiles([]);
+
+      setCommentNotice(
+        commentPublic
+          ? "Public comment added"
+          : "Private comment added"
+      );
+
+      await loadComments(
+        selected.ticket_key,
+        false
+      );
+
+      window.setTimeout(
+        () =>
+          setCommentNotice(
+            ""
+          ),
+        2200
+      );
+    } catch (error) {
+      setCommentNotice(
+        error instanceof Error
+          ? error.message
+          : "Could not add the comment."
+      );
+    } finally {
+      setCommentBusy(false);
     }
   }
 
@@ -2237,8 +2411,7 @@ function App() {
     setUpdateBusy(true);
     setUpdateNotice("");
 
-    let finalValue =
-      value;
+    let finalValue = value;
 
     if (
       field ===
@@ -2289,18 +2462,17 @@ function App() {
       return;
     }
 
-    setUpdateNotice(
-      "Saved"
-    );
+    setUpdateNotice("Saved");
 
     await loadTickets(
       selected.ticket_key
     );
 
     setTimeout(
-      () => {
-        setUpdateNotice("");
-      },
+      () =>
+        setUpdateNotice(
+          ""
+        ),
       1800
     );
 
@@ -2318,19 +2490,14 @@ function App() {
           .trim()
           .toLowerCase();
 
-      if (!needle) {
-        return [];
-      }
+      if (!needle) return [];
 
       const attached =
         new Set(
           tags.map(
-            (
-              tag
-            ) =>
+            (tag) =>
               String(
-                tag.name ||
-                  ""
+                tag.name || ""
               )
                 .trim()
                 .toLowerCase()
@@ -2339,35 +2506,26 @@ function App() {
 
       return tagCatalog
         .filter(
-          (
-            tag
-          ) =>
+          (tag) =>
             !attached.has(
               String(
-                tag.name ||
-                  ""
+                tag.name || ""
               )
                 .trim()
                 .toLowerCase()
             )
         )
         .filter(
-          (
-            tag
-          ) =>
+          (tag) =>
             String(
-              tag.name ||
-                ""
+              tag.name || ""
             )
               .toLowerCase()
               .includes(
                 needle
               )
         )
-        .slice(
-          0,
-          8
-        );
+        .slice(0, 8);
     }, [
       tagCatalog,
       tags,
@@ -2386,12 +2544,9 @@ function App() {
       }
 
       return tagCatalog.some(
-        (
-          tag
-        ) =>
+        (tag) =>
           String(
-            tag.name ||
-              ""
+            tag.name || ""
           )
             .trim()
             .toLowerCase() ===
@@ -2418,12 +2573,9 @@ function App() {
 
     const duplicate =
       tags.some(
-        (
-          tag
-        ) =>
+        (tag) =>
           String(
-            tag.name ||
-              ""
+            tag.name || ""
           ).toLowerCase() ===
           cleanName.toLowerCase()
       );
@@ -2452,8 +2604,7 @@ function App() {
               ticket_key:
                 selected.ticket_key,
 
-              action:
-                "add",
+              action: "add",
 
               tag_name:
                 cleanName,
@@ -2491,13 +2642,6 @@ function App() {
 
     await loadTagCatalog(
       selected.source
-    );
-
-    setTimeout(
-      () => {
-        setTagNotice("");
-      },
-      1800
     );
 
     setTagBusy(false);
@@ -2576,24 +2720,16 @@ function App() {
       selected.ticket_key
     );
 
-    setTimeout(
-      () => {
-        setTagNotice("");
-      },
-      1800
-    );
-
     setTagBusy(false);
   }
 
   // ====================================================
-  // FILTERS
+  // FILTERING
   // ====================================================
 
   const filteredTickets =
     useMemo(() => {
-      let rows =
-        [...tickets];
+      let rows = [...tickets];
 
       if (
         brandFilter !==
@@ -2601,37 +2737,29 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.source ===
               brandFilter
           );
       }
 
       if (
-        filter ===
-        "all"
+        filter === "all"
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status !==
               "Closed"
           );
       }
 
       if (
-        filter ===
-        "open"
+        filter === "open"
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Open"
           );
@@ -2643,37 +2771,29 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "In Progress"
           );
       }
 
       if (
-        filter ===
-        "onhold"
+        filter === "onhold"
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "On Hold"
           );
       }
 
       if (
-        filter ===
-        "waiting"
+        filter === "waiting"
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Waiting"
           );
@@ -2685,31 +2805,25 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Escalated"
           );
       }
 
       if (
-        filter ===
-        "closed"
+        filter === "closed"
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Closed"
           );
       }
 
       if (
-        filter ===
-        "overdue"
+        filter === "overdue"
       ) {
         rows =
           rows.filter(
@@ -2723,9 +2837,7 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               !ticket.assignee_id &&
               ticket.status !==
                 "Closed"
@@ -2733,8 +2845,7 @@ function App() {
       }
 
       if (
-        filter ===
-        "mine"
+        filter === "mine"
       ) {
         const userEmail =
           session
@@ -2744,9 +2855,7 @@ function App() {
 
         rows =
           rows.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               String(
                 ticket.assignee_email ||
                   ""
@@ -2757,9 +2866,7 @@ function App() {
           );
       }
 
-      if (
-        search.trim()
-      ) {
+      if (search.trim()) {
         const needle =
           search
             .trim()
@@ -2767,9 +2874,7 @@ function App() {
 
         rows =
           rows.filter(
-            (
-              ticket
-            ) => {
+            (ticket) => {
               const haystack =
                 [
                   ticket.subject,
@@ -2803,10 +2908,6 @@ function App() {
       session,
     ]);
 
-  // ====================================================
-  // BRAND-AWARE COUNTS
-  // ====================================================
-
   const counts =
     useMemo(() => {
       const userEmail =
@@ -2820,9 +2921,7 @@ function App() {
         "all"
           ? tickets
           : tickets.filter(
-              (
-                ticket
-              ) =>
+              (ticket) =>
                 ticket.source ===
                 brandFilter
             );
@@ -2830,18 +2929,14 @@ function App() {
       return {
         active:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status !==
               "Closed"
           ).length,
 
         mine:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status !==
                 "Closed" &&
               String(
@@ -2853,54 +2948,42 @@ function App() {
 
         open:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Open"
           ).length,
 
         inprogress:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "In Progress"
           ).length,
 
         onhold:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "On Hold"
           ).length,
 
         waiting:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Waiting"
           ).length,
 
         escalated:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Escalated"
           ).length,
 
         closed:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               ticket.status ===
               "Closed"
           ).length,
@@ -2912,9 +2995,7 @@ function App() {
 
         unassigned:
           countTickets.filter(
-            (
-              ticket
-            ) =>
+            (ticket) =>
               !ticket.assignee_id &&
               ticket.status !==
                 "Closed"
@@ -2926,34 +3007,15 @@ function App() {
       brandFilter,
     ]);
 
-  // ====================================================
-  // BRAND BUTTON
-  // ====================================================
-
-  function switchBrand(
-    value
-  ) {
-    setBrandFilter(value);
-    setSearch("");
-  }
-
-  // ====================================================
-  // SIGN OUT
-  // ====================================================
-
   async function signOut() {
-    await supabase
-      .auth
-      .signOut();
+    await supabase.auth.signOut();
   }
 
   // ====================================================
   // AUTH UI
   // ====================================================
 
-  if (
-    authLoading
-  ) {
+  if (authLoading) {
     return (
       <div className="full-page-loading">
         Loading…
@@ -2987,9 +3049,7 @@ function App() {
   return (
     <div className="app-shell">
 
-      {/* ================================================= */}
       {/* SIDEBAR */}
-      {/* ================================================= */}
 
       <aside className="sidebar">
 
@@ -3044,13 +3104,11 @@ function App() {
               counts.overdue,
             ],
           ].map(
-            (
-              [
-                id,
-                label,
-                count,
-              ]
-            ) => (
+            ([
+              id,
+              label,
+              count,
+            ]) => (
               <button
                 key={id}
                 className={`nav-item ${
@@ -3112,13 +3170,11 @@ function App() {
               counts.closed,
             ],
           ].map(
-            (
-              [
-                id,
-                label,
-                count,
-              ]
-            ) => (
+            ([
+              id,
+              label,
+              count,
+            ]) => (
               <button
                 key={id}
                 className={`nav-item ${
@@ -3171,12 +3227,10 @@ function App() {
               "Code Wiz",
             ],
           ].map(
-            (
-              [
-                value,
-                label,
-              ]
-            ) => (
+            ([
+              value,
+              label,
+            ]) => (
               <button
                 key={value}
                 className={`brand-nav brand-nav-${brandSlug(
@@ -3187,11 +3241,12 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  switchBrand(
+                onClick={() => {
+                  setBrandFilter(
                     value
-                  )
-                }
+                  );
+                  setSearch("");
+                }}
               >
                 <span
                   className={`brand-dot brand-dot-${brandSlug(
@@ -3238,9 +3293,7 @@ function App() {
         </div>
       </aside>
 
-      {/* ================================================= */}
       {/* TICKET LIST */}
-      {/* ================================================= */}
 
       <section className="ticket-column">
 
@@ -3275,13 +3328,9 @@ function App() {
             type="search"
             placeholder="Search tickets…"
             value={search}
-            onChange={(
-              event
-            ) =>
+            onChange={(event) =>
               setSearch(
-                event
-                  .target
-                  .value
+                event.target.value
               )
             }
           />
@@ -3306,9 +3355,7 @@ function App() {
             )}
 
           {filteredTickets.map(
-            (
-              ticket
-            ) => (
+            (ticket) => (
               <button
                 key={
                   ticket.ticket_key
@@ -3327,6 +3374,7 @@ function App() {
                   )
                 }
               >
+
                 <div className="ticket-row-top">
 
                   <BrandBadge
@@ -3388,9 +3436,7 @@ function App() {
         </div>
       </section>
 
-      {/* ================================================= */}
-      {/* TICKET WORKSPACE */}
-      {/* ================================================= */}
+      {/* MAIN WORKSPACE */}
 
       <main
         className={`conversation-column ${
@@ -3404,7 +3450,9 @@ function App() {
 
         {!selected ? (
           <div className="conversation-empty">
+
             <div className="conversation-empty-card">
+
               <div className="conversation-empty-icon">
                 ✉
               </div>
@@ -3414,15 +3462,13 @@ function App() {
               </h2>
 
               <p>
-                Choose a ticket from the list to view its conversation.
+                Choose a ticket from the list.
               </p>
             </div>
           </div>
         ) : (
           <>
-            {/* ============================================= */}
             {/* HEADER */}
-            {/* ============================================= */}
 
             <header className="conversation-header">
 
@@ -3489,9 +3535,7 @@ function App() {
               )}
             </header>
 
-            {/* ============================================= */}
-            {/* COMPOSER AT TOP */}
-            {/* ============================================= */}
+            {/* EMAIL COMPOSER */}
 
             <div
               ref={
@@ -3499,6 +3543,7 @@ function App() {
               }
               className="composer-area"
             >
+
               <div className="composer-area-heading">
 
                 <div>
@@ -3514,8 +3559,6 @@ function App() {
 
               <div className="rich-composer">
 
-                {/* MODE */}
-
                 <div className="composer-mode-row">
 
                   <div className="composer-dropdown-wrap">
@@ -3525,9 +3568,7 @@ function App() {
                       className="composer-mode-button"
                       onClick={() =>
                         setShowReplyModeMenu(
-                          (
-                            current
-                          ) =>
+                          (current) =>
                             !current
                         )
                       }
@@ -3568,18 +3609,12 @@ function App() {
                             )
                           }
                         >
-                          <span className="dropdown-action-icon">
-                            ↩
-                          </span>
+                          <strong>
+                            Reply
+                          </strong>
 
-                          <span className="dropdown-action-copy">
-                            <strong>
-                              Reply
-                            </strong>
-
-                            <small>
-                              Reply to the requester
-                            </small>
+                          <span>
+                            Reply to the requester
                           </span>
                         </button>
 
@@ -3591,18 +3626,12 @@ function App() {
                             )
                           }
                         >
-                          <span className="dropdown-action-icon">
-                            ↩↩
-                          </span>
+                          <strong>
+                            Reply All
+                          </strong>
 
-                          <span className="dropdown-action-copy">
-                            <strong>
-                              Reply All
-                            </strong>
-
-                            <small>
-                              Include everyone on the conversation
-                            </small>
+                          <span>
+                            Include all current CCs and participants
                           </span>
                         </button>
 
@@ -3614,18 +3643,12 @@ function App() {
                             )
                           }
                         >
-                          <span className="dropdown-action-icon">
-                            ↗
-                          </span>
+                          <strong>
+                            Forward
+                          </strong>
 
-                          <span className="dropdown-action-copy">
-                            <strong>
-                              Forward
-                            </strong>
-
-                            <small>
-                              Send the conversation to someone else
-                            </small>
+                          <span>
+                            Send the conversation elsewhere
                           </span>
                         </button>
                       </div>
@@ -3662,8 +3685,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* RECIPIENTS */}
-
                 <div className="recipient-section">
 
                   <div className="recipient-row">
@@ -3677,6 +3698,7 @@ function App() {
                   </div>
 
                   <div className="recipient-row">
+
                     <div className="recipient-label">
                       To
                     </div>
@@ -3687,18 +3709,11 @@ function App() {
                       value={
                         recipientTo
                       }
-                      placeholder={
-                        replyMode ===
-                        "forward"
-                          ? "Enter recipient email…"
-                          : "Recipient"
-                      }
+                      placeholder="Recipient"
                       disabled={
                         composerBusy
                       }
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         setRecipientTo(
                           event
                             .target
@@ -3710,6 +3725,7 @@ function App() {
 
                   {showCc && (
                     <div className="recipient-row">
+
                       <div className="recipient-label">
                         Cc
                       </div>
@@ -3724,9 +3740,7 @@ function App() {
                         disabled={
                           composerBusy
                         }
-                        onChange={(
-                          event
-                        ) =>
+                        onChange={(event) =>
                           setRecipientCc(
                             event
                               .target
@@ -3739,12 +3753,8 @@ function App() {
                         type="button"
                         className="recipient-remove"
                         onClick={() => {
-                          setRecipientCc(
-                            ""
-                          );
-                          setShowCc(
-                            false
-                          );
+                          setRecipientCc("");
+                          setShowCc(false);
                         }}
                       >
                         ×
@@ -3754,6 +3764,7 @@ function App() {
 
                   {showBcc && (
                     <div className="recipient-row">
+
                       <div className="recipient-label">
                         Bcc
                       </div>
@@ -3768,9 +3779,7 @@ function App() {
                         disabled={
                           composerBusy
                         }
-                        onChange={(
-                          event
-                        ) =>
+                        onChange={(event) =>
                           setRecipientBcc(
                             event
                               .target
@@ -3783,12 +3792,8 @@ function App() {
                         type="button"
                         className="recipient-remove"
                         onClick={() => {
-                          setRecipientBcc(
-                            ""
-                          );
-                          setShowBcc(
-                            false
-                          );
+                          setRecipientBcc("");
+                          setShowBcc(false);
                         }}
                       >
                         ×
@@ -3797,16 +3802,12 @@ function App() {
                   )}
                 </div>
 
-                {/* TOOLBAR */}
-
                 <div className="rich-toolbar">
 
                   <button
                     type="button"
                     title="Undo"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       runEditorCommand(
                         "undo"
@@ -3819,9 +3820,7 @@ function App() {
                   <button
                     type="button"
                     title="Redo"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       runEditorCommand(
                         "redo"
@@ -3836,10 +3835,7 @@ function App() {
                   <button
                     type="button"
                     className="toolbar-bold"
-                    title="Bold"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       runEditorCommand(
                         "bold"
@@ -3852,10 +3848,7 @@ function App() {
                   <button
                     type="button"
                     className="toolbar-italic"
-                    title="Italic"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       runEditorCommand(
                         "italic"
@@ -3868,10 +3861,7 @@ function App() {
                   <button
                     type="button"
                     className="toolbar-underline"
-                    title="Underline"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       runEditorCommand(
                         "underline"
@@ -3884,10 +3874,7 @@ function App() {
                   <button
                     type="button"
                     className="toolbar-strike"
-                    title="Strikethrough"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       runEditorCommand(
                         "strikeThrough"
@@ -3901,16 +3888,11 @@ function App() {
 
                   <select
                     className="toolbar-select"
-                    title="Font size"
                     defaultValue="3"
-                    onChange={(
-                      event
-                    ) =>
+                    onChange={(event) =>
                       runEditorCommand(
                         "fontSize",
-                        event
-                          .target
-                          .value
+                        event.target.value
                       )
                     }
                   >
@@ -3931,45 +3913,31 @@ function App() {
                     </option>
                   </select>
 
-                  <label
-                    className="toolbar-color"
-                    title="Text color"
-                  >
+                  <label className="toolbar-color">
                     A
 
                     <input
                       type="color"
                       defaultValue="#202a44"
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         runEditorCommand(
                           "foreColor",
-                          event
-                            .target
-                            .value
+                          event.target.value
                         )
                       }
                     />
                   </label>
 
-                  <label
-                    className="toolbar-highlight"
-                    title="Highlight"
-                  >
+                  <label className="toolbar-highlight">
                     ▬
 
                     <input
                       type="color"
                       defaultValue="#d9e2e9"
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         runEditorCommand(
                           "hiliteColor",
-                          event
-                            .target
-                            .value
+                          event.target.value
                         )
                       }
                     />
@@ -3979,11 +3947,9 @@ function App() {
 
                   <button
                     type="button"
-                    title="Align left"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
+
                       runEditorCommand(
                         "justifyLeft"
                       );
@@ -3994,11 +3960,9 @@ function App() {
 
                   <button
                     type="button"
-                    title="Align center"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
+
                       runEditorCommand(
                         "justifyCenter"
                       );
@@ -4009,28 +3973,9 @@ function App() {
 
                   <button
                     type="button"
-                    title="Align right"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
-                      runEditorCommand(
-                        "justifyRight"
-                      );
-                    }}
-                  >
-                    ☷
-                  </button>
 
-                  <div className="toolbar-divider" />
-
-                  <button
-                    type="button"
-                    title="Bulleted list"
-                    onMouseDown={(
-                      event
-                    ) => {
-                      event.preventDefault();
                       runEditorCommand(
                         "insertUnorderedList"
                       );
@@ -4041,11 +3986,9 @@ function App() {
 
                   <button
                     type="button"
-                    title="Numbered list"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
+
                       runEditorCommand(
                         "insertOrderedList"
                       );
@@ -4056,42 +3999,7 @@ function App() {
 
                   <button
                     type="button"
-                    title="Outdent"
-                    onMouseDown={(
-                      event
-                    ) => {
-                      event.preventDefault();
-                      runEditorCommand(
-                        "outdent"
-                      );
-                    }}
-                  >
-                    ⇤
-                  </button>
-
-                  <button
-                    type="button"
-                    title="Indent"
-                    onMouseDown={(
-                      event
-                    ) => {
-                      event.preventDefault();
-                      runEditorCommand(
-                        "indent"
-                      );
-                    }}
-                  >
-                    ⇥
-                  </button>
-
-                  <div className="toolbar-divider" />
-
-                  <button
-                    type="button"
-                    title="Insert link"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
                       addLink();
                     }}
@@ -4101,11 +4009,9 @@ function App() {
 
                   <button
                     type="button"
-                    title="Remove formatting"
-                    onMouseDown={(
-                      event
-                    ) => {
+                    onMouseDown={(event) => {
                       event.preventDefault();
+
                       runEditorCommand(
                         "removeFormat"
                       );
@@ -4115,26 +4021,15 @@ function App() {
                   </button>
                 </div>
 
-                {/* EDITOR */}
-
                 <div
-                  ref={
-                    editorRef
-                  }
+                  ref={editorRef}
                   className="rich-editor"
                   contentEditable={
                     !composerBusy
                   }
                   suppressContentEditableWarning
-                  data-placeholder={
-                    replyMode ===
-                    "forward"
-                      ? "Add a message to your forwarded email…"
-                      : "Write your reply…"
-                  }
-                  onInput={(
-                    event
-                  ) =>
+                  data-placeholder="Write your reply…"
+                  onInput={(event) =>
                     setEditorHtml(
                       event
                         .currentTarget
@@ -4142,8 +4037,6 @@ function App() {
                     )
                   }
                 />
-
-                {/* FILES */}
 
                 {pendingFiles.length >
                   0 && (
@@ -4158,15 +4051,9 @@ function App() {
                           className="pending-attachment"
                           key={`${file.name}-${file.size}-${file.lastModified}`}
                         >
-
-                          <div className="pending-file-icon">
-                            {file.type
-                              ?.startsWith(
-                                "image/"
-                              )
-                              ? "🖼"
-                              : "📎"}
-                          </div>
+                          <span>
+                            📎
+                          </span>
 
                           <div className="pending-file-meta">
 
@@ -4186,9 +4073,6 @@ function App() {
                           <button
                             type="button"
                             className="pending-file-remove"
-                            disabled={
-                              composerBusy
-                            }
                             onClick={() =>
                               removePendingFile(
                                 index
@@ -4203,8 +4087,6 @@ function App() {
                   </div>
                 )}
 
-                {/* FOOTER */}
-
                 <div className="rich-composer-footer">
 
                   <div className="composer-footer-left">
@@ -4216,13 +4098,9 @@ function App() {
                       type="file"
                       multiple
                       className="hidden-file-input"
-                      onChange={(
-                        event
-                      ) => {
+                      onChange={(event) => {
                         addFiles(
-                          event
-                            .target
-                            .files
+                          event.target.files
                         );
 
                         event.target.value =
@@ -4238,13 +4116,9 @@ function App() {
                       multiple
                       accept="image/*"
                       className="hidden-file-input"
-                      onChange={(
-                        event
-                      ) => {
+                      onChange={(event) => {
                         addFiles(
-                          event
-                            .target
-                            .files
+                          event.target.files
                         );
 
                         event.target.value =
@@ -4255,10 +4129,6 @@ function App() {
                     <button
                       type="button"
                       className="composer-icon-button"
-                      title="Attach files"
-                      disabled={
-                        composerBusy
-                      }
                       onClick={() =>
                         fileInputRef
                           .current
@@ -4274,10 +4144,6 @@ function App() {
                     <button
                       type="button"
                       className="composer-icon-button"
-                      title="Attach images"
-                      disabled={
-                        composerBusy
-                      }
                       onClick={() =>
                         imageInputRef
                           .current
@@ -4310,27 +4176,7 @@ function App() {
 
                     {(uploadProgress ||
                       composerNotice) && (
-                      <div
-                        className={`composer-status ${
-                          composerNotice
-                            ?.toLowerCase()
-                            .includes(
-                              "could"
-                            ) ||
-                          composerNotice
-                            ?.toLowerCase()
-                            .includes(
-                              "required"
-                            ) ||
-                          composerNotice
-                            ?.toLowerCase()
-                            .includes(
-                              "expired"
-                            )
-                            ? "error"
-                            : ""
-                        }`}
-                      >
+                      <div className="composer-status">
                         {uploadProgress ||
                           composerNotice}
                       </div>
@@ -4366,9 +4212,7 @@ function App() {
                         }
                         onClick={() =>
                           setShowSendMenu(
-                            (
-                              current
-                            ) =>
+                            (current) =>
                               !current
                           )
                         }
@@ -4392,7 +4236,7 @@ function App() {
                             </strong>
 
                             <span>
-                              Keep the current ticket status
+                              Keep current status
                             </span>
                           </button>
 
@@ -4407,10 +4251,6 @@ function App() {
                             <strong>
                               Send & Close
                             </strong>
-
-                            <span>
-                              Send and close this ticket
-                            </span>
                           </button>
 
                           <button
@@ -4424,10 +4264,6 @@ function App() {
                             <strong>
                               Send & Waiting
                             </strong>
-
-                            <span>
-                              Send and mark as Waiting
-                            </span>
                           </button>
 
                           <button
@@ -4441,10 +4277,6 @@ function App() {
                             <strong>
                               Send & On Hold
                             </strong>
-
-                            <span>
-                              Send and put this ticket on hold
-                            </span>
                           </button>
                         </div>
                       )}
@@ -4454,9 +4286,405 @@ function App() {
               </div>
             </div>
 
-            {/* ============================================= */}
-            {/* CONVERSATION */}
-            {/* ============================================= */}
+            {/* COMMENTS */}
+
+            <section className="comments-area">
+
+              <div className="section-title-row">
+
+                <div>
+                  <h3>
+                    Comments
+                  </h3>
+
+                  <p>
+                    Internal collaboration and ticket notes.
+                  </p>
+                </div>
+
+                <span className="section-count">
+                  {comments.length}
+                </span>
+              </div>
+
+              <div className="comment-composer">
+
+                <div className="comment-mode-row">
+
+                  <div>
+                    <strong>
+                      Add comment
+                    </strong>
+
+                    <span>
+                      Type @ to mention an agent
+                    </span>
+                  </div>
+
+                  <div className="comment-visibility">
+
+                    <button
+                      type="button"
+                      className={
+                        !commentPublic
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() =>
+                        setCommentPublic(
+                          false
+                        )
+                      }
+                    >
+                      🔒 Private
+                    </button>
+
+                    <button
+                      type="button"
+                      className={
+                        commentPublic
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() =>
+                        setCommentPublic(
+                          true
+                        )
+                      }
+                    >
+                      ◉ Public
+                    </button>
+                  </div>
+                </div>
+
+                <div className="comment-input-wrap">
+
+                  <textarea
+                    ref={
+                      commentInputRef
+                    }
+                    value={
+                      commentText
+                    }
+                    placeholder="Write a comment… Use @ to mention someone."
+                    onChange={(event) =>
+                      handleCommentChange(
+                        event.target.value
+                      )
+                    }
+                  />
+
+                  {showMentionSuggestions &&
+                    mentionSuggestions.length >
+                      0 && (
+                      <div className="mention-menu">
+
+                        {mentionSuggestions.map(
+                          (agent) => (
+                            <button
+                              type="button"
+                              key={
+                                agent.zoho_agent_id
+                              }
+                              onClick={() =>
+                                selectMention(
+                                  agent
+                                )
+                              }
+                            >
+                              <span className="mention-avatar">
+                                {(
+                                  agent.name ||
+                                  agent.email ||
+                                  "?"
+                                )
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </span>
+
+                              <span className="mention-copy">
+                                <strong>
+                                  {agent.name ||
+                                    agent.email}
+                                </strong>
+
+                                {agent.email && (
+                                  <small>
+                                    {
+                                      agent.email
+                                    }
+                                  </small>
+                                )}
+                              </span>
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+                </div>
+
+                {commentMentions.length >
+                  0 && (
+                  <div className="comment-mention-chips">
+
+                    {commentMentions.map(
+                      (mention) => (
+                        <span
+                          key={
+                            mention.zoho_agent_id
+                          }
+                        >
+                          @
+                          {
+                            mention.name
+                          }
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCommentMentions(
+                                (current) =>
+                                  current.filter(
+                                    (item) =>
+                                      item.zoho_agent_id !==
+                                      mention.zoho_agent_id
+                                  )
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {commentFiles.length >
+                  0 && (
+                  <div className="comment-files">
+
+                    {commentFiles.map(
+                      (
+                        file,
+                        index
+                      ) => (
+                        <div
+                          key={`${file.name}-${index}`}
+                        >
+                          📎
+                          <span>
+                            {
+                              file.name
+                            }
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCommentFiles(
+                                (current) =>
+                                  current.filter(
+                                    (
+                                      _,
+                                      itemIndex
+                                    ) =>
+                                      itemIndex !==
+                                      index
+                                  )
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                <div className="comment-composer-footer">
+
+                  <div className="comment-left-actions">
+
+                    <input
+                      ref={
+                        commentFileInputRef
+                      }
+                      type="file"
+                      multiple
+                      className="hidden-file-input"
+                      onChange={(event) => {
+                        addCommentFiles(
+                          event.target.files
+                        );
+
+                        event.target.value =
+                          "";
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        commentFileInputRef
+                          .current
+                          ?.click()
+                      }
+                    >
+                      📎 Attach file
+                    </button>
+
+                    {commentNotice && (
+                      <span className="comment-notice">
+                        {
+                          commentNotice
+                        }
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="add-comment-button"
+                    disabled={
+                      commentBusy ||
+                      !commentText.trim()
+                    }
+                    onClick={
+                      submitComment
+                    }
+                  >
+                    {commentBusy
+                      ? "Adding…"
+                      : "Add comment"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="comment-list">
+
+                {loadingComments && (
+                  <div className="comments-loading">
+                    Loading comments…
+                  </div>
+                )}
+
+                {!loadingComments &&
+                  comments.length ===
+                    0 && (
+                    <div className="no-comments">
+                      No comments on this ticket yet.
+                    </div>
+                  )}
+
+                {comments.map(
+                  (comment) => (
+                    <article
+                      className={`comment-card ${
+                        comment.is_public
+                          ? "public"
+                          : "private"
+                      }`}
+                      key={
+                        comment.comment_key ||
+                        comment.id
+                      }
+                    >
+
+                      <div className="comment-header">
+
+                        <div className="comment-author-area">
+
+                          <div className="comment-avatar">
+                            {(
+                              comment.commenter_name ||
+                              comment.commenter_email ||
+                              "?"
+                            )
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+
+                          <div>
+                            <div className="comment-author">
+                              {comment.commenter_name ||
+                                comment.commenter_email ||
+                                "Zoho user"}
+                            </div>
+
+                            <div className="comment-meta">
+                              <span
+                                className={`comment-badge ${
+                                  comment.is_public
+                                    ? "public"
+                                    : "private"
+                                }`}
+                              >
+                                {comment.is_public
+                                  ? "Public"
+                                  : "Private"}
+                              </span>
+
+                              <span>
+                                {formatDateTime(
+                                  comment.commented_at_zoho
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {comment.content_html ? (
+                        <div
+                          className="comment-body"
+                          dangerouslySetInnerHTML={{
+                            __html:
+                              comment.content_html,
+                          }}
+                        />
+                      ) : (
+                        <div className="comment-body">
+                          {
+                            comment.content_text
+                          }
+                        </div>
+                      )}
+
+                      {Array.isArray(
+                        comment.attachments
+                      ) &&
+                        comment.attachments.length >
+                          0 && (
+                          <div className="comment-attachments">
+
+                            {comment.attachments.map(
+                              (
+                                attachment,
+                                index
+                              ) => (
+                                <span
+                                  key={
+                                    attachment.id ||
+                                    index
+                                  }
+                                >
+                                  📎{" "}
+                                  {attachment.name ||
+                                    "Attachment"}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        )}
+                    </article>
+                  )
+                )}
+              </div>
+            </section>
+
+            {/* EMAIL CONVERSATION */}
 
             <div className="conversation-scroll">
 
@@ -4468,7 +4696,7 @@ function App() {
                   </h3>
 
                   <p>
-                    Newest message first
+                    Newest email first
                   </p>
                 </div>
 
@@ -4489,9 +4717,7 @@ function App() {
 
               {!loadingThreads &&
                 newestThreads.map(
-                  (
-                    thread
-                  ) => {
+                  (thread) => {
                     const outbound =
                       isOutboundThread(
                         thread
@@ -4516,6 +4742,7 @@ function App() {
                             : "inbound"
                         }`}
                       >
+
                         <div className="message-header">
 
                           <div className="message-author-area">
@@ -4658,62 +4885,33 @@ function App() {
                           0 && (
                           <div className="existing-attachments">
 
-                            <div className="attachment-section-label">
-                              Attachments
-                            </div>
+                            {attachments.map(
+                              (
+                                attachment,
+                                index
+                              ) => (
+                                <div
+                                  className="existing-attachment"
+                                  key={
+                                    attachment.id ||
+                                    `${attachment.name}-${index}`
+                                  }
+                                >
+                                  📎
 
-                            <div className="existing-attachment-list">
-
-                              {attachments.map(
-                                (
-                                  attachment,
-                                  index
-                                ) => (
-                                  <div
-                                    className="existing-attachment"
-                                    key={
-                                      attachment.id ||
-                                      `${attachment.name}-${index}`
-                                    }
-                                  >
-                                    <span className="attachment-icon">
-                                      {String(
-                                        attachment.content_type ||
-                                          ""
-                                      ).startsWith(
-                                        "image/"
-                                      )
-                                        ? "🖼"
-                                        : "📎"}
-                                    </span>
-
-                                    <span className="existing-attachment-copy">
-
-                                      <span className="existing-attachment-name">
-                                        {attachment.name ||
-                                          "Attachment"}
-                                      </span>
-
-                                      {attachment.size && (
-                                        <span className="existing-attachment-size">
-                                          {formatFileSize(
-                                            attachment.size
-                                          )}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                )
-                              )}
-                            </div>
+                                  <span>
+                                    {attachment.name ||
+                                      "Attachment"}
+                                  </span>
+                                </div>
+                              )
+                            )}
                           </div>
                         )}
                       </article>
                     );
                   }
                 )}
-
-              {/* ORIGINAL REQUEST LAST */}
 
               {selected.description && (
                 <article className="original-message">
@@ -4786,9 +4984,7 @@ function App() {
         )}
       </main>
 
-      {/* ================================================= */}
-      {/* DETAILS */}
-      {/* ================================================= */}
+      {/* RIGHT DETAILS */}
 
       <aside className="details-column">
 
@@ -4832,14 +5028,10 @@ function App() {
                   disabled={
                     updateBusy
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     updateTicketField(
                       "status",
-                      event
-                        .target
-                        .value
+                      event.target.value
                     )
                   }
                 >
@@ -4860,9 +5052,7 @@ function App() {
                     )}
 
                   {availableStatuses.map(
-                    (
-                      status
-                    ) => (
+                    (status) => (
                       <option
                         key={
                           status
@@ -4871,9 +5061,7 @@ function App() {
                           status
                         }
                       >
-                        {
-                          status
-                        }
+                        {status}
                       </option>
                     )
                   )}
@@ -4896,14 +5084,10 @@ function App() {
                     disabled={
                       updateBusy
                     }
-                    onChange={(
-                      event
-                    ) =>
+                    onChange={(event) =>
                       updateTicketField(
                         "assigneeId",
-                        event
-                          .target
-                          .value ||
+                        event.target.value ||
                           null
                       )
                     }
@@ -4914,9 +5098,7 @@ function App() {
                     </option>
 
                     {agents.map(
-                      (
-                        agent
-                      ) => (
+                      (agent) => (
                         <option
                           key={
                             agent.zoho_agent_id
@@ -4965,9 +5147,7 @@ function App() {
                       )}
 
                       {tags.map(
-                        (
-                          tag
-                        ) => (
+                        (tag) => (
                           <div
                             key={
                               tag.zoho_tag_id
@@ -4983,9 +5163,6 @@ function App() {
                             <button
                               type="button"
                               className="tag-remove-button"
-                              disabled={
-                                tagBusy
-                              }
                               onClick={() =>
                                 removeTag(
                                   tag
@@ -5014,22 +5191,15 @@ function App() {
                             tagInput
                           }
                           placeholder="Add a tag…"
-                          disabled={
-                            tagBusy
-                          }
                           autoComplete="off"
                           onFocus={() =>
                             setShowTagSuggestions(
                               true
                             )
                           }
-                          onChange={(
-                            event
-                          ) => {
+                          onChange={(event) => {
                             setTagInput(
-                              event
-                                .target
-                                .value
+                              event.target.value
                             );
 
                             setShowTagSuggestions(
@@ -5043,39 +5213,23 @@ function App() {
                             <div className="tag-suggestions">
 
                               {suggestedTags.map(
-                                (
-                                  tag
-                                ) => (
+                                (tag) => (
                                   <button
                                     key={
                                       tag.zoho_tag_id
                                     }
                                     type="button"
                                     className="tag-suggestion"
-                                    onMouseDown={(
-                                      event
-                                    ) =>
-                                      event.preventDefault()
-                                    }
                                     onClick={() =>
                                       addTagByName(
                                         tag.name
                                       )
                                     }
                                   >
-                                    <span className="tag-suggestion-icon">
-                                      #
-                                    </span>
-
-                                    <span>
-                                      {
-                                        tag.name
-                                      }
-                                    </span>
-
-                                    <span className="existing-tag-label">
-                                      Existing
-                                    </span>
+                                    #
+                                    {
+                                      tag.name
+                                    }
                                   </button>
                                 )
                               )}
@@ -5083,32 +5237,18 @@ function App() {
                               {!exactTagMatch && (
                                 <button
                                   type="button"
-                                  className="tag-suggestion create-tag-option"
-                                  onMouseDown={(
-                                    event
-                                  ) =>
-                                    event.preventDefault()
-                                  }
+                                  className="tag-suggestion"
                                   onClick={() =>
                                     addTagByName(
                                       tagInput
                                     )
                                   }
                                 >
-                                  <span className="tag-create-plus">
-                                    +
-                                  </span>
-
-                                  <span>
-                                    Create{" "}
-                                    <strong>
-                                      “
-                                      {
-                                        tagInput.trim()
-                                      }
-                                      ”
-                                    </strong>
-                                  </span>
+                                  + Create “
+                                  {
+                                    tagInput.trim()
+                                  }
+                                  ”
                                 </button>
                               )}
                             </div>
@@ -5118,10 +5258,6 @@ function App() {
                       <button
                         type="submit"
                         className="tag-add-button"
-                        disabled={
-                          tagBusy ||
-                          !tagInput.trim()
-                        }
                       >
                         +
                       </button>
@@ -5151,17 +5287,10 @@ function App() {
                     selected.priority ||
                     ""
                   }
-                  disabled={
-                    updateBusy
-                  }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     updateTicketField(
                       "priority",
-                      event
-                        .target
-                        .value ||
+                      event.target.value ||
                         null
                     )
                   }
@@ -5192,17 +5321,10 @@ function App() {
                   value={dateInputValue(
                     selected.due_date
                   )}
-                  disabled={
-                    updateBusy
-                  }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     updateTicketField(
                       "dueDate",
-                      event
-                        .target
-                        .value
+                      event.target.value
                     )
                   }
                 />
@@ -5210,15 +5332,7 @@ function App() {
 
               {(updateBusy ||
                 updateNotice) && (
-                <div
-                  className={`update-notice ${
-                    updateNotice.startsWith(
-                      "Could"
-                    )
-                      ? "error"
-                      : ""
-                  }`}
-                >
+                <div className="update-notice">
                   {updateBusy
                     ? "Saving…"
                     : updateNotice}
@@ -5267,15 +5381,6 @@ function App() {
                   selected.updated_at_zoho
                 )}
               </Detail>
-
-              <Detail label="Ticket ID">
-
-                <span className="technical-value">
-                  {
-                    selected.zoho_ticket_id
-                  }
-                </span>
-              </Detail>
             </div>
           </>
         )}
@@ -5283,10 +5388,6 @@ function App() {
     </div>
   );
 }
-
-// ======================================================
-// RENDER
-// ======================================================
 
 ReactDOM
   .createRoot(
