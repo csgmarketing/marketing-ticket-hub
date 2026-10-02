@@ -75,6 +75,12 @@ const CODEWIZ_TICKET_OWNERS = [
   },
 ];
 
+const CODEWIZ_DEFAULT_DEPARTMENT = {
+  zoho_agent_id: "598256000022663005",
+  name: "Code Wiz Marketing",
+  email: "marketing@thecodewiz.com",
+};
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -3018,10 +3024,6 @@ function App() {
           .trim()
           .toLowerCase();
 
-      if (!needle) {
-        return [];
-      }
-
       const attached =
         new Set(
           tags.map(
@@ -3054,19 +3056,24 @@ function App() {
         .filter(
           (
             tag
-          ) =>
-            String(
+          ) => {
+            if (!needle) {
+              return true;
+            }
+
+            return String(
               tag.name ||
                 ""
             )
               .toLowerCase()
               .includes(
                 needle
-              )
+              );
+          }
         )
         .slice(
           0,
-          8
+          20
         );
     }, [
       tagCatalog,
@@ -3292,6 +3299,61 @@ function App() {
       false
     );
   }
+
+  const tierOptions =
+    useMemo(() => {
+      const values =
+        new Set();
+
+      for (
+        const ticket of
+        tickets
+      ) {
+        if (
+          ticket.source !==
+          selected?.source
+        ) {
+          continue;
+        }
+
+        const value =
+          String(
+            ticket.tier_level ||
+              ""
+          ).trim();
+
+        if (value) {
+          values.add(value);
+        }
+      }
+
+      if (
+        selected?.tier_level
+      ) {
+        values.add(
+          String(
+            selected.tier_level
+          ).trim()
+        );
+      }
+
+      return Array.from(
+        values
+      ).sort((a, b) =>
+        a.localeCompare(
+          b,
+          undefined,
+          {
+            numeric: true,
+            sensitivity: "base",
+          }
+        )
+      );
+    }, [
+      tickets,
+      selected?.source,
+      selected?.tier_level,
+    ]);
 
   // ====================================================
   // FILTERING
@@ -5879,7 +5941,7 @@ function App() {
                         className="detail-control owner-select"
                         value={
                           selected.assignee_id ||
-                          ""
+                          CODEWIZ_DEFAULT_DEPARTMENT.zoho_agent_id
                         }
                         disabled={
                           updateBusy
@@ -5896,11 +5958,24 @@ function App() {
                           )
                         }
                       >
-                        <option value="">
-                          Unassigned
-                        </option>
+                        {!agents.some(
+                          (agent) =>
+                            agent.zoho_agent_id ===
+                            CODEWIZ_DEFAULT_DEPARTMENT.zoho_agent_id
+                        ) && (
+                          <option
+                            value={
+                              CODEWIZ_DEFAULT_DEPARTMENT.zoho_agent_id
+                            }
+                          >
+                            {CODEWIZ_DEFAULT_DEPARTMENT.name}
+                            {` — ${CODEWIZ_DEFAULT_DEPARTMENT.email}`}
+                          </option>
+                        )}
 
                         {selected.assignee_id &&
+                          selected.assignee_id !==
+                            CODEWIZ_DEFAULT_DEPARTMENT.zoho_agent_id &&
                           !agents.some(
                             (
                               agent
@@ -5948,13 +6023,10 @@ function App() {
                       </select>
                     )}
 
-                    {selected.assignee_email && (
-                      <div className="owner-current-email">
-                        {
-                          selected.assignee_email
-                        }
-                      </div>
-                    )}
+                    <div className="owner-current-email">
+                      {selected.assignee_email ||
+                        CODEWIZ_DEFAULT_DEPARTMENT.email}
+                    </div>
                   </Detail>
 
                   <Detail label="Ticket Owner">
@@ -6201,9 +6273,15 @@ function App() {
                           }}
                         />
 
-                        {showTagSuggestions &&
-                          tagInput.trim() && (
+                        {showTagSuggestions && (
                             <div className="tag-suggestions">
+
+                              {!tagInput.trim() &&
+                                suggestedTags.length > 0 && (
+                                  <div className="tag-suggestions-title">
+                                    Existing tags
+                                  </div>
+                                )}
 
                               {suggestedTags.map(
                                 (
@@ -6229,7 +6307,8 @@ function App() {
                                 )
                               )}
 
-                              {!exactTagMatch && (
+                              {tagInput.trim() &&
+                                !exactTagMatch && (
                                 <button
                                   type="button"
                                   className="tag-suggestion"
@@ -6270,8 +6349,40 @@ function App() {
               </Detail>
 
               <Detail label="Tier">
-                {selected.tier_level ||
-                  "—"}
+                <select
+                  className="detail-control"
+                  value={
+                    selected.tier_level ||
+                    ""
+                  }
+                  disabled={
+                    updateBusy
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateTicketField(
+                      "tierLevel",
+                      event.target.value ||
+                        null
+                    )
+                  }
+                >
+                  <option value="">
+                    No tier
+                  </option>
+
+                  {tierOptions.map(
+                    (tier) => (
+                      <option
+                        key={tier}
+                        value={tier}
+                      >
+                        {tier}
+                      </option>
+                    )
+                  )}
+                </select>
               </Detail>
 
               <Detail label="Priority">
