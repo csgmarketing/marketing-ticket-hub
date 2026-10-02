@@ -61,9 +61,12 @@ const BRAND_STATUSES = {
 // ======================================================
 
 function formatDate(value) {
-  if (!value) return "—";
+  if (!value) {
+    return "—";
+  }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -84,9 +87,12 @@ function formatDate(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -108,9 +114,12 @@ function formatDateTime(value) {
 }
 
 function dateInputValue(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -126,23 +135,32 @@ function dateInputValue(value) {
   const month =
     String(
       date.getMonth() + 1
-    ).padStart(2, "0");
+    ).padStart(
+      2,
+      "0"
+    );
 
   const day =
     String(
       date.getDate()
-    ).padStart(2, "0");
+    ).padStart(
+      2,
+      "0"
+    );
 
   return `${year}-${month}-${day}`;
 }
 
 function isOverdue(ticket) {
-  if (!ticket?.due_date) {
+  if (
+    !ticket?.due_date
+  ) {
     return false;
   }
 
   if (
-    ticket.status === "Closed"
+    ticket.status ===
+    "Closed"
   ) {
     return false;
   }
@@ -185,9 +203,7 @@ function statusClass(status) {
   return `status-${value}`;
 }
 
-function getTicketSummary(
-  ticket
-) {
+function getTicketSummary(ticket) {
   return (
     ticket.email_summary ||
     ticket.description ||
@@ -201,7 +217,7 @@ function getTicketSummary(
 }
 
 // ======================================================
-// SMALL COMPONENTS
+// COMPONENTS
 // ======================================================
 
 function BrandBadge({
@@ -258,10 +274,16 @@ function Detail({
 function Login({
   onSignedIn,
 }) {
-  const [email, setEmail] =
+  const [
+    email,
+    setEmail,
+  ] =
     useState("");
 
-  const [busy, setBusy] =
+  const [
+    busy,
+    setBusy,
+  ] =
     useState(false);
 
   const [
@@ -275,7 +297,9 @@ function Login({
   ) {
     event.preventDefault();
 
-    if (!email.trim()) {
+    if (
+      !email.trim()
+    ) {
       return;
     }
 
@@ -312,7 +336,8 @@ function Login({
 
   useEffect(() => {
     const {
-      data: listener,
+      data:
+        listener,
     } =
       supabase.auth.onAuthStateChange(
         (
@@ -345,20 +370,17 @@ function Login({
   return (
     <div className="login-page">
       <div className="login-card">
+
         <div className="login-logo">
           CSG
         </div>
 
         <h1>
-          Marketing Ticket
-          Hub
+          Marketing Ticket Hub
         </h1>
 
         <p>
-          Qualicare, Tutor
-          Doctor and Code
-          Wiz tickets in one
-          place.
+          Qualicare, Tutor Doctor and Code Wiz tickets in one place.
         </p>
 
         <form
@@ -386,7 +408,9 @@ function Login({
           <button
             type="submit"
             className="primary-button"
-            disabled={busy}
+            disabled={
+              busy
+            }
           >
             {busy
               ? "Sending…"
@@ -440,6 +464,12 @@ function App() {
     useState([]);
 
   const [
+    tags,
+    setTags,
+  ] =
+    useState([]);
+
+  const [
     selectedKey,
     setSelectedKey,
   ] =
@@ -464,6 +494,12 @@ function App() {
     useState(false);
 
   const [
+    loadingTags,
+    setLoadingTags,
+  ] =
+    useState(false);
+
+  const [
     filter,
     setFilter,
   ] =
@@ -480,6 +516,8 @@ function App() {
     setSearch,
   ] =
     useState("");
+
+  // Reply
 
   const [
     replyText,
@@ -499,6 +537,8 @@ function App() {
   ] =
     useState("");
 
+  // Ticket updates
+
   const [
     updateBusy,
     setUpdateBusy,
@@ -508,6 +548,26 @@ function App() {
   const [
     updateNotice,
     setUpdateNotice,
+  ] =
+    useState("");
+
+  // Tags
+
+  const [
+    tagInput,
+    setTagInput,
+  ] =
+    useState("");
+
+  const [
+    tagBusy,
+    setTagBusy,
+  ] =
+    useState(false);
+
+  const [
+    tagNotice,
+    setTagNotice,
   ] =
     useState("");
 
@@ -534,7 +594,8 @@ function App() {
     loadSession();
 
     const {
-      data: listener,
+      data:
+        listener,
     } =
       supabase.auth.onAuthStateChange(
         (
@@ -561,7 +622,9 @@ function App() {
       async (
         preferredKey = null
       ) => {
-        if (!session) {
+        if (
+          !session
+        ) {
           return;
         }
 
@@ -574,7 +637,9 @@ function App() {
           error,
         } =
           await supabase
-            .from("tickets")
+            .from(
+              "tickets"
+            )
             .select("*")
             .eq(
               "is_deleted",
@@ -589,6 +654,7 @@ function App() {
               {
                 ascending:
                   false,
+
                 nullsFirst:
                   false,
               }
@@ -647,11 +713,15 @@ function App() {
           false
         );
       },
-      [session]
+      [
+        session,
+      ]
     );
 
   useEffect(() => {
-    if (session) {
+    if (
+      session
+    ) {
       loadTickets();
     }
   }, [
@@ -663,10 +733,13 @@ function App() {
     useMemo(
       () =>
         tickets.find(
-          (ticket) =>
+          (
+            ticket
+          ) =>
             ticket.ticket_key ===
             selectedKey
-        ) || null,
+        ) ||
+        null,
       [
         tickets,
         selectedKey,
@@ -689,6 +762,7 @@ function App() {
           setThreads(
             []
           );
+
           return;
         }
 
@@ -728,7 +802,8 @@ function App() {
           );
         } else {
           setThreads(
-            data || []
+            data ||
+            []
           );
         }
 
@@ -736,7 +811,9 @@ function App() {
           false
         );
       },
-      [session]
+      [
+        session,
+      ]
     );
 
   useEffect(() => {
@@ -753,7 +830,7 @@ function App() {
   ]);
 
   // ====================================================
-  // LOAD AGENTS FOR SELECTED BRAND
+  // AGENTS
   // ====================================================
 
   const loadAgents =
@@ -768,6 +845,7 @@ function App() {
           setAgents(
             []
           );
+
           return;
         }
 
@@ -813,7 +891,8 @@ function App() {
           );
         } else {
           setAgents(
-            data || []
+            data ||
+            []
           );
         }
 
@@ -821,7 +900,9 @@ function App() {
           false
         );
       },
-      [session]
+      [
+        session,
+      ]
     );
 
   useEffect(() => {
@@ -842,11 +923,105 @@ function App() {
   ]);
 
   // ====================================================
+  // TAGS
+  // ====================================================
+
+  const loadTags =
+    useCallback(
+      async (
+        ticketKey
+      ) => {
+        if (
+          !session ||
+          !ticketKey
+        ) {
+          setTags(
+            []
+          );
+
+          return;
+        }
+
+        setLoadingTags(
+          true
+        );
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "ticket_tags"
+            )
+            .select(
+              "id, ticket_key, zoho_tag_id, name, tag_type"
+            )
+            .eq(
+              "ticket_key",
+              ticketKey
+            )
+            .order(
+              "name",
+              {
+                ascending:
+                  true,
+              }
+            );
+
+        if (error) {
+          console.error(
+            "Tag load error:",
+            error
+          );
+
+          setTags(
+            []
+          );
+        } else {
+          setTags(
+            data ||
+            []
+          );
+        }
+
+        setLoadingTags(
+          false
+        );
+      },
+      [
+        session,
+      ]
+    );
+
+  useEffect(() => {
+    if (
+      selectedKey
+    ) {
+      loadTags(
+        selectedKey
+      );
+    } else {
+      setTags(
+        []
+      );
+    }
+
+    setTagInput("");
+    setTagNotice("");
+  }, [
+    selectedKey,
+    loadTags,
+  ]);
+
+  // ====================================================
   // REALTIME
   // ====================================================
 
   useEffect(() => {
-    if (!session) {
+    if (
+      !session
+    ) {
       return;
     }
 
@@ -897,6 +1072,35 @@ function App() {
             }
           }
         )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema:
+              "public",
+            table:
+              "ticket_tags",
+          },
+          (
+            payload
+          ) => {
+            const ticketKey =
+              payload.new
+                ?.ticket_key ||
+              payload.old
+                ?.ticket_key;
+
+            if (
+              ticketKey &&
+              ticketKey ===
+                selectedKey
+            ) {
+              loadTags(
+                selectedKey
+              );
+            }
+          }
+        )
         .subscribe();
 
     return () => {
@@ -909,6 +1113,7 @@ function App() {
     selectedKey,
     loadTickets,
     loadThreads,
+    loadTags,
   ]);
 
   // ====================================================
@@ -917,9 +1122,10 @@ function App() {
 
   const filteredTickets =
     useMemo(() => {
-      let rows = [
-        ...tickets,
-      ];
+      let rows =
+        [
+          ...tickets,
+        ];
 
       if (
         brandFilter !==
@@ -927,7 +1133,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.source ===
               brandFilter
           );
@@ -939,7 +1147,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status !==
               "Closed"
           );
@@ -951,7 +1161,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Open"
           );
@@ -963,7 +1175,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Waiting"
           );
@@ -975,7 +1189,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "On Hold"
           );
@@ -987,7 +1203,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Escalated"
           );
@@ -999,7 +1217,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "In Progress"
           );
@@ -1011,7 +1231,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Closed"
           );
@@ -1033,8 +1255,12 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
-              !ticket.assignee_id
+            (
+              ticket
+            ) =>
+              !ticket.assignee_id &&
+              ticket.status !==
+                "Closed"
           );
       }
 
@@ -1048,7 +1274,9 @@ function App() {
 
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               String(
                 ticket.assignee_email ||
                   ""
@@ -1069,7 +1297,9 @@ function App() {
 
         rows =
           rows.filter(
-            (ticket) => {
+            (
+              ticket
+            ) => {
               const haystack =
                 [
                   ticket.subject,
@@ -1085,7 +1315,9 @@ function App() {
                   .filter(
                     Boolean
                   )
-                  .join(" ")
+                  .join(
+                    " "
+                  )
                   .toLowerCase();
 
               return haystack.includes(
@@ -1117,14 +1349,18 @@ function App() {
       return {
         active:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status !==
               "Closed"
           ).length,
 
         mine:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status !==
                 "Closed" &&
               String(
@@ -1136,42 +1372,54 @@ function App() {
 
         open:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Open"
           ).length,
 
         onhold:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "On Hold"
           ).length,
 
         waiting:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Waiting"
           ).length,
 
         escalated:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Escalated"
           ).length,
 
         inprogress:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "In Progress"
           ).length,
 
         closed:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               ticket.status ===
               "Closed"
           ).length,
@@ -1183,7 +1431,9 @@ function App() {
 
         unassigned:
           tickets.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               !ticket.assignee_id &&
               ticket.status !==
                 "Closed"
@@ -1195,7 +1445,7 @@ function App() {
     ]);
 
   // ====================================================
-  // UPDATE TICKET FIELD
+  // UPDATE TICKET
   // ====================================================
 
   async function updateTicketField(
@@ -1224,7 +1474,9 @@ function App() {
       field ===
       "dueDate"
     ) {
-      if (!value) {
+      if (
+        !value
+      ) {
         finalValue =
           null;
       } else {
@@ -1258,12 +1510,6 @@ function App() {
       error ||
       !data?.success
     ) {
-      console.error(
-        "Ticket update error:",
-        error ||
-          data
-      );
-
       setUpdateNotice(
         `Could not update: ${
           data?.error ||
@@ -1297,6 +1543,212 @@ function App() {
     );
 
     setUpdateBusy(
+      false
+    );
+  }
+
+  // ====================================================
+  // ADD TAG
+  // ====================================================
+
+  async function addTag(
+    event
+  ) {
+    event?.preventDefault();
+
+    if (
+      !selected ||
+      tagBusy
+    ) {
+      return;
+    }
+
+    const name =
+      tagInput
+        .trim();
+
+    if (
+      !name
+    ) {
+      return;
+    }
+
+    const duplicate =
+      tags.some(
+        (
+          tag
+        ) =>
+          tag.name
+            ?.toLowerCase() ===
+          name.toLowerCase()
+      );
+
+    if (
+      duplicate
+    ) {
+      setTagNotice(
+        "This ticket already has that tag."
+      );
+
+      return;
+    }
+
+    setTagBusy(
+      true
+    );
+
+    setTagNotice(
+      ""
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.functions.invoke(
+        "manage-zoho-ticket-tags",
+        {
+          body: {
+            ticket_key:
+              selected.ticket_key,
+
+            action:
+              "add",
+
+            tag_name:
+              name,
+          },
+        }
+      );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      setTagNotice(
+        `Could not add tag: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setTagBusy(
+        false
+      );
+
+      return;
+    }
+
+    setTagInput(
+      ""
+    );
+
+    setTagNotice(
+      "Tag added"
+    );
+
+    await loadTags(
+      selected.ticket_key
+    );
+
+    window.setTimeout(
+      () => {
+        setTagNotice(
+          ""
+        );
+      },
+      1800
+    );
+
+    setTagBusy(
+      false
+    );
+  }
+
+  // ====================================================
+  // REMOVE TAG
+  // ====================================================
+
+  async function removeTag(
+    tag
+  ) {
+    if (
+      !selected ||
+      !tag?.zoho_tag_id ||
+      tagBusy
+    ) {
+      return;
+    }
+
+    setTagBusy(
+      true
+    );
+
+    setTagNotice(
+      ""
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.functions.invoke(
+        "manage-zoho-ticket-tags",
+        {
+          body: {
+            ticket_key:
+              selected.ticket_key,
+
+            action:
+              "remove",
+
+            tag_id:
+              tag.zoho_tag_id,
+
+            tag_name:
+              tag.name,
+          },
+        }
+      );
+
+    if (
+      error ||
+      !data?.success
+    ) {
+      setTagNotice(
+        `Could not remove tag: ${
+          data?.error ||
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+
+      setTagBusy(
+        false
+      );
+
+      return;
+    }
+
+    setTagNotice(
+      "Tag removed"
+    );
+
+    await loadTags(
+      selected.ticket_key
+    );
+
+    window.setTimeout(
+      () => {
+        setTagNotice(
+          ""
+        );
+      },
+      1800
+    );
+
+    setTagBusy(
       false
     );
   }
@@ -1374,7 +1826,7 @@ function App() {
       selected.ticket_key
     );
 
-    setTimeout(
+    window.setTimeout(
       () => {
         setReplyNotice(
           ""
@@ -1406,7 +1858,9 @@ function App() {
     );
   }
 
-  if (!session) {
+  if (
+    !session
+  ) {
     return (
       <Login
         onSignedIn={
@@ -1419,7 +1873,8 @@ function App() {
   const availableStatuses =
     BRAND_STATUSES[
       selected?.source
-    ] || [
+    ] ||
+    [
       "Open",
       "On Hold",
       "Closed",
@@ -1432,7 +1887,9 @@ function App() {
   return (
     <div className="app-shell">
 
-      {/* LEFT NAV */}
+      {/* ================================================= */}
+      {/* SIDEBAR */}
+      {/* ================================================= */}
 
       <aside className="sidebar">
 
@@ -1453,6 +1910,7 @@ function App() {
         </div>
 
         <div className="sidebar-section">
+
           <div className="sidebar-label">
             MY WORK
           </div>
@@ -1555,6 +2013,7 @@ function App() {
         </div>
 
         <div className="sidebar-section">
+
           <div className="sidebar-label">
             STATUS
           </div>
@@ -1705,6 +2164,7 @@ function App() {
         </div>
 
         <div className="sidebar-section">
+
           <div className="sidebar-label">
             BRANDS
           </div>
@@ -1779,6 +2239,7 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
+
           <div className="user-email">
             {
               session.user
@@ -1797,7 +2258,9 @@ function App() {
         </div>
       </aside>
 
+      {/* ================================================= */}
       {/* TICKET LIST */}
+      {/* ================================================= */}
 
       <section className="ticket-column">
 
@@ -1817,11 +2280,14 @@ function App() {
         </div>
 
         <div className="search-wrap">
+
           <input
             className="search-input"
             type="search"
             placeholder="Search tickets…"
-            value={search}
+            value={
+              search
+            }
             onChange={(
               event
             ) =>
@@ -1848,13 +2314,14 @@ function App() {
             filteredTickets.length ===
               0 && (
               <div className="empty-state">
-                No tickets match
-                this view.
+                No tickets match this view.
               </div>
             )}
 
           {filteredTickets.map(
-            (ticket) => (
+            (
+              ticket
+            ) => (
               <button
                 key={
                   ticket.ticket_key
@@ -1871,7 +2338,9 @@ function App() {
                   )
                 }
               >
+
                 <div className="ticket-row-top">
+
                   <BrandBadge
                     source={
                       ticket.source
@@ -1905,6 +2374,7 @@ function App() {
                 </div>
 
                 <div className="ticket-row-bottom">
+
                   <StatusBadge
                     status={
                       ticket.status
@@ -1930,29 +2400,33 @@ function App() {
         </div>
       </section>
 
+      {/* ================================================= */}
       {/* CONVERSATION */}
+      {/* ================================================= */}
 
       <main className="conversation-column">
 
         {!selected ? (
           <div className="conversation-empty">
+
             <div>
               <h2>
                 Select a ticket
               </h2>
 
               <p>
-                Choose a ticket
-                to view its
-                conversation.
+                Choose a ticket to view its conversation.
               </p>
             </div>
           </div>
         ) : (
           <>
             <header className="conversation-header">
+
               <div className="conversation-heading">
+
                 <div className="conversation-meta">
+
                   <BrandBadge
                     source={
                       selected.source
@@ -2001,6 +2475,7 @@ function App() {
                 <article className="original-message">
 
                   <div className="message-header">
+
                     <div>
                       <div className="message-author">
                         {selected.contact_name ||
@@ -2063,7 +2538,9 @@ function App() {
                             : "inbound"
                         }`}
                       >
+
                         <div className="message-header">
+
                           <div>
                             <div className="message-author">
                               {thread.author_name ||
@@ -2109,6 +2586,8 @@ function App() {
                   }
                 )}
             </div>
+
+            {/* REPLY */}
 
             <div className="composer">
 
@@ -2173,7 +2652,9 @@ function App() {
         )}
       </main>
 
+      {/* ================================================= */}
       {/* DETAILS */}
+      {/* ================================================= */}
 
       <aside className="details-column">
 
@@ -2192,6 +2673,7 @@ function App() {
             <div className="details-content">
 
               <Detail label="Brand">
+
                 <BrandBadge
                   source={
                     selected.source
@@ -2200,6 +2682,7 @@ function App() {
               </Detail>
 
               <Detail label="Status">
+
                 <select
                   className="detail-control"
                   value={
@@ -2220,6 +2703,7 @@ function App() {
                     )
                   }
                 >
+
                   {selected.status &&
                     !availableStatuses.includes(
                       selected.status
@@ -2256,7 +2740,7 @@ function App() {
                 </select>
               </Detail>
 
-              {/* TICKET OWNER */}
+              {/* OWNER */}
 
               <Detail label="Ticket Owner">
 
@@ -2286,6 +2770,7 @@ function App() {
                       )
                     }
                   >
+
                     <option value="">
                       Unassigned
                     </option>
@@ -2321,18 +2806,125 @@ function App() {
                     }
                   </div>
                 )}
+              </Detail>
 
-                {!loadingAgents &&
-                  agents.length ===
-                    0 && (
-                    <div className="field-help error-help">
-                      No active agents have been synced for this brand yet.
+              {/* TAGS */}
+
+              <Detail label="Tags">
+
+                {loadingTags ? (
+                  <div className="tag-loading">
+                    Loading tags…
+                  </div>
+                ) : (
+                  <>
+                    <div className="tag-list">
+
+                      {tags.length ===
+                        0 && (
+                        <div className="no-tags">
+                          No tags yet
+                        </div>
+                      )}
+
+                      {tags.map(
+                        (
+                          tag
+                        ) => (
+                          <div
+                            key={
+                              tag.zoho_tag_id
+                            }
+                            className="ticket-tag"
+                          >
+                            <span className="ticket-tag-name">
+                              {
+                                tag.name
+                              }
+                            </span>
+
+                            <button
+                              type="button"
+                              className="tag-remove-button"
+                              title={`Remove ${tag.name}`}
+                              disabled={
+                                tagBusy
+                              }
+                              onClick={() =>
+                                removeTag(
+                                  tag
+                                )
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )
+                      )}
                     </div>
-                  )}
 
+                    <form
+                      className="add-tag-form"
+                      onSubmit={
+                        addTag
+                      }
+                    >
+                      <input
+                        className="tag-input"
+                        type="text"
+                        value={
+                          tagInput
+                        }
+                        placeholder="Add a tag…"
+                        disabled={
+                          tagBusy
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setTagInput(
+                            event
+                              .target
+                              .value
+                          )
+                        }
+                      />
+
+                      <button
+                        type="submit"
+                        className="tag-add-button"
+                        disabled={
+                          tagBusy ||
+                          !tagInput.trim()
+                        }
+                      >
+                        {tagBusy
+                          ? "…"
+                          : "+"}
+                      </button>
+                    </form>
+
+                    {tagNotice && (
+                      <div
+                        className={`tag-notice ${
+                          tagNotice.startsWith(
+                            "Could"
+                          )
+                            ? "error"
+                            : ""
+                        }`}
+                      >
+                        {
+                          tagNotice
+                        }
+                      </div>
+                    )}
+                  </>
+                )}
               </Detail>
 
               <Detail label="Tier">
+
                 <div className="read-only-detail">
                   {selected.tier_level ||
                     "—"}
@@ -2340,6 +2932,7 @@ function App() {
               </Detail>
 
               <Detail label="Priority">
+
                 <select
                   className="detail-control"
                   value={
@@ -2361,6 +2954,7 @@ function App() {
                     )
                   }
                 >
+
                   <option value="">
                     No priority
                   </option>
@@ -2380,6 +2974,7 @@ function App() {
               </Detail>
 
               <Detail label="Due date">
+
                 <input
                   className="detail-control"
                   type="date"
@@ -2422,7 +3017,9 @@ function App() {
               <div className="details-divider" />
 
               <Detail label="Requester">
+
                 <div className="requester-detail">
+
                   <strong>
                     {selected.contact_name ||
                       "—"}
@@ -2461,13 +3058,13 @@ function App() {
               </Detail>
 
               <Detail label="Ticket ID">
+
                 <span className="technical-value">
                   {
                     selected.zoho_ticket_id
                   }
                 </span>
               </Detail>
-
             </div>
           </>
         )}
