@@ -116,6 +116,13 @@ function isApprovedCompanyEmail(value) {
   );
 }
 
+
+const TUTOR_DOCTOR_DEPARTMENTS = [
+  "Marketing",
+  "Client/Tutor Newsletter",
+  "Marketing Tech",
+];
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -922,6 +929,12 @@ function App() {
   const [
     brandFilter,
     setBrandFilter,
+  ] =
+    useState("all");
+
+  const [
+    departmentFilter,
+    setDepartmentFilter,
   ] =
     useState("all");
 
@@ -3513,6 +3526,25 @@ function App() {
       }
 
       if (
+        brandFilter ===
+          "Tutor Doctor" &&
+        departmentFilter !==
+          "all"
+      ) {
+        rows =
+          rows.filter(
+            (
+              ticket
+            ) =>
+              String(
+                ticket.department ||
+                  ""
+              ).trim() ===
+              departmentFilter
+          );
+      }
+
+      if (
         filter ===
         "all"
       ) {
@@ -3689,6 +3721,7 @@ function App() {
                   ticket.codewiz_agent_email,
                   ticket.status,
                   ticket.source,
+                  ticket.department,
                   ticket.description,
                 ]
                   .filter(Boolean)
@@ -3708,6 +3741,7 @@ function App() {
       tickets,
       filter,
       brandFilter,
+      departmentFilter,
       search,
       session,
     ]);
@@ -3771,7 +3805,7 @@ function App() {
           ?.email
           ?.toLowerCase();
 
-      const countTickets =
+      let countTickets =
         brandFilter ===
         "all"
           ? tickets
@@ -3782,6 +3816,25 @@ function App() {
                 ticket.source ===
                 brandFilter
             );
+
+      if (
+        brandFilter ===
+          "Tutor Doctor" &&
+        departmentFilter !==
+          "all"
+      ) {
+        countTickets =
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              String(
+                ticket.department ||
+                  ""
+              ).trim() ===
+              departmentFilter
+          );
+      }
 
       return {
         active:
@@ -3884,6 +3937,7 @@ function App() {
       tickets,
       session,
       brandFilter,
+      departmentFilter,
     ]);
 
   async function signOut() {
@@ -4497,6 +4551,15 @@ function App() {
                     value
                   );
 
+                  if (
+                    value !==
+                    "Tutor Doctor"
+                  ) {
+                    setDepartmentFilter(
+                      "all"
+                    );
+                  }
+
                   setSearch(
                     ""
                   );
@@ -4515,6 +4578,63 @@ function App() {
             )
           )}
         </div>
+
+        {brandFilter ===
+          "Tutor Doctor" && (
+          <div className="sidebar-section">
+
+            <div className="sidebar-label">
+              TUTOR DOCTOR DEPARTMENT
+            </div>
+
+            {[
+              [
+                "all",
+                "All Departments",
+              ],
+              ...TUTOR_DOCTOR_DEPARTMENTS.map(
+                (
+                  department
+                ) => [
+                  department,
+                  department,
+                ]
+              ),
+            ].map(
+              (
+                [
+                  value,
+                  label,
+                ]
+              ) => (
+                <button
+                  key={
+                    value
+                  }
+                  className={`nav-item ${
+                    departmentFilter ===
+                    value
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setDepartmentFilter(
+                      value
+                    );
+
+                    setSearch(
+                      ""
+                    );
+                  }}
+                >
+                  <span>
+                    {label}
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        )}
 
         <div className="sidebar-footer">
 
@@ -4558,7 +4678,12 @@ function App() {
               {brandFilter ===
               "all"
                 ? "Tickets"
-                : brandFilter}
+                : brandFilter ===
+                    "Tutor Doctor" &&
+                  departmentFilter !==
+                    "all"
+                  ? `Tutor Doctor · ${departmentFilter}`
+                  : brandFilter}
             </h1>
 
             <p>
