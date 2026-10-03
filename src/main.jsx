@@ -118,9 +118,18 @@ function isApprovedCompanyEmail(value) {
 
 
 const TUTOR_DOCTOR_DEPARTMENTS = [
-  "Marketing",
-  "Client/Tutor Newsletter",
-  "Marketing Tech",
+  {
+    value: "Marketing",
+    label: "Marketing",
+  },
+  {
+    value: "Client_Tutor Newsletter",
+    label: "Client/Tutor Newsletter",
+  },
+  {
+    value: "Marketing Tech",
+    label: "Marketing Tech",
+  },
 ];
 
 // ======================================================
@@ -4596,8 +4605,8 @@ function App() {
                 (
                   department
                 ) => [
-                  department,
-                  department,
+                  department.value,
+                  department.label,
                 ]
               ),
             ].map(
@@ -4682,7 +4691,16 @@ function App() {
                     "Tutor Doctor" &&
                   departmentFilter !==
                     "all"
-                  ? `Tutor Doctor · ${departmentFilter}`
+                  ? `Tutor Doctor · ${
+                      TUTOR_DOCTOR_DEPARTMENTS.find(
+                        (
+                          department
+                        ) =>
+                          department.value ===
+                          departmentFilter
+                      )?.label ||
+                      departmentFilter
+                    }`
                   : brandFilter}
             </h1>
 
