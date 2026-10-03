@@ -3913,10 +3913,40 @@ function App() {
   // FILTERING
   // ====================================================
 
+  function isVisibleMarketingTicket(
+    ticket
+  ) {
+    /*
+      Code Wiz Support tickets remain synced in Supabase so a Marketing
+      ticket can still be reassigned to Support and Support agents can
+      continue to be used in the Department and @mention controls.
+
+      They are simply excluded from the Marketing Ticket Hub's ticket
+      lists, searches, My Work views, status views, and counts.
+    */
+    if (
+      ticket?.source ===
+        "Code Wiz" &&
+      String(
+        ticket?.department ||
+          ""
+      )
+        .trim()
+        .toLowerCase() ===
+        "support"
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
   const filteredTickets =
     useMemo(() => {
       let rows =
-        [...tickets];
+        tickets.filter(
+          isVisibleMarketingTicket
+        );
 
       if (
         brandFilter !==
@@ -4212,11 +4242,16 @@ function App() {
           ?.email
           ?.toLowerCase();
 
+      const visibleTickets =
+        tickets.filter(
+          isVisibleMarketingTicket
+        );
+
       let countTickets =
         brandFilter ===
         "all"
-          ? tickets
-          : tickets.filter(
+          ? visibleTickets
+          : visibleTickets.filter(
               (
                 ticket
               ) =>
