@@ -3071,6 +3071,48 @@ function App() {
             })
           );
 
+      /*
+        Qualicare's active Zoho agents currently come back without ZUIDs.
+        They therefore cannot create native Zoho @mentions, but we still
+        expose them in the Ticket Hub mention picker and handle them as
+        Ticket Hub mentions.
+      */
+      const qualicareHubOptions =
+        selected?.source ===
+        "Qualicare"
+          ? agents
+              .filter(
+                (
+                  agent
+                ) =>
+                  !agent.zuid &&
+                  agent.active !==
+                    false &&
+                  String(
+                    agent.email ||
+                      ""
+                  ).trim()
+              )
+              .map(
+                (
+                  agent
+                ) => ({
+                  ...agent,
+
+                  mention_type:
+                    "ticket_hub_user",
+
+                  mention_key:
+                    `ticket-hub:${String(
+                      agent.email ||
+                        ""
+                    )
+                      .trim()
+                      .toLowerCase()}`,
+                })
+              )
+          : [];
+
       const codeWizTeamOptions =
         selected?.source ===
         "Code Wiz"
@@ -3115,6 +3157,19 @@ function App() {
       const combined =
         [
           ...codeWizTeamOptions.filter(
+            (
+              person
+            ) =>
+              !zohoEmails.has(
+                String(
+                  person.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+              )
+          ),
+          ...qualicareHubOptions.filter(
             (
               person
             ) =>
