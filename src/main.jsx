@@ -2786,22 +2786,97 @@ function App() {
           .trim()
           .toLowerCase();
 
-      return agents
+      const zohoAgentOptions =
+        agents
+          .filter(
+            (
+              agent
+            ) =>
+              agent.zuid
+          )
+          .map(
+            (
+              agent
+            ) => ({
+              ...agent,
+
+              mention_type:
+                "zoho_agent",
+
+              mention_key:
+                `zoho:${agent.zoho_agent_id}`,
+            })
+          );
+
+      const codeWizTeamOptions =
+        selected?.source ===
+        "Code Wiz"
+          ? CODEWIZ_TICKET_OWNERS.map(
+              (
+                person
+              ) => ({
+                ...person,
+
+                zoho_agent_id:
+                  null,
+
+                zuid:
+                  null,
+
+                mention_type:
+                  "ticket_hub_user",
+
+                mention_key:
+                  `ticket-hub:${person.email.toLowerCase()}`,
+              })
+            )
+          : [];
+
+      const zohoEmails =
+        new Set(
+          zohoAgentOptions
+            .map(
+              (
+                agent
+              ) =>
+                String(
+                  agent.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+            )
+            .filter(Boolean)
+        );
+
+      const combined =
+        [
+          ...codeWizTeamOptions.filter(
+            (
+              person
+            ) =>
+              !zohoEmails.has(
+                String(
+                  person.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+              )
+          ),
+          ...zohoAgentOptions,
+        ];
+
+      return combined
         .filter(
           (
-            agent
-          ) =>
-            agent.zuid
-        )
-        .filter(
-          (
-            agent
+            person
           ) => {
             if (!needle) {
               return true;
             }
 
-            return `${agent.name || ""} ${agent.email || ""}`
+            return `${person.name || ""} ${person.email || ""}`
               .toLowerCase()
               .includes(
                 needle
@@ -2810,40 +2885,31 @@ function App() {
         )
         .slice(
           0,
-          8
+          12
         );
     }, [
       agents,
       mentionQuery,
+      selected?.source,
       showMentionSuggestions,
     ]);
 
-  function handleCommentChange(
-    value
+  function mentionIdentity(
+    mention
   ) {
-    setCommentText(
-      value
+    return (
+      mention?.mention_key ||
+      (
+        mention?.zoho_agent_id
+          ? `zoho:${mention.zoho_agent_id}`
+          : `ticket-hub:${String(
+              mention?.email ||
+                ""
+            )
+              .trim()
+              .toLowerCase()}`
+      )
     );
-
-    const match =
-      value.match(
-        /@([^@\n]*)$/
-      );
-
-    if (match) {
-      setMentionQuery(
-        match[1]
-      );
-
-      setShowMentionSuggestions(
-        true
-      );
-    } else {
-      setMentionQuery("");
-      setShowMentionSuggestions(
-        false
-      );
-    }
   }
 
   function selectMention(
@@ -2864,7 +2930,7 @@ function App() {
     const display =
       agent.name ||
       agent.email ||
-      "Agent";
+      "Teammate";
 
     const before =
       commentText.slice(
@@ -2880,13 +2946,20 @@ function App() {
       (
         current
       ) => {
+        const identity =
+          mentionIdentity(
+            agent
+          );
+
         if (
           current.some(
             (
               item
             ) =>
-              item.zoho_agent_id ===
-              agent.zoho_agent_id
+              mentionIdentity(
+                item
+              ) ===
+              identity
           )
         ) {
           return current;
@@ -2895,17 +2968,27 @@ function App() {
         return [
           ...current,
           {
+            mention_type:
+              agent.mention_type ||
+              "zoho_agent",
+
+            mention_key:
+              identity,
+
             zoho_agent_id:
-              agent.zoho_agent_id,
+              agent.zoho_agent_id ||
+              null,
 
             name:
               display,
 
             email:
-              agent.email,
+              agent.email ||
+              null,
 
             zuid:
-              agent.zuid,
+              agent.zuid ||
+              null,
           },
         ];
       }
@@ -2980,13 +3063,24 @@ function App() {
         const visible =
           `@${mention.name}`;
 
+        const placeholder =
+          mention.mention_type ===
+          "ticket_hub_user"
+            ? `[[HUB_MENTION:${String(
+                mention.email ||
+                  ""
+              )
+                .trim()
+                .toLowerCase()}]]`
+            : `[[MENTION:${mention.zoho_agent_id}]]`;
+
         transformed =
           transformed
             .split(
               visible
             )
             .join(
-              `[[MENTION:${mention.zoho_agent_id}]]`
+              placeholder
             );
       }
 
@@ -3025,8 +3119,21 @@ function App() {
                     (
                       mention
                     ) => ({
+                      mention_type:
+                        mention.mention_type ||
+                        "zoho_agent",
+
                       zoho_agent_id:
-                        mention.zoho_agent_id,
+                        mention.zoho_agent_id ||
+                        null,
+
+                      name:
+                        mention.name ||
+                        null,
+
+                      email:
+                        mention.email ||
+                        null,
                     })
                   ),
 
@@ -5743,7 +5850,7 @@ function App() {
                     value={
                       commentText
                     }
-                    placeholder="Add a comment… Type @ to mention an agent."
+                    placeholder="Add a comment… Type @ to mention an agent or teammate."
                     onChange={(
                       event
                     ) =>
@@ -5767,7 +5874,9 @@ function App() {
                             <button
                               type="button"
                               key={
-                                agent.zoho_agent_id
+                                mentionIdentity(
+                                  agent
+                                )
                               }
                               onClick={() =>
                                 selectMention(
@@ -5799,6 +5908,10 @@ function App() {
                                     {
                                       agent.email
                                     }
+                                    {agent.mention_type ===
+                                      "ticket_hub_user"
+                                      ? " · Ticket Hub teammate"
+                                      : ""}
                                   </small>
                                 )}
                               </span>
@@ -5819,7 +5932,9 @@ function App() {
                       ) => (
                         <span
                           key={
-                            mention.zoho_agent_id
+                            mentionIdentity(
+                              mention
+                            )
                           }
                         >
                           @
@@ -5838,8 +5953,12 @@ function App() {
                                     (
                                       item
                                     ) =>
-                                      item.zoho_agent_id !==
-                                      mention.zoho_agent_id
+                                      mentionIdentity(
+                                        item
+                                      ) !==
+                                      mentionIdentity(
+                                        mention
+                                      )
                                   )
                               )
                             }
