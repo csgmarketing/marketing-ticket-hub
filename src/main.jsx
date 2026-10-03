@@ -81,6 +81,41 @@ const CODEWIZ_DEFAULT_DEPARTMENT = {
   email: "marketing@thecodewiz.com",
 };
 
+
+const ALLOWED_LOGIN_DOMAINS = [
+  "clearsummitgroup.com",
+  "tutordoctor.org",
+  "qualicare.com",
+  "thecodewiz.com",
+];
+
+function isApprovedCompanyEmail(value) {
+  const normalized =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  const atIndex =
+    normalized.lastIndexOf("@");
+
+  if (
+    atIndex <= 0 ||
+    atIndex ===
+      normalized.length - 1
+  ) {
+    return false;
+  }
+
+  const domain =
+    normalized.slice(
+      atIndex + 1
+    );
+
+  return ALLOWED_LOGIN_DOMAINS.includes(
+    domain
+  );
+}
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -589,9 +624,30 @@ function Login({
   ) {
     event.preventDefault();
 
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
     if (
-      !email.trim()
+      !normalizedEmail
     ) {
+      setMessage(
+        "Enter your work email address."
+      );
+
+      return;
+    }
+
+    if (
+      !isApprovedCompanyEmail(
+        normalizedEmail
+      )
+    ) {
+      setMessage(
+        "Please use an approved company email address."
+      );
+
       return;
     }
 
@@ -604,7 +660,7 @@ function Login({
       await supabase.auth.signInWithOtp(
         {
           email:
-            email.trim(),
+            normalizedEmail,
 
           options: {
             emailRedirectTo:
