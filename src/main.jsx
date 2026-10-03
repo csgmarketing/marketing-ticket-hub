@@ -2894,6 +2894,34 @@ function App() {
       showMentionSuggestions,
     ]);
 
+  function handleCommentChange(
+    value
+  ) {
+    setCommentText(
+      value
+    );
+
+    const match =
+      value.match(
+        /@([^@\n]*)$/
+      );
+
+    if (match) {
+      setMentionQuery(
+        match[1]
+      );
+
+      setShowMentionSuggestions(
+        true
+      );
+    } else {
+      setMentionQuery("");
+      setShowMentionSuggestions(
+        false
+      );
+    }
+  }
+
   function mentionIdentity(
     mention
   ) {
