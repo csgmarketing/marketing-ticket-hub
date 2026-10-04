@@ -493,14 +493,52 @@ function normalizeMentionList(value) {
 function BrandBadge({
   source,
 }) {
+  const meta = {
+    Qualicare: { short: "Q", label: "Qualicare", color: "#16835b", bg: "#eaf7f1" },
+    "Tutor Doctor": { short: "TD", label: "Tutor Doctor", color: "#2563eb", bg: "#eef4ff" },
+    "Code Wiz": { short: "CW", label: "Code Wiz", color: "#ea6a16", bg: "#fff3e8" },
+  }[source] || { short: "?", label: source || "Unknown", color: "#667085", bg: "#f2f4f7" };
+
   return (
     <span
-      className={`brand-badge ${brandClass(
-        source
-      )}`}
+      className={`brand-badge ${brandClass(source)}`}
+      title={meta.label}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        minWidth: 0,
+        padding: "3px 8px 3px 4px",
+        borderRadius: 7,
+        background: meta.bg,
+        color: meta.color,
+        border: `1px solid ${meta.color}22`,
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: ".01em",
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
     >
-      {source ||
-        "Unknown"}
+      <span
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 5,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: meta.color,
+          color: "#fff",
+          fontSize: 8,
+          fontWeight: 900,
+          letterSpacing: "-.02em",
+          flex: "0 0 auto",
+        }}
+      >
+        {meta.short}
+      </span>
+      <span>{meta.label}</span>
     </span>
   );
 }
@@ -4665,6 +4703,17 @@ function App() {
                     ? "selected"
                     : ""
                 }`}
+                style={{
+                  borderLeft: `3px solid ${
+                    ticket.source === "Qualicare"
+                      ? "#16835b"
+                      : ticket.source === "Tutor Doctor"
+                        ? "#2563eb"
+                        : ticket.source === "Code Wiz"
+                          ? "#ea6a16"
+                          : "#98a2b3"
+                  }`,
+                }}
                 onClick={() =>
                   setSelectedKey(
                     ticket.ticket_key
