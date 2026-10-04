@@ -9,7 +9,6 @@ import React, {
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import "./styles.css";
-import "./styles-ticket-hub-v7.css";
 
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL;
@@ -544,29 +543,15 @@ function normalizeMentionList(value) {
 
 function BrandBadge({
   source,
-  compact = false,
 }) {
-  const brand = source || "Unknown";
-  const mark =
-    brand === "Qualicare"
-      ? "Q"
-      : brand === "Tutor Doctor"
-        ? "TD"
-        : brand === "Code Wiz"
-          ? "CW"
-          : "?";
-
   return (
     <span
       className={`brand-badge ${brandClass(
         source
-      )} ${compact ? "brand-badge-compact" : ""}`}
-      title={brand}
+      )}`}
     >
-      <span className="brand-mark" aria-hidden="true">
-        {mark}
-      </span>
-      <span className="brand-name">{brand}</span>
+      {source ||
+        "Unknown"}
     </span>
   );
 }
@@ -629,172 +614,191 @@ function RecipientLine({
 // LOGIN
 // ======================================================
 
+function Login({
+  onSignedIn,
+}) {
+  const [
+    email,
+    setEmail,
+  ] =
+    useState("");
 
-function ticketAgeDays(ticket) {
-  if (!ticket) return 0;
-  const opened = ticket.created_at_zoho || ticket.created_at;
-  if (!opened) return 0;
-  const start = new Date(opened).getTime();
-  if (Number.isNaN(start)) return 0;
-  const end = ticket.status === "Closed" && ticket.updated_at_zoho
-    ? new Date(ticket.updated_at_zoho).getTime()
-    : Date.now();
-  return Math.max(0, end - start) / 86400000;
-}
+  const [
+    busy,
+    setBusy,
+  ] =
+    useState(false);
 
-function formatAge(ticket) {
-  const days = ticketAgeDays(ticket);
-  if (!days) return "—";
-  if (days < 1) return `${Math.max(1, Math.floor(days * 24))}h`;
-  if (days < 7) return `${Math.floor(days)}d ${Math.floor((days % 1) * 24)}h`;
-  return `${Math.floor(days / 7)}w ${Math.floor(days % 7)}d`;
-}
+  const [
+    message,
+    setMessage,
+  ] =
+    useState("");
 
-function lastActivityAt(threads = [], comments = [], ticket = null) {
-  const values = [
-    ticket?.updated_at_zoho,
-    ...threads.map(x => x.created_at_zoho),
-    ...comments.map(x => x.commented_at_zoho),
-  ].filter(Boolean).map(x => new Date(x).getTime()).filter(Number.isFinite);
-  return values.length ? new Date(Math.max(...values)).toISOString() : null;
-}
-
-function lastActivityLabel(threads = [], comments = [], ticket = null) {
-  const value = lastActivityAt(threads, comments, ticket);
-  if (!value) return "No activity";
-  const hours = Math.max(0, (Date.now() - new Date(value).getTime()) / 3600000);
-  if (hours < 1) return "Just now";
-  if (hours < 24) return `${Math.floor(hours)}h ago`;
-  if (hours < 168) return `${Math.floor(hours / 24)}d ago`;
-  return `${Math.floor(hours / 168)}w ago`;
-}
-
-function needsAttentionReason(ticket) {
-  if (!ticket || ticket.status === "Closed") return "";
-  if (isOverdue(ticket)) return "Overdue";
-  if (isTicketUnassigned(ticket)) return "Unassigned";
-  if (String(ticket.priority || "").toLowerCase() === "high") return "High priority";
-  if (ticketAgeDays(ticket) >= 7) return "Open 7+ days";
-  if (ticketAgeDays(ticket) >= 3) return "Open 3+ days";
-  if (ticket.status === "Escalated") return "Escalated";
-  return "";
-}
-
-function isNeedsAttentionTicket(ticket) {
-  return Boolean(needsAttentionReason(ticket));
-}
-
-function Login({ onSignedIn }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [mode, setMode] = useState("login");
-  const [recoverySession, setRecoverySession] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setRecoverySession(true);
-        setMode("reset");
-        return;
-      }
-      if (nextSession && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
-        onSignedIn(nextSession);
-      }
-    });
-    return () => listener.subscription.unsubscribe();
-  }, [onSignedIn]);
-
-  async function submit(event) {
+  async function signIn(
+    event
+  ) {
     event.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !isApprovedCompanyEmail(normalizedEmail)) {
-      setMessage("Please use an approved company email address.");
+
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    if (
+      !normalizedEmail
+    ) {
+      setMessage(
+        "Enter your work email address."
+      );
+
       return;
     }
-    setBusy(true); setMessage("");
-    try {
-      if (mode === "reset") {
-        if (password.length < 8) throw new Error("Password must be at least 8 characters.");
-        if (password !== confirmPassword) throw new Error("Passwords do not match.");
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) throw error;
-        setMessage("Password updated. Signing you in…");
-        const { data: refreshed } = await supabase.auth.getSession();
-        if (refreshed?.session) onSignedIn(refreshed.session);
-      } else if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo: `${window.location.origin}/`,
-        });
-        if (error) throw error;
-        setMessage("If that account exists, a password reset email has been sent.");
-      } else if (mode === "create") {
-        if (password.length < 8) throw new Error("Password must be at least 8 characters.");
-        if (password !== confirmPassword) throw new Error("Passwords do not match.");
-        const { data, error } = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        if (data?.session) onSignedIn(data.session);
-        else setMessage("Check your email to confirm your account, then sign in.");
-      } else {
-        if (!password) throw new Error("Enter your password.");
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
-        });
-        if (error) throw error;
-        if (data?.session) onSignedIn(data.session);
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Authentication failed.");
-    } finally {
-      setBusy(false);
+
+    if (
+      !isApprovedCompanyEmail(
+        normalizedEmail
+      )
+    ) {
+      setMessage(
+        "Please use an approved company email address."
+      );
+
+      return;
     }
+
+    setBusy(true);
+    setMessage("");
+
+    const {
+      error,
+    } =
+      await supabase.auth.signInWithOtp(
+        {
+          email:
+            normalizedEmail,
+
+          options: {
+            emailRedirectTo:
+              window.location.origin,
+          },
+        }
+      );
+
+    if (error) {
+      setMessage(
+        error.message
+      );
+    } else {
+      setMessage(
+        "Check your email for the sign-in link."
+      );
+    }
+
+    setBusy(false);
   }
 
-  const title = mode === "forgot" ? "Reset your password" : mode === "reset" ? "Choose a new password" : mode === "create" ? "Create your password" : "Welcome back";
-  const subtitle = mode === "forgot"
-    ? "Enter your work email and we’ll send you a secure reset link."
-    : mode === "reset"
-      ? "Choose a new password for your Ticket Hub account."
-      : mode === "create"
-      ? "First time accessing the Hub? Set your password here."
-      : "Your workspace for Qualicare, Tutor Doctor and Code Wiz.";
+  useEffect(() => {
+    const {
+      data:
+        listener,
+    } =
+      supabase.auth.onAuthStateChange(
+        (
+          event,
+          nextSession
+        ) => {
+          if (
+            nextSession &&
+            (
+              event ===
+                "SIGNED_IN" ||
+              event ===
+                "INITIAL_SESSION"
+            )
+          ) {
+            onSignedIn(
+              nextSession
+            );
+          }
+        }
+      );
+
+    return () => {
+      listener
+        .subscription
+        .unsubscribe();
+    };
+  }, [
+    onSignedIn,
+  ]);
 
   return (
     <div className="login-page">
-      <div className="login-card login-card-modern">
-        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
-        <div className="login-eyebrow">MARKETING OPERATIONS</div>
-        <h1>{title}</h1>
-        <p>{subtitle}</p>
-        <form onSubmit={submit}>
-          <label>Work email</label>
-          <input type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} />
-          {mode !== "forgot" && <>
-            <label>Password</label>
-            <input type="password" autoComplete={mode === "create" ? "new-password" : "current-password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
-          </>}
-          {mode === "create" && <>
-            <label>Confirm password</label>
-            <input type="password" autoComplete="new-password" placeholder="Repeat your password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-            <div className="password-hint">Use at least 8 characters.</div>
-          </>}
-          <button type="submit" className="primary-button" disabled={busy}>{busy ? "Please wait…" : mode === "forgot" ? "Send reset link" : mode === "create" ? "Create password" : "Sign in"}</button>
-          {message && <div className="login-message">{message}</div>}
-        </form>
-        <div className="login-links">
-          {mode === "login" && <>
-            <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }}>Forgot password?</button>
-            <button type="button" onClick={() => { setMode("create"); setMessage(""); }}>First time accessing the Hub? <strong>Create your password</strong></button>
-          </>}
-          {mode !== "login" && mode !== "reset" && <button type="button" onClick={() => { setMode("login"); setMessage(""); }}>← Back to sign in</button>}
+
+      <div className="login-card">
+
+        <div className="login-logo">
+          <span className="login-logo-mountain">
+            ▲
+          </span>
+
+          <span>
+            CSG
+          </span>
         </div>
+
+        <h1>
+          Marketing Ticket Hub
+        </h1>
+
+        <p>
+          One workspace for Qualicare,
+          Tutor Doctor and Code Wiz.
+        </p>
+
+        <form
+          onSubmit={
+            signIn
+          }
+        >
+          <label>
+            Work email
+          </label>
+
+          <input
+            type="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(
+              event
+            ) =>
+              setEmail(
+                event
+                  .target
+                  .value
+              )
+            }
+          />
+
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={
+              busy
+            }
+          >
+            {busy
+              ? "Sending…"
+              : "Sign in with email"}
+          </button>
+
+          {message && (
+            <div className="login-message">
+              {message}
+            </div>
+          )}
+        </form>
       </div>
     </div>
   );
@@ -949,25 +953,6 @@ function App() {
   ] =
     useState("");
 
-
-  const [dashboardTab, setDashboardTab] = useState(false);
-  const [savedView, setSavedView] = useState("all");
-  const [followedTickets, setFollowedTickets] = useState([]);
-  const [reminders, setReminders] = useState([]);
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [commandQuery, setCommandQuery] = useState("");
-  const [showReminderMenu, setShowReminderMenu] = useState(false);
-  const [reminderNotice, setReminderNotice] = useState("");
-  const [draftNotice, setDraftNotice] = useState("");
-  const [ageTick, setAgeTick] = useState(Date.now());
-  const [ticketListView, setTicketListView] = useState(() => {
-    try {
-      return localStorage.getItem("csg-ticket-list-view") || "classic";
-    } catch {
-      return "classic";
-    }
-  });
-
   const [
     updateBusy,
     setUpdateBusy,
@@ -979,78 +964,6 @@ function App() {
     setUpdateNotice,
   ] =
     useState("");
-
-
-  useEffect(() => {
-    const email = session?.user?.email?.toLowerCase();
-    if (!email) return;
-    try {
-      setFollowedTickets(JSON.parse(localStorage.getItem(`csg-followed:${email}`) || "[]"));
-      setReminders(JSON.parse(localStorage.getItem(`csg-reminders:${email}`) || "[]"));
-    } catch {}
-  }, [session?.user?.email]);
-
-  useEffect(() => {
-    const email = session?.user?.email?.toLowerCase();
-    if (!email) return;
-    localStorage.setItem(`csg-followed:${email}`, JSON.stringify(followedTickets));
-  }, [followedTickets, session?.user?.email]);
-
-  useEffect(() => {
-    const email = session?.user?.email?.toLowerCase();
-    if (!email) return;
-    localStorage.setItem(`csg-reminders:${email}`, JSON.stringify(reminders));
-  useEffect(() => {
-    try {
-      localStorage.setItem("csg-ticket-list-view", ticketListView);
-    } catch {}
-  }, [ticketListView]);
-
-  }, [reminders, session?.user?.email]);
-
-  useEffect(() => {
-    const id = setInterval(() => setAgeTick(Date.now()), 60000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const handler = (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setShowCommandPalette(true);
-        setCommandQuery("");
-      }
-      if (event.key === "Escape") {
-        setShowCommandPalette(false);
-        setShowReminderMenu(false);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
-  function toggleFollow(ticketKey) {
-    setFollowedTickets(current => current.includes(ticketKey)
-      ? current.filter(key => key !== ticketKey)
-      : [...current, ticketKey]);
-  }
-
-  function addReminder(ticket, hours = 24) {
-    if (!ticket) return;
-    const dueAt = new Date(Date.now() + hours * 3600000).toISOString();
-    setReminders(current => [
-      ...current.filter(item => item.ticket_key !== ticket.ticket_key),
-      { id: `${ticket.ticket_key}-${Date.now()}`, ticket_key: ticket.ticket_key, due_at: dueAt, note: "", dismissed: false },
-    ]);
-    setReminderNotice(`Reminder set for ${formatDateTime(dueAt)}`);
-    setShowReminderMenu(false);
-  }
-
-  function dismissReminder(id) {
-    setReminders(current => current.map(item => item.id === id ? { ...item, dismissed: true } : item));
-  }
-
-  const activeReminders = reminders.filter(item => !item.dismissed);
 
   // ====================================================
   // ZOHO FIELD METADATA
@@ -2320,15 +2233,6 @@ function App() {
   const latestThread =
     newestThreads[0] ||
     null;
-
-  useEffect(() => {
-    if (!selected?.ticket_key || !editorRef.current) return;
-    const key = `csg-draft:${selected.ticket_key}:${session?.user?.email || ""}`;
-    const draft = localStorage.getItem(key) || "";
-    editorRef.current.innerHTML = draft;
-    setEditorHtml(draft);
-    setDraftNotice(draft ? "Draft restored" : "");
-  }, [selected?.ticket_key, session?.user?.email]);
 
   const timelineItems =
     useMemo(() => {
@@ -4259,23 +4163,6 @@ function App() {
 
       if (
         filter ===
-        "high"
-      ) {
-        rows =
-          rows.filter(
-            (ticket) =>
-              String(
-                ticket.priority ||
-                  ""
-              ).toLowerCase() ===
-              "high" &&
-              ticket.status !==
-                "Closed"
-          );
-      }
-
-      if (
-        filter ===
         "mine"
       ) {
         const userEmail =
@@ -4299,38 +4186,6 @@ function App() {
               ticket.status !==
                 "Closed"
           );
-      }
-
-
-      if (savedView === "needs") {
-        rows = rows.filter(isNeedsAttentionTicket);
-      }
-      if (savedView === "aging") {
-        rows = rows.filter(ticket => ticket.status !== "Closed" && ticketAgeDays(ticket) >= 3);
-      }
-      if (savedView === "followed") {
-        rows = rows.filter(ticket => followedTickets.includes(ticket.ticket_key));
-      }
-      if (savedView === "reminders") {
-        const keys = new Set(activeReminders.map(item => item.ticket_key));
-        rows = rows.filter(ticket => keys.has(ticket.ticket_key));
-      }
-      if (savedView === "today") {
-        const now = new Date();
-        rows = rows.filter(ticket => {
-          const due = ticket.due_date ? new Date(ticket.due_date) : null;
-          return due && due.getFullYear() === now.getFullYear() && due.getMonth() === now.getMonth() && due.getDate() === now.getDate();
-        });
-      }
-      if (["age_0_1", "age_1_3", "age_3_5", "age_5_7", "age_7_plus"].includes(savedView)) {
-        const ranges = { age_0_1: [0, 1], age_1_3: [1, 3], age_3_5: [3, 5], age_5_7: [5, 7], age_7_plus: [7, Infinity] };
-        const [minAge, maxAge] = ranges[savedView];
-        rows = rows.filter(ticket => { const age = ticketAgeDays(ticket); return age >= minAge && age < maxAge; });
-      }
-
-      // Closed tickets belong ONLY in the Closed view.
-      if (filter !== "closed") {
-        rows = rows.filter((ticket) => ticket.status !== "Closed");
       }
 
       if (
@@ -4381,10 +4236,6 @@ function App() {
       departmentFilter,
       search,
       session,
-      savedView,
-      followedTickets,
-      activeReminders,
-      ageTick,
     ]);
 
   /*
@@ -4392,8 +4243,10 @@ function App() {
     CURRENT filtered list.
   */
   useEffect(() => {
-    if (dashboardTab) return;
-    if (filteredTickets.length === 0) {
+    if (
+      filteredTickets.length ===
+      0
+    ) {
       setSelectedKey(
         null
       );
@@ -4431,53 +4284,6 @@ function App() {
   }, [
     filteredTickets,
   ]);
-
-
-  const dashboardMetrics = useMemo(() => {
-    const visible = tickets.filter(isVisibleMarketingTicket);
-    const active = visible.filter(t => t.status !== "Closed");
-    const userEmail = session?.user?.email?.toLowerCase();
-    const mine = active.filter(t => String(getTicketOwnerEmail(t) || "").toLowerCase() === userEmail);
-    return {
-      active: active.length,
-      mine: mine.length,
-      needs: active.filter(isNeedsAttentionTicket).length,
-      overdue: active.filter(isOverdue).length,
-      unassigned: active.filter(t => isTicketUnassigned(t)).length,
-      aging: active.filter(t => ticketAgeDays(t) >= 3).length,
-      waiting: active.filter(t => t.status === "Waiting" && ticketAgeDays(t) >= 2).length,
-      high: active.filter(t => String(t.priority || "").toLowerCase() === "high").length,
-      today: active.filter(t => {
-        if (!t.due_date) return false;
-        const d = new Date(t.due_date), n = new Date();
-        return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
-      }).length,
-      brands: ["Qualicare", "Tutor Doctor", "Code Wiz"].map(source => ({ source, count: active.filter(t => t.source === source).length })),
-      statuses: ["Open", "In Progress", "On Hold", "Waiting", "Escalated"].map(status => ({ status, count: active.filter(t => t.status === status).length })),
-      agingBuckets: [
-        ["0–1d", 0, 1], ["1–3d", 1, 3], ["3–5d", 3, 5], ["5–7d", 5, 7], ["7d+", 7, Infinity],
-      ].map(([label, min, max]) => ({ label, count: active.filter(t => { const d=ticketAgeDays(t); return d >= min && d < max; }).length })),
-      recent: [...active].sort((a,b) => new Date(b.updated_at_zoho || b.created_at_zoho || 0) - new Date(a.updated_at_zoho || a.created_at_zoho || 0)).slice(0, 8),
-    };
-  }, [tickets, session, ageTick]);
-
-  function openDashboardQueue(target, options = {}) {
-    setDashboardTab(false);
-    setSelectedKey(null);
-    setSearch("");
-    setSavedView("all");
-    if (!options.preserveBrand) {
-      setBrandFilter("all");
-      setDepartmentFilter("all");
-    }
-    if (target === "needs") { setSavedView("needs"); setFilter("all"); }
-    else if (target === "aging") { setSavedView("aging"); setFilter("all"); }
-    else if (target === "followed") { setSavedView("followed"); setFilter("all"); }
-    else if (target === "reminders") { setSavedView("reminders"); setFilter("all"); }
-    else if (target === "today") { setSavedView("today"); setFilter("all"); }
-    else if (["age_0_1", "age_1_3", "age_3_5", "age_5_7", "age_7_plus"].includes(target)) { setSavedView(target); setFilter("all"); }
-    else setFilter(target);
-  }
 
   // ====================================================
   // COUNTS
@@ -5066,12 +4872,6 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-top-actions">
-          <button className={`dashboard-nav-button ${dashboardTab ? "active" : ""}`} onClick={() => { setDashboardTab(true); setSelectedKey(null); }}>
-            <span>▦</span><strong>Dashboard</strong><span className="shortcut-hint">⌘K</span>
-          </button>
-        </div>
-
         <div className="sidebar-section">
 
           <div className="sidebar-label">
@@ -5141,7 +4941,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() =>
-                  openDashboardQueue(id)
+                  setFilter(id)
                 }
               >
                 <span>
@@ -5154,19 +4954,6 @@ function App() {
               </button>
             )
           )}
-        </div>
-
-        <div className="sidebar-section">
-          <div className="sidebar-label">TODAY</div>
-          <button className={`nav-item ${savedView === "today" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("today"); setFilter("all"); }}><span>Due today</span><span className="nav-count">{dashboardMetrics.today}</span></button>
-          <button className={`nav-item ${savedView === "needs" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("needs"); setFilter("all"); }}><span>Needs attention</span><span className="nav-count">{dashboardMetrics.needs}</span></button>
-        </div>
-
-        <div className="sidebar-section">
-          <div className="sidebar-label">SAVED VIEWS</div>
-          <button className={`nav-item ${savedView === "followed" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("followed"); setFilter("all"); }}><span>Following</span><span className="nav-count">{followedTickets.length}</span></button>
-          <button className={`nav-item ${savedView === "reminders" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("reminders"); setFilter("all"); }}><span>My reminders</span><span className="nav-count">{activeReminders.length}</span></button>
-          <button className={`nav-item ${savedView === "aging" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("aging"); setFilter("all"); }}><span>Aging 3+ days</span><span className="nav-count">{dashboardMetrics.aging}</span></button>
         </div>
 
         <div className="sidebar-section">
@@ -5227,7 +5014,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() =>
-                  openDashboardQueue(id)
+                  setFilter(id)
                 }
               >
                 <span>
@@ -5744,7 +5531,9 @@ function App() {
                     "all"
                   ? `Tutor Doctor · ${
                       TUTOR_DOCTOR_DEPARTMENTS.find(
-                        (department) =>
+                        (
+                          department
+                        ) =>
                           department.value ===
                           departmentFilter
                       )?.label ||
@@ -5754,29 +5543,16 @@ function App() {
             </h1>
 
             <p>
-              {filteredTickets.length} ticket
-              {filteredTickets.length === 1 ? "" : "s"} in this view
+              {
+                filteredTickets.length
+              }{" "}
+              ticket
+              {filteredTickets.length ===
+              1
+                ? ""
+                : "s"}{" "}
+              in this view
             </p>
-          </div>
-
-          <div className="ticket-view-switcher" role="group" aria-label="Ticket list view">
-            <span className="ticket-view-label">View</span>
-            <button
-              type="button"
-              className={ticketListView === "classic" ? "active" : ""}
-              onClick={() => setTicketListView("classic")}
-              aria-pressed={ticketListView === "classic"}
-            >
-              Classic
-            </button>
-            <button
-              type="button"
-              className={ticketListView === "compact" ? "active" : ""}
-              onClick={() => setTicketListView("compact")}
-              aria-pressed={ticketListView === "compact"}
-            >
-              Compact
-            </button>
           </div>
         </div>
 
@@ -5787,145 +5563,113 @@ function App() {
             type="search"
             placeholder="Search tickets…"
             value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
+            onChange={(
+              event
+            ) =>
+              setSearch(
+                event
+                  .target
+                  .value
+              )
             }
           />
         </div>
 
-        <div className={`ticket-list ticket-list-${ticketListView}`}>
+        <div className="ticket-list">
 
           {loadingTickets &&
-            tickets.length === 0 && (
+            tickets.length ===
+              0 && (
               <div className="empty-state">
                 Loading tickets…
               </div>
             )}
 
           {!loadingTickets &&
-            filteredTickets.length === 0 && (
+            filteredTickets.length ===
+              0 && (
               <div className="empty-state">
                 No tickets match this view.
               </div>
             )}
 
-          {filteredTickets.map((ticket) => {
-            if (ticketListView === "compact") {
-              return (
-                <button
-                  key={ticket.ticket_key}
-                  type="button"
-                  className={`ticket-row ticket-row-compact ${brandClass(
-                    ticket.source
-                  )} ${selectedKey === ticket.ticket_key ? "selected" : ""}`}
-                  onClick={() => setSelectedKey(ticket.ticket_key)}
-                >
-                  <span className="compact-ticket-icon" aria-hidden="true">
-                    ✉
-                  </span>
-
-                  <span className="compact-ticket-main">
-                    <span className="compact-ticket-subject">
-                      {ticket.subject || "Untitled ticket"}
-                    </span>
-                    <span className="compact-ticket-meta">
-                      <BrandBadge source={ticket.source} compact />
-                      <span className="ticket-number">#{ticket.ticket_number}</span>
-                      <span className="compact-meta-separator">·</span>
-                      <span>{ticket.contact_name || ticket.contact_email || "Unknown requester"}</span>
-                      <span className="compact-meta-separator">·</span>
-                      <span>{lastActivityLabel([], [], ticket)}</span>
-                    </span>
-                  </span>
-
-                  <span className="compact-ticket-summary">
-                    {getTicketSummary(ticket) || "No preview available"}
-                  </span>
-
-                  <span className="compact-ticket-status">
-                    <StatusBadge status={ticket.status} />
-                  </span>
-
-                  <span className="compact-ticket-owner">
-                    {getTicketOwnerName(ticket) || "Unassigned"}
-                  </span>
-                </button>
-              );
-            }
-
-            return (
+          {filteredTickets.map(
+            (
+              ticket
+            ) => (
               <button
-                key={ticket.ticket_key}
-                type="button"
+                key={
+                  ticket.ticket_key
+                }
                 className={`ticket-row ${brandClass(
                   ticket.source
-                )} ${selectedKey === ticket.ticket_key ? "selected" : ""}`}
-                onClick={() => setSelectedKey(ticket.ticket_key)}
+                )} ${
+                  selectedKey ===
+                  ticket.ticket_key
+                    ? "selected"
+                    : ""
+                }`}
+                onClick={() =>
+                  setSelectedKey(
+                    ticket.ticket_key
+                  )
+                }
               >
                 <div className="ticket-row-top">
-                  <BrandBadge source={ticket.source} />
-                  <span className="ticket-number">#{ticket.ticket_number}</span>
+
+                  <BrandBadge
+                    source={
+                      ticket.source
+                    }
+                  />
+
+                  <span className="ticket-number">
+                    #
+                    {
+                      ticket.ticket_number
+                    }
+                  </span>
                 </div>
 
                 <div className="ticket-subject">
-                  {ticket.subject || "Untitled ticket"}
+                  {ticket.subject ||
+                    "Untitled ticket"}
                 </div>
 
                 <div className="ticket-summary">
-                  {getTicketSummary(ticket) || "No preview available"}
+                  {getTicketSummary(
+                    ticket
+                  ) ||
+                    "No preview available"}
                 </div>
 
                 <div className="ticket-requester">
-                  {ticket.contact_name || ticket.contact_email || "Unknown requester"}
+                  {ticket.contact_name ||
+                    ticket.contact_email ||
+                    "Unknown requester"}
                 </div>
 
                 <div className="ticket-row-bottom">
-                  <StatusBadge status={ticket.status} />
+
+                  <StatusBadge
+                    status={
+                      ticket.status
+                    }
+                  />
+
                   <span className="ticket-assignee">
-                    {getTicketOwnerName(ticket) || "Unassigned"}
+                    {getTicketOwnerName(
+                      ticket
+                    ) ||
+                      "Unassigned"}
                   </span>
                 </div>
               </button>
-            );
-          })}
+            )
+          )}
         </div>
       </section>
 
-      {dashboardTab ? (
-        <main className="dashboard-workspace">
-          <div className="dashboard-page">
-            <div className="dashboard-page-header">
-              <div><div className="dashboard-eyebrow">CSG · MARKETING OPERATIONS</div><h1>Good work starts with knowing what needs attention.</h1><p>Your operational view across Qualicare, Tutor Doctor and Code Wiz.</p></div>
-              <div className="dashboard-header-actions"><button onClick={() => openDashboardQueue("mine")}>My tickets</button><button onClick={() => openDashboardQueue("needs")}>Needs attention</button></div>
-            </div>
-            <div className="dashboard-grid">
-              {[
-                ["Active tickets", dashboardMetrics.active, "Current workload", "all"],
-                ["Needs attention", dashboardMetrics.needs, "Action required", "needs"],
-                ["High priority", dashboardMetrics.high, "High-priority work", "high"],
-                ["Overdue", dashboardMetrics.overdue, "Past due", "overdue"],
-                ["Due today", dashboardMetrics.today, "Needs action today", "today"],
-                ["Unassigned", dashboardMetrics.unassigned, "No owner", "unassigned"],
-                ["Aging 3+ days", dashboardMetrics.aging, "Older workload", "aging"],
-              ].map(([label,count,sub,target]) => <button key={label} className="dashboard-kpi" onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><small>{sub} →</small></button>)}
-            </div>
-            <div className="dashboard-columns">
-              <section className="dashboard-panel dashboard-panel-wide"><div className="panel-heading"><div><h2>My work</h2><p>Queues that matter most to you.</p></div></div><div className="dashboard-list">
-                {[["My tickets",dashboardMetrics.mine,"mine"],["Overdue",dashboardMetrics.overdue,"overdue"],["Due today",dashboardMetrics.today,"today"],["High priority",dashboardMetrics.high,"high"],["Following",followedTickets.length,"followed"],["My reminders",activeReminders.length,"reminders"]].map(([label,count,target]) => <button key={label} onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><em>View →</em></button>)}
-              </div></section>
-              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Workload by brand</h2><p>Active tickets.</p></div></div>{dashboardMetrics.brands.map(item => <button className="dashboard-bar-row" key={item.source} onClick={() => { setBrandFilter(item.source); setDepartmentFilter("all"); openDashboardQueue("all", { preserveBrand: true }); }}><span>{item.source}</span><div><i style={{width:`${dashboardMetrics.active ? Math.max(3,(item.count/dashboardMetrics.active)*100) : 0}%`}} /></div><strong>{item.count}</strong></button>)}</section>
-            </div>
-            <div className="dashboard-columns">
-              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Queue health</h2><p>Current status mix.</p></div></div>{dashboardMetrics.statuses.map(item => <button className="dashboard-simple-row" key={item.status} onClick={() => openDashboardQueue(item.status === "In Progress" ? "inprogress" : item.status.toLowerCase().replace(" ",""))}><span>{item.status}</span><strong>{item.count}</strong></button>)}</section>
-              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Ticket age</h2><p>Where the backlog is accumulating.</p></div></div>{dashboardMetrics.agingBuckets.map(item => <button className="dashboard-simple-row" key={item.label} onClick={() => openDashboardQueue(({ "0–1d": "age_0_1", "1–3d": "age_1_3", "3–5d": "age_3_5", "5–7d": "age_5_7", "7d+": "age_7_plus" })[item.label] || "aging")}><span>{item.label}</span><strong>{item.count}</strong></button>)}</section>
-            </div>
-            <section className="dashboard-panel"><div className="panel-heading"><div><h2>Recently updated</h2><p>Jump straight back into active work.</p></div></div><div className="recent-grid">{dashboardMetrics.recent.map(ticket => <button key={ticket.ticket_key} onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); }}><div><BrandBadge source={ticket.source}/><strong>#{ticket.ticket_number}</strong></div><h3>{ticket.subject || "Untitled ticket"}</h3><p>{ticket.contact_name || "Unknown requester"} · {formatAge(ticket)} old</p><span>{needsAttentionReason(ticket) || ticket.status}</span></button>)}</div></section>
-          </div>
-        </main>
-      ) : null}
-
-      {!dashboardTab && (
-      <>
       {/* WORKSPACE */}
 
       <main
@@ -6008,14 +5752,6 @@ function App() {
                 </div>
               </div>
 
-              <div className="ticket-header-insights">
-                <span>Opened <strong>{formatAge(selected)}</strong></span>
-                <span>Last activity <strong>{lastActivityLabel(threads, comments, selected)}</strong></span>
-                {selected.due_date && <span>Due <strong>{formatDate(selected.due_date)}</strong></span>}
-                <button type="button" onClick={() => toggleFollow(selected.ticket_key)}>{followedTickets.includes(selected.ticket_key) ? "★ Following" : "☆ Follow"}</button>
-                <button type="button" onClick={() => setShowReminderMenu(v => !v)}>⏰ Remind</button>
-                {showReminderMenu && <div className="reminder-menu"><button onClick={() => addReminder(selected,1)}>In 1 hour</button><button onClick={() => addReminder(selected,24)}>Tomorrow</button><button onClick={() => addReminder(selected,72)}>In 3 days</button><button onClick={() => addReminder(selected,168)}>Next week</button></div>}
-              </div>
               {selected.ticket_url && (
                 <a
                   className="zoho-link"
@@ -7866,10 +7602,6 @@ function App() {
 
               <div className="details-divider" />
 
-              {activeReminders.filter(item => item.ticket_key === selected.ticket_key).map(item => (
-                <Detail label="Reminder" key={item.id}><div className="reminder-detail"><strong>{formatDateTime(item.due_at)}</strong><button type="button" onClick={() => dismissReminder(item.id)}>Dismiss</button></div></Detail>
-              ))}
-
               <Detail label="Requester">
 
                 <div className="requester-detail">
@@ -7914,18 +7646,7 @@ function App() {
           </>
         )}
       </aside>
-      </>
-      )}
     </div>
-      {showCommandPalette && (
-        <div className="command-overlay" onMouseDown={() => setShowCommandPalette(false)}>
-          <div className="command-palette" onMouseDown={e => e.stopPropagation()}>
-            <div className="command-input-wrap"><span>⌘K</span><input autoFocus value={commandQuery} onChange={e => setCommandQuery(e.target.value)} placeholder="Search tickets, customers, emails, tags…" /></div>
-            <div className="command-results">{tickets.filter(isVisibleMarketingTicket).filter(ticket => `${ticket.ticket_number} ${ticket.subject} ${ticket.contact_name} ${ticket.contact_email} ${ticket.ticket_key}`.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,10).map(ticket => <button key={ticket.ticket_key} onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); setShowCommandPalette(false); }}><span>#{ticket.ticket_number}</span><strong>{ticket.subject || "Untitled ticket"}</strong><small>{ticket.contact_name || ""} · {ticket.source}</small></button>)}</div>
-            {!commandQuery && <div className="command-hints"><span>Search tickets and customers</span><span>Esc to close</span></div>}
-          </div>
-        </div>
-      )}
   );
 }
 
