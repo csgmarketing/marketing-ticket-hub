@@ -9,6 +9,7 @@ import React, {
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import "./styles.css";
+import "./styles-ticket-hub-v7.css";
 
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL;
@@ -543,15 +544,29 @@ function normalizeMentionList(value) {
 
 function BrandBadge({
   source,
+  compact = false,
 }) {
+  const brand = source || "Unknown";
+  const mark =
+    brand === "Qualicare"
+      ? "Q"
+      : brand === "Tutor Doctor"
+        ? "TD"
+        : brand === "Code Wiz"
+          ? "CW"
+          : "?";
+
   return (
     <span
       className={`brand-badge ${brandClass(
         source
-      )}`}
+      )} ${compact ? "brand-badge-compact" : ""}`}
+      title={brand}
     >
-      {source ||
-        "Unknown"}
+      <span className="brand-mark" aria-hidden="true">
+        {mark}
+      </span>
+      <span className="brand-name">{brand}</span>
     </span>
   );
 }
@@ -945,6 +960,13 @@ function App() {
   const [reminderNotice, setReminderNotice] = useState("");
   const [draftNotice, setDraftNotice] = useState("");
   const [ageTick, setAgeTick] = useState(Date.now());
+  const [ticketListView, setTicketListView] = useState(() => {
+    try {
+      return localStorage.getItem("csg-ticket-list-view") || "classic";
+    } catch {
+      return "classic";
+    }
+  });
 
   const [
     updateBusy,
@@ -978,6 +1000,12 @@ function App() {
     const email = session?.user?.email?.toLowerCase();
     if (!email) return;
     localStorage.setItem(`csg-reminders:${email}`, JSON.stringify(reminders));
+  useEffect(() => {
+    try {
+      localStorage.setItem("csg-ticket-list-view", ticketListView);
+    } catch {}
+  }, [ticketListView]);
+
   }, [reminders, session?.user?.email]);
 
   useEffect(() => {
@@ -4294,6 +4322,16 @@ function App() {
           return due && due.getFullYear() === now.getFullYear() && due.getMonth() === now.getMonth() && due.getDate() === now.getDate();
         });
       }
+      if (["age_0_1", "age_1_3", "age_3_5", "age_5_7", "age_7_plus"].includes(savedView)) {
+        const ranges = { age_0_1: [0, 1], age_1_3: [1, 3], age_3_5: [3, 5], age_5_7: [5, 7], age_7_plus: [7, Infinity] };
+        const [minAge, maxAge] = ranges[savedView];
+        rows = rows.filter(ticket => { const age = ticketAgeDays(ticket); return age >= minAge && age < maxAge; });
+      }
+
+      // Closed tickets belong ONLY in the Closed view.
+      if (filter !== "closed") {
+        rows = rows.filter((ticket) => ticket.status !== "Closed");
+      }
 
       if (
         search.trim()
@@ -4423,15 +4461,21 @@ function App() {
     };
   }, [tickets, session, ageTick]);
 
-  function openDashboardQueue(target) {
+  function openDashboardQueue(target, options = {}) {
     setDashboardTab(false);
     setSelectedKey(null);
     setSearch("");
     setSavedView("all");
+    if (!options.preserveBrand) {
+      setBrandFilter("all");
+      setDepartmentFilter("all");
+    }
     if (target === "needs") { setSavedView("needs"); setFilter("all"); }
     else if (target === "aging") { setSavedView("aging"); setFilter("all"); }
     else if (target === "followed") { setSavedView("followed"); setFilter("all"); }
+    else if (target === "reminders") { setSavedView("reminders"); setFilter("all"); }
     else if (target === "today") { setSavedView("today"); setFilter("all"); }
+    else if (["age_0_1", "age_1_3", "age_3_5", "age_5_7", "age_7_plus"].includes(target)) { setSavedView(target); setFilter("all"); }
     else setFilter(target);
   }
 
@@ -5097,7 +5141,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() =>
-                  setFilter(id)
+                  openDashboardQueue(id)
                 }
               >
                 <span>
@@ -5183,7 +5227,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() =>
-                  setFilter(id)
+                  openDashboardQueue(id)
                 }
               >
                 <span>
@@ -5700,9 +5744,7 @@ function App() {
                     "all"
                   ? `Tutor Doctor · ${
                       TUTOR_DOCTOR_DEPARTMENTS.find(
-                        (
-                          department
-                        ) =>
+                        (department) =>
                           department.value ===
                           departmentFilter
                       )?.label ||
@@ -5712,16 +5754,29 @@ function App() {
             </h1>
 
             <p>
-              {
-                filteredTickets.length
-              }{" "}
-              ticket
-              {filteredTickets.length ===
-              1
-                ? ""
-                : "s"}{" "}
-              in this view
+              {filteredTickets.length} ticket
+              {filteredTickets.length === 1 ? "" : "s"} in this view
             </p>
+          </div>
+
+          <div className="ticket-view-switcher" role="group" aria-label="Ticket list view">
+            <span className="ticket-view-label">View</span>
+            <button
+              type="button"
+              className={ticketListView === "classic" ? "active" : ""}
+              onClick={() => setTicketListView("classic")}
+              aria-pressed={ticketListView === "classic"}
+            >
+              Classic
+            </button>
+            <button
+              type="button"
+              className={ticketListView === "compact" ? "active" : ""}
+              onClick={() => setTicketListView("compact")}
+              aria-pressed={ticketListView === "compact"}
+            >
+              Compact
+            </button>
           </div>
         </div>
 
@@ -5732,110 +5787,107 @@ function App() {
             type="search"
             placeholder="Search tickets…"
             value={search}
-            onChange={(
-              event
-            ) =>
-              setSearch(
-                event
-                  .target
-                  .value
-              )
+            onChange={(event) =>
+              setSearch(event.target.value)
             }
           />
         </div>
 
-        <div className="ticket-list">
+        <div className={`ticket-list ticket-list-${ticketListView}`}>
 
           {loadingTickets &&
-            tickets.length ===
-              0 && (
+            tickets.length === 0 && (
               <div className="empty-state">
                 Loading tickets…
               </div>
             )}
 
           {!loadingTickets &&
-            filteredTickets.length ===
-              0 && (
+            filteredTickets.length === 0 && (
               <div className="empty-state">
                 No tickets match this view.
               </div>
             )}
 
-          {filteredTickets.map(
-            (
-              ticket
-            ) => (
+          {filteredTickets.map((ticket) => {
+            if (ticketListView === "compact") {
+              return (
+                <button
+                  key={ticket.ticket_key}
+                  type="button"
+                  className={`ticket-row ticket-row-compact ${brandClass(
+                    ticket.source
+                  )} ${selectedKey === ticket.ticket_key ? "selected" : ""}`}
+                  onClick={() => setSelectedKey(ticket.ticket_key)}
+                >
+                  <span className="compact-ticket-icon" aria-hidden="true">
+                    ✉
+                  </span>
+
+                  <span className="compact-ticket-main">
+                    <span className="compact-ticket-subject">
+                      {ticket.subject || "Untitled ticket"}
+                    </span>
+                    <span className="compact-ticket-meta">
+                      <BrandBadge source={ticket.source} compact />
+                      <span className="ticket-number">#{ticket.ticket_number}</span>
+                      <span className="compact-meta-separator">·</span>
+                      <span>{ticket.contact_name || ticket.contact_email || "Unknown requester"}</span>
+                      <span className="compact-meta-separator">·</span>
+                      <span>{lastActivityLabel([], [], ticket)}</span>
+                    </span>
+                  </span>
+
+                  <span className="compact-ticket-summary">
+                    {getTicketSummary(ticket) || "No preview available"}
+                  </span>
+
+                  <span className="compact-ticket-status">
+                    <StatusBadge status={ticket.status} />
+                  </span>
+
+                  <span className="compact-ticket-owner">
+                    {getTicketOwnerName(ticket) || "Unassigned"}
+                  </span>
+                </button>
+              );
+            }
+
+            return (
               <button
-                key={
-                  ticket.ticket_key
-                }
+                key={ticket.ticket_key}
+                type="button"
                 className={`ticket-row ${brandClass(
                   ticket.source
-                )} ${
-                  selectedKey ===
-                  ticket.ticket_key
-                    ? "selected"
-                    : ""
-                }`}
-                onClick={() =>
-                  setSelectedKey(
-                    ticket.ticket_key
-                  )
-                }
+                )} ${selectedKey === ticket.ticket_key ? "selected" : ""}`}
+                onClick={() => setSelectedKey(ticket.ticket_key)}
               >
                 <div className="ticket-row-top">
-
-                  <BrandBadge
-                    source={
-                      ticket.source
-                    }
-                  />
-
-                  <span className="ticket-number">
-                    #
-                    {
-                      ticket.ticket_number
-                    }
-                  </span>
+                  <BrandBadge source={ticket.source} />
+                  <span className="ticket-number">#{ticket.ticket_number}</span>
                 </div>
 
                 <div className="ticket-subject">
-                  {ticket.subject ||
-                    "Untitled ticket"}
+                  {ticket.subject || "Untitled ticket"}
                 </div>
 
                 <div className="ticket-summary">
-                  {getTicketSummary(
-                    ticket
-                  ) ||
-                    "No preview available"}
+                  {getTicketSummary(ticket) || "No preview available"}
                 </div>
 
                 <div className="ticket-requester">
-                  {ticket.contact_name ||
-                    ticket.contact_email ||
-                    "Unknown requester"}
+                  {ticket.contact_name || ticket.contact_email || "Unknown requester"}
                 </div>
 
                 <div className="ticket-row-bottom">
-
-                  <StatusBadge
-                    status={
-                      ticket.status
-                    }
-                  />
-
+                  <StatusBadge status={ticket.status} />
                   <span className="ticket-assignee">
-                    {getTicketOwnerName(
-                      ticket
-                    ) ||
-                      "Unassigned"}
+                    {getTicketOwnerName(ticket) || "Unassigned"}
                   </span>
                 </div>
               </button>
-            )
-          )}
+            );
+          })}
         </div>
       </section>
 
@@ -5848,23 +5900,24 @@ function App() {
             </div>
             <div className="dashboard-grid">
               {[
-                ["Active", dashboardMetrics.active, "Current workload", "all"],
+                ["Active tickets", dashboardMetrics.active, "Current workload", "all"],
                 ["Needs attention", dashboardMetrics.needs, "Action required", "needs"],
+                ["High priority", dashboardMetrics.high, "High-priority work", "high"],
                 ["Overdue", dashboardMetrics.overdue, "Past due", "overdue"],
                 ["Due today", dashboardMetrics.today, "Needs action today", "today"],
                 ["Unassigned", dashboardMetrics.unassigned, "No owner", "unassigned"],
-                ["Aging 3d+", dashboardMetrics.aging, "Older workload", "aging"],
+                ["Aging 3+ days", dashboardMetrics.aging, "Older workload", "aging"],
               ].map(([label,count,sub,target]) => <button key={label} className="dashboard-kpi" onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><small>{sub} →</small></button>)}
             </div>
             <div className="dashboard-columns">
               <section className="dashboard-panel dashboard-panel-wide"><div className="panel-heading"><div><h2>My work</h2><p>Queues that matter most to you.</p></div></div><div className="dashboard-list">
-                {[["My tickets",dashboardMetrics.mine,"mine"],["Needs attention",dashboardMetrics.needs,"needs"],["Overdue",dashboardMetrics.overdue,"overdue"],["Due today",dashboardMetrics.today,"today"],["High priority",dashboardMetrics.high,"high"],["Following",followedTickets.length,"followed"]].map(([label,count,target]) => <button key={label} onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><em>View →</em></button>)}
+                {[["My tickets",dashboardMetrics.mine,"mine"],["Overdue",dashboardMetrics.overdue,"overdue"],["Due today",dashboardMetrics.today,"today"],["High priority",dashboardMetrics.high,"high"],["Following",followedTickets.length,"followed"],["My reminders",activeReminders.length,"reminders"]].map(([label,count,target]) => <button key={label} onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><em>View →</em></button>)}
               </div></section>
-              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Workload by brand</h2><p>Active tickets.</p></div></div>{dashboardMetrics.brands.map(item => <button className="dashboard-bar-row" key={item.source} onClick={() => { setBrandFilter(item.source); openDashboardQueue("all"); }}><span>{item.source}</span><div><i style={{width:`${dashboardMetrics.active ? Math.max(3,(item.count/dashboardMetrics.active)*100) : 0}%`}} /></div><strong>{item.count}</strong></button>)}</section>
+              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Workload by brand</h2><p>Active tickets.</p></div></div>{dashboardMetrics.brands.map(item => <button className="dashboard-bar-row" key={item.source} onClick={() => { setBrandFilter(item.source); setDepartmentFilter("all"); openDashboardQueue("all", { preserveBrand: true }); }}><span>{item.source}</span><div><i style={{width:`${dashboardMetrics.active ? Math.max(3,(item.count/dashboardMetrics.active)*100) : 0}%`}} /></div><strong>{item.count}</strong></button>)}</section>
             </div>
             <div className="dashboard-columns">
-              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Queue health</h2><p>Current status mix.</p></div></div>{dashboardMetrics.statuses.map(item => <button className="dashboard-simple-row" key={item.status} onClick={() => { setDashboardTab(false); setFilter(item.status === "In Progress" ? "inprogress" : item.status.toLowerCase().replace(" ","")); }}><span>{item.status}</span><strong>{item.count}</strong></button>)}</section>
-              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Ticket age</h2><p>Where the backlog is accumulating.</p></div></div>{dashboardMetrics.agingBuckets.map(item => <button className="dashboard-simple-row" key={item.label} onClick={() => openDashboardQueue(item.label === "7d+" ? "aging" : "aging")}><span>{item.label}</span><strong>{item.count}</strong></button>)}</section>
+              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Queue health</h2><p>Current status mix.</p></div></div>{dashboardMetrics.statuses.map(item => <button className="dashboard-simple-row" key={item.status} onClick={() => openDashboardQueue(item.status === "In Progress" ? "inprogress" : item.status.toLowerCase().replace(" ",""))}><span>{item.status}</span><strong>{item.count}</strong></button>)}</section>
+              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Ticket age</h2><p>Where the backlog is accumulating.</p></div></div>{dashboardMetrics.agingBuckets.map(item => <button className="dashboard-simple-row" key={item.label} onClick={() => openDashboardQueue(({ "0–1d": "age_0_1", "1–3d": "age_1_3", "3–5d": "age_3_5", "5–7d": "age_5_7", "7d+": "age_7_plus" })[item.label] || "aging")}><span>{item.label}</span><strong>{item.count}</strong></button>)}</section>
             </div>
             <section className="dashboard-panel"><div className="panel-heading"><div><h2>Recently updated</h2><p>Jump straight back into active work.</p></div></div><div className="recent-grid">{dashboardMetrics.recent.map(ticket => <button key={ticket.ticket_key} onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); }}><div><BrandBadge source={ticket.source}/><strong>#{ticket.ticket_number}</strong></div><h3>{ticket.subject || "Untitled ticket"}</h3><p>{ticket.contact_name || "Unknown requester"} · {formatAge(ticket)} old</p><span>{needsAttentionReason(ticket) || ticket.status}</span></button>)}</div></section>
           </div>
