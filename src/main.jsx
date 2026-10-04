@@ -212,6 +212,29 @@ function formatNotificationType(type) {
   return labels[type] || "ticket activity";
 }
 
+function ticketAgeDays(ticket) {
+  if (!ticket) return 0;
+  const openedAt = ticket.created_at_zoho || ticket.created_at;
+  if (!openedAt) return 0;
+  const openedMs = new Date(openedAt).getTime();
+  if (Number.isNaN(openedMs)) return 0;
+  const endMs = ticket.status === "Closed" && ticket.updated_at_zoho
+    ? new Date(ticket.updated_at_zoho).getTime()
+    : Date.now();
+  return Math.max(0, endMs - openedMs) / 86400000;
+}
+
+function isNeedsAttention(ticket) {
+  if (!ticket || ticket.status === "Closed") return false;
+  return Boolean(
+    isOverdue(ticket) ||
+    isTicketUnassigned(ticket) ||
+    ticketAgeDays(ticket) >= 3 ||
+    String(ticket.priority || "").toLowerCase() === "high" ||
+    ticket.status === "Escalated"
+  );
+}
+
 function formatDateTime(value) {
   if (!value) return "";
 
@@ -1026,6 +1049,42 @@ function App() {
     useState("all");
 
   const [
+    followedTickets,
+    setFollowedTickets,
+  ] =
+    useState([]);
+
+  const [
+    reminders,
+    setReminders,
+  ] =
+    useState([]);
+
+  const [
+    showReminderMenu,
+    setShowReminderMenu,
+  ] =
+    useState(false);
+
+  const [
+    reminderNote,
+    setReminderNote,
+  ] =
+    useState("");
+
+  const [
+    reminderNotice,
+    setReminderNotice,
+  ] =
+    useState("");
+
+  const [
+    savedView,
+    setSavedView,
+  ] =
+    useState("all");
+
+  const [
     search,
     setSearch,
   ] =
@@ -1354,9 +1413,35 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!session?.user?.email) return;
+    const email = session.user.email.toLowerCase();
+    try {
+      setFollowedTickets(JSON.parse(localStorage.getItem(`csg-followed:${email}`) || "[]"));
+      setReminders(JSON.parse(localStorage.getItem(`csg-reminders:${email}`) || "[]"));
+    } catch {
+      setFollowedTickets([]);
+      setReminders([]);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    const email = session.user.email.toLowerCase();
+    localStorage.setItem(`csg-followed:${email}`, JSON.stringify(followedTickets));
+  }, [followedTickets, session]);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    const email = session.user.email.toLowerCase();
+    localStorage.setItem(`csg-reminders:${email}`, JSON.stringify(reminders));
+  }, [reminders, session]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setAgeTick((value) => value + 1);
+      setReminders((current) => current.filter((reminder) => !reminder.dismissed));
     }, 60000);
+
 
     return () => clearInterval(timer);
   }, []);
@@ -4293,6 +4378,27 @@ function App() {
           );
       }
 
+      if (savedView === "high") {
+        rows = rows.filter((ticket) => String(ticket.priority || "").toLowerCase() === "high");
+      }
+
+      if (savedView === "aging") {
+        rows = rows.filter((ticket) => ticket.status !== "Closed" && ticketAgeDays(ticket) >= 3);
+      }
+
+      if (savedView === "followed") {
+        rows = rows.filter((ticket) => followedTickets.includes(ticket.ticket_key));
+      }
+
+      if (savedView === "reminders") {
+        const activeReminderKeys = new Set(reminders.filter((item) => !item.dismissed).map((item) => item.ticket_key));
+        rows = rows.filter((ticket) => activeReminderKeys.has(ticket.ticket_key));
+      }
+
+      if (savedView === "needs") {
+        rows = rows.filter(isNeedsAttention);
+      }
+
       if (
         search.trim()
       ) {
@@ -4341,6 +4447,9 @@ function App() {
       departmentFilter,
       search,
       session,
+      savedView,
+      followedTickets,
+      reminders,
     ]);
 
   /*
@@ -4534,6 +4643,11 @@ function App() {
               ticket.status !==
                 "Closed"
           ).length,
+
+        needsAttention:
+          countTickets.filter(
+            isNeedsAttention
+          ).length,
       };
     }, [
       tickets,
@@ -4541,6 +4655,65 @@ function App() {
       brandFilter,
       departmentFilter,
     ]);
+
+  const operationsMetrics = useMemo(() => {
+    const visibleTickets = tickets
+      .filter(isVisibleMarketingTicket)
+      .filter((ticket) => brandFilter === "all" || ticket.source === brandFilter)
+      .filter((ticket) => brandFilter !== "Tutor Doctor" || departmentFilter === "all" || String(ticket.department || "").trim() === departmentFilter)
+      .filter((ticket) => ticket.status !== "Closed");
+
+    const ages = visibleTickets.map(ticketAgeDays);
+
+    return {
+      under1Day: ages.filter((days) => days < 1).length,
+      oneTo3Days: ages.filter((days) => days >= 1 && days < 3).length,
+      threeTo5Days: ages.filter((days) => days >= 3 && days < 5).length,
+      fivePlusDays: ages.filter((days) => days >= 5).length,
+      aging3Plus: ages.filter((days) => days >= 3).length,
+      waiting48Plus: visibleTickets.filter((ticket) => ticket.status === "Waiting" && ticketAgeDays(ticket) >= 2).length,
+      highPriority: visibleTickets.filter((ticket) => String(ticket.priority || "").toLowerCase() === "high").length,
+    };
+  }, [tickets, brandFilter, departmentFilter]);
+
+  function toggleFollowTicket(ticketKey) {
+    setFollowedTickets((current) =>
+      current.includes(ticketKey)
+        ? current.filter((key) => key !== ticketKey)
+        : [...current, ticketKey]
+    );
+  }
+
+  function addReminder(ticket, preset, note = "") {
+    if (!ticket) return;
+    const now = Date.now();
+    const offsets = {
+      "1h": 60 * 60 * 1000,
+      "tomorrow": 24 * 60 * 60 * 1000,
+      "3days": 3 * 24 * 60 * 60 * 1000,
+      "nextweek": 7 * 24 * 60 * 60 * 1000,
+    };
+    const dueAt = new Date(now + (offsets[preset] || offsets.tomorrow)).toISOString();
+    const reminder = {
+      id: `${ticket.ticket_key}-${now}`,
+      ticket_key: ticket.ticket_key,
+      ticket_number: ticket.ticket_number,
+      subject: ticket.subject,
+      due_at: dueAt,
+      note: note.trim(),
+      dismissed: false,
+    };
+    setReminders((current) => [...current.filter((item) => item.ticket_key !== ticket.ticket_key || item.dismissed), reminder]);
+    setReminderNotice(`Reminder set for ${formatDateTime(dueAt)}`);
+    setShowReminderMenu(false);
+    setReminderNote("");
+  }
+
+  function dismissReminder(reminderId) {
+    setReminders((current) => current.map((item) => item.id === reminderId ? { ...item, dismissed: true } : item));
+  }
+
+  const activeReminders = reminders.filter((item) => !item.dismissed);
 
   async function signOut() {
     await supabase
@@ -5069,6 +5242,39 @@ function App() {
               </button>
             )
           )}
+
+          <button
+            className={`nav-item ${filter === "needs" ? "active" : ""}`}
+            onClick={() => { setFilter("needs"); setSavedView("all"); }}
+          >
+            <span>Needs Attention</span>
+            <span className="nav-count">{counts.needsAttention}</span>
+          </button>
+        </div>
+
+        <div className="sidebar-section">
+          <div className="sidebar-label">SAVED VIEWS</div>
+          {[
+            ["all", "Active Tickets"],
+            ["high", "High Priority"],
+            ["aging", "Aging 3+ Days"],
+            ["followed", "Following"],
+            ["reminders", "My Reminders"],
+            ["needs", "Needs Attention"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              className={`nav-item ${savedView === value && filter === "all" ? "active" : ""}`}
+              onClick={() => {
+                setSavedView(value);
+                setFilter("all");
+              }}
+            >
+              <span>{label}</span>
+              {value === "followed" && <span className="nav-count">{followedTickets.length}</span>}
+              {value === "reminders" && <span className="nav-count">{activeReminders.length}</span>}
+            </button>
+          ))}
         </div>
 
         <div className="sidebar-section">
@@ -5188,6 +5394,7 @@ function App() {
                   setBrandFilter(
                     value
                   );
+                  setSavedView("all");
 
                   if (
                     value !==
@@ -5700,6 +5907,70 @@ function App() {
           />
         </div>
 
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+            gap: "8px",
+            padding: "0 16px 14px",
+          }}
+        >
+          {[
+            ["Active", counts.active, "#0f172a"],
+            ["Overdue", counts.overdue, counts.overdue ? "#dc2626" : "#0f172a"],
+            ["Unassigned", counts.unassigned, counts.unassigned ? "#d97706" : "#0f172a"],
+            ["Aging 3d+", operationsMetrics.aging3Plus, operationsMetrics.aging3Plus ? "#d97706" : "#0f172a"],
+            ["Waiting 48h+", operationsMetrics.waiting48Plus, operationsMetrics.waiting48Plus ? "#7c3aed" : "#0f172a"],
+            ["High Priority", operationsMetrics.highPriority, operationsMetrics.highPriority ? "#be123c" : "#0f172a"],
+          ].map(([label, value, valueColor]) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => {
+                if (label === "Overdue") setFilter("overdue");
+                else if (label === "Unassigned") setFilter("unassigned");
+                else if (label === "High Priority") { setFilter("all"); setSavedView("high"); }
+                else if (label === "Aging 3d+") { setFilter("all"); setSavedView("aging"); }
+                else { setFilter("all"); setSavedView("all"); }
+              }}
+              style={{
+                textAlign: "left",
+                border: "1px solid #e8edf3",
+                background: "#fff",
+                borderRadius: "10px",
+                padding: "10px 11px",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{label}</div>
+              <div style={{ marginTop: "3px", fontSize: "18px", lineHeight: 1, fontWeight: 750, color: valueColor }}>{value}</div>
+            </button>
+          ))}
+        </div>
+
+        <div
+          style={{
+            margin: "0 16px 14px",
+            border: "1px solid #e8edf3",
+            background: "#f8fafc",
+            borderRadius: "10px",
+            padding: "10px 12px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: 750, color: "#334155", textTransform: "uppercase", letterSpacing: ".04em" }}>Ticket aging</div>
+              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>Open tickets by age in the current brand/department scope</div>
+            </div>
+            <div style={{ display: "flex", gap: "14px", fontSize: "11px", color: "#475569" }}>
+              <span><strong>{operationsMetrics.under1Day}</strong> &lt;1d</span>
+              <span><strong>{operationsMetrics.oneTo3Days}</strong> 1–3d</span>
+              <span><strong>{operationsMetrics.threeTo5Days}</strong> 3–5d</span>
+              <span><strong>{operationsMetrics.fivePlusDays}</strong> 5d+</span>
+            </div>
+          </div>
+        </div>
+
         <div className="ticket-list">
 
           {loadingTickets &&
@@ -5910,6 +6181,43 @@ function App() {
                   )}
                 </div>
               </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "14px", position: "relative" }}>
+                <button
+                  type="button"
+                  className="zoho-link"
+                  onClick={() => toggleFollowTicket(selected.ticket_key)}
+                  style={{ border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer" }}
+                >
+                  {followedTickets.includes(selected.ticket_key) ? "★ Following" : "☆ Follow"}
+                </button>
+                <button
+                  type="button"
+                  className="zoho-link"
+                  onClick={() => { setShowReminderMenu((current) => !current); setReminderNotice(""); }}
+                  style={{ border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer" }}
+                >
+                  ⏰ Remind me
+                </button>
+                {showReminderMenu && (
+                  <div style={{ position: "absolute", right: 0, top: "42px", width: "280px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", boxShadow: "0 16px 35px rgba(15,23,42,.16)", padding: "12px", zIndex: 50 }}>
+                    <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "8px" }}>Remind me</div>
+                    <input
+                      value={reminderNote}
+                      onChange={(event) => setReminderNote(event.target.value)}
+                      placeholder="Optional note"
+                      style={{ width: "100%", boxSizing: "border-box", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "8px", marginBottom: "8px" }}
+                    />
+                    {[ ["1h", "In 1 hour"], ["tomorrow", "Tomorrow"], ["3days", "In 3 days"], ["nextweek", "Next week"] ].map(([value, label]) => (
+                      <button key={value} type="button" onClick={() => addReminder(selected, value, reminderNote)} style={{ display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "8px 6px", borderRadius: "7px", cursor: "pointer" }}>{label}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {reminderNotice && (
+                <div style={{ marginTop: "7px", fontSize: "12px", color: "#64748b" }}>{reminderNotice}</div>
+              )}
 
               {selected.ticket_url && (
                 <a
@@ -7792,6 +8100,20 @@ function App() {
 
               <Detail label="Age">
                 <strong>{formatTicketAge(selected)}</strong>
+              </Detail>
+
+              <Detail label="Reminder">
+                {activeReminders.filter((item) => item.ticket_key === selected.ticket_key).length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {activeReminders.filter((item) => item.ticket_key === selected.ticket_key).map((item) => (
+                      <div key={item.id} style={{ fontSize: "12px" }}>
+                        <strong>{formatDateTime(item.due_at)}</strong>
+                        {item.note && <div style={{ color: "#64748b", marginTop: "2px" }}>{item.note}</div>}
+                        <button type="button" onClick={() => dismissReminder(item.id)} style={{ marginTop: "5px", border: 0, background: "transparent", padding: 0, color: "#64748b", cursor: "pointer", fontSize: "11px" }}>Dismiss</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : <span style={{ color: "#94a3b8" }}>None</span>}
               </Detail>
 
               <Detail label="Created">
