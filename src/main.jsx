@@ -5035,6 +5035,7 @@ function App() {
   // ====================================================
 
   return (
+    <>
     <div className="app-shell">
 
       {/* SIDEBAR */}
@@ -7925,6 +7926,7 @@ function App() {
           </div>
         </div>
       )}
+    </>
   );
 }
 
