@@ -5907,69 +5907,135 @@ function App() {
           />
         </div>
 
-        <div
+        <section
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-            gap: "8px",
-            padding: "0 16px 14px",
-          }}
-        >
-          {[
-            ["Active", counts.active, "#0f172a"],
-            ["Overdue", counts.overdue, counts.overdue ? "#dc2626" : "#0f172a"],
-            ["Unassigned", counts.unassigned, counts.unassigned ? "#d97706" : "#0f172a"],
-            ["Aging 3d+", operationsMetrics.aging3Plus, operationsMetrics.aging3Plus ? "#d97706" : "#0f172a"],
-            ["Waiting 48h+", operationsMetrics.waiting48Plus, operationsMetrics.waiting48Plus ? "#7c3aed" : "#0f172a"],
-            ["High Priority", operationsMetrics.highPriority, operationsMetrics.highPriority ? "#be123c" : "#0f172a"],
-          ].map(([label, value, valueColor]) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => {
-                if (label === "Overdue") setFilter("overdue");
-                else if (label === "Unassigned") setFilter("unassigned");
-                else if (label === "High Priority") { setFilter("all"); setSavedView("high"); }
-                else if (label === "Aging 3d+") { setFilter("all"); setSavedView("aging"); }
-                else { setFilter("all"); setSavedView("all"); }
-              }}
-              style={{
-                textAlign: "left",
-                border: "1px solid #e8edf3",
-                background: "#fff",
-                borderRadius: "10px",
-                padding: "10px 11px",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{label}</div>
-              <div style={{ marginTop: "3px", fontSize: "18px", lineHeight: 1, fontWeight: 750, color: valueColor }}>{value}</div>
-            </button>
-          ))}
-        </div>
-
-        <div
-          style={{
-            margin: "0 16px 14px",
-            border: "1px solid #e8edf3",
+            margin: "0 16px 18px",
+            border: "1px solid #e2e8f0",
+            borderRadius: "16px",
             background: "#f8fafc",
-            borderRadius: "10px",
-            padding: "10px 12px",
+            overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+          <div
+            style={{
+              padding: "18px 20px 14px",
+              background: "#fff",
+              borderBottom: "1px solid #e2e8f0",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
             <div>
-              <div style={{ fontSize: "11px", fontWeight: 750, color: "#334155", textTransform: "uppercase", letterSpacing: ".04em" }}>Ticket aging</div>
-              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>Open tickets by age in the current brand/department scope</div>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".08em" }}>
+                Operations Dashboard
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>
+                Ticket health at a glance
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "12px", color: "#64748b" }}>
+                {brandFilter === "all" ? "All brands" : brandFilter}
+                {brandFilter === "Tutor Doctor" && departmentFilter !== "all" ? ` · ${departmentFilter === "Client_Tutor Newsletter" ? "Client/Tutor Newsletter" : departmentFilter}` : ""}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "14px", fontSize: "11px", color: "#475569" }}>
-              <span><strong>{operationsMetrics.under1Day}</strong> &lt;1d</span>
-              <span><strong>{operationsMetrics.oneTo3Days}</strong> 1–3d</span>
-              <span><strong>{operationsMetrics.threeTo5Days}</strong> 3–5d</span>
-              <span><strong>{operationsMetrics.fivePlusDays}</strong> 5d+</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "11px", color: "#64748b" }}>Active tickets</span>
+              <strong style={{ fontSize: "22px", color: "#0f172a" }}>{counts.active}</strong>
             </div>
           </div>
-        </div>
+
+          <div
+            style={{
+              padding: "16px",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            {[
+              ["Active", counts.active, "All active tickets", "#0f172a", () => { setFilter("all"); setSavedView("all"); }],
+              ["Overdue", counts.overdue, "Past due date", counts.overdue ? "#dc2626" : "#0f172a", () => { setFilter("overdue"); setSavedView("all"); }],
+              ["Needs Attention", counts.needsAttention, "Requires action", counts.needsAttention ? "#b45309" : "#0f172a", () => { setFilter("all"); setSavedView("needs"); }],
+              ["Unassigned", counts.unassigned, "No owner", counts.unassigned ? "#d97706" : "#0f172a", () => { setFilter("unassigned"); setSavedView("all"); }],
+              ["Aging 3d+", operationsMetrics.aging3Plus, "Open 3+ days", operationsMetrics.aging3Plus ? "#c2410c" : "#0f172a", () => { setFilter("all"); setSavedView("aging"); }],
+              ["Waiting 48h+", operationsMetrics.waiting48Plus, "Waiting 2+ days", operationsMetrics.waiting48Plus ? "#7c3aed" : "#0f172a", () => { setFilter("all"); setSavedView("all"); }],
+            ].map(([label, value, subtitle, valueColor, onClick]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={onClick}
+                style={{
+                  minWidth: 0,
+                  minHeight: "104px",
+                  textAlign: "left",
+                  border: "1px solid #e2e8f0",
+                  background: "#fff",
+                  borderRadius: "12px",
+                  padding: "14px",
+                  cursor: "pointer",
+                  boxShadow: "0 1px 2px rgba(15,23,42,.03)",
+                }}
+              >
+                <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</div>
+                <div style={{ marginTop: "8px", fontSize: "28px", lineHeight: 1, fontWeight: 800, color: valueColor }}>{value}</div>
+                <div style={{ marginTop: "7px", fontSize: "11px", color: "#94a3b8" }}>{subtitle}</div>
+              </button>
+            ))}
+          </div>
+
+          <div
+            style={{
+              padding: "0 16px 16px",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: "12px", padding: "15px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 800, color: "#334155" }}>Ticket aging</div>
+              <div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>How long active tickets have been open</div>
+              <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "8px" }}>
+                {[
+                  ["<1d", operationsMetrics.under1Day],
+                  ["1–3d", operationsMetrics.oneTo3Days],
+                  ["3–5d", operationsMetrics.threeTo5Days],
+                  ["5d+", operationsMetrics.fivePlusDays],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ minWidth: 0 }}>
+                    <div style={{ height: "7px", borderRadius: "99px", background: "#e2e8f0", overflow: "hidden" }}>
+                      <div style={{ width: `${counts.active ? Math.min(100, (value / counts.active) * 100) : 0}%`, height: "100%", background: "#475569", borderRadius: "99px" }} />
+                    </div>
+                    <div style={{ marginTop: "7px", fontSize: "11px", color: "#64748b" }}>{label}</div>
+                    <div style={{ marginTop: "2px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: "12px", padding: "15px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 800, color: "#334155" }}>Status mix</div>
+              <div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>Current active workload</div>
+              <div style={{ marginTop: "13px", display: "grid", gap: "8px" }}>
+                {[
+                  ["Open", counts.open],
+                  ["In Progress", counts.inprogress],
+                  ["Waiting", counts.waiting],
+                  ["On Hold", counts.onhold],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr) 32px", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "11px", color: "#64748b" }}>{label}</span>
+                    <div style={{ height: "6px", borderRadius: "99px", background: "#e2e8f0", overflow: "hidden" }}>
+                      <div style={{ width: `${counts.active ? Math.min(100, (value / counts.active) * 100) : 0}%`, height: "100%", background: "#64748b", borderRadius: "99px" }} />
+                    </div>
+                    <strong style={{ fontSize: "11px", textAlign: "right", color: "#334155" }}>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         <div className="ticket-list">
 
