@@ -48,6 +48,13 @@ const BRAND_STATUSES = {
   ],
 };
 
+const TUTOR_DOCTOR_DEPARTMENTS = [
+  { value: "all", label: "All departments" },
+  { value: "Marketing", label: "Marketing" },
+  { value: "Client_Tutor Newsletter", label: "Client/Tutor Newsletter" },
+  { value: "Marketing Tech", label: "Marketing Tech" },
+];
+
 const CODEWIZ_TICKET_OWNERS = [
   {
     name: "Manuela Cruz",
@@ -560,172 +567,139 @@ function RecipientLine({
 }
 
 // ======================================================
-// LOGIN
+// LOGIN / PASSWORD AUTH
 // ======================================================
 
-function Login({
-  onSignedIn,
-}) {
-  const [
-    email,
-    setEmail,
-  ] =
-    useState("");
+const APPROVED_AUTH_DOMAINS = [
+  "@clearsummitgroup.com",
+  "@tutordoctor.org",
+  "@qualicare.com",
+  "@thecodewiz.com",
+];
 
-  const [
-    busy,
-    setBusy,
-  ] =
-    useState(false);
+function isApprovedCompanyEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  return APPROVED_AUTH_DOMAINS.some((domain) => normalized.endsWith(domain));
+}
 
-  const [
-    message,
-    setMessage,
-  ] =
-    useState("");
+function Login({ onSignedIn, onPasswordRecovery }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [mode, setMode] = useState("signin");
 
-  async function signIn(
-    event
-  ) {
+  async function signIn(event) {
     event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) { setMessage("Enter your work email address."); return; }
+    if (!isApprovedCompanyEmail(normalizedEmail)) { setMessage("Please use an approved company email address."); return; }
+    if (!password) { setMessage("Enter your password."); return; }
 
-    if (
-      !email.trim()
-    ) {
-      return;
-    }
-
-    setBusy(true);
-    setMessage("");
-
-    const {
-      error,
-    } =
-      await supabase.auth.signInWithOtp(
-        {
-          email:
-            email.trim(),
-
-          options: {
-            emailRedirectTo:
-              window.location.origin,
-          },
-        }
-      );
-
+    setBusy(true); setMessage("");
+    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) {
-      setMessage(
-        error.message
-      );
-    } else {
-      setMessage(
-        "Check your email for the sign-in link."
-      );
+      setMessage("That email and password combination could not be verified. If you need access, use Forgot password below.");
+    } else if (data?.session) {
+      onSignedIn(data.session);
     }
+    setBusy(false);
+  }
 
+  async function sendPasswordReset(event) {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) { setMessage("Enter your work email address first."); return; }
+    if (!isApprovedCompanyEmail(normalizedEmail)) { setMessage("Please use an approved company email address."); return; }
+
+    setBusy(true); setMessage("");
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo: window.location.origin });
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setMessage("If an account exists for that work email, we sent a password reset link. Check your inbox.");
+    }
     setBusy(false);
   }
 
   useEffect(() => {
-    const {
-      data:
-        listener,
-    } =
-      supabase.auth.onAuthStateChange(
-        (
-          event,
-          nextSession
-        ) => {
-          if (
-            nextSession &&
-            (
-              event ===
-                "SIGNED_IN" ||
-              event ===
-                "INITIAL_SESSION"
-            )
-          ) {
-            onSignedIn(
-              nextSession
-            );
-          }
-        }
-      );
-
-    return () => {
-      listener
-        .subscription
-        .unsubscribe();
-    };
-  }, [
-    onSignedIn,
-  ]);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        onPasswordRecovery();
+        return;
+      }
+      if (nextSession && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        onSignedIn(nextSession);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [onSignedIn, onPasswordRecovery]);
 
   return (
     <div className="login-page">
-
       <div className="login-card">
+        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+        <h1>Marketing Ticket Hub</h1>
+        <p>One workspace for Qualicare, Tutor Doctor and Code Wiz.</p>
 
-        <div className="login-logo">
-          <span className="login-logo-mountain">
-            ▲
-          </span>
+        {mode === "signin" ? (
+          <form onSubmit={signIn}>
+            <label>Work email</label>
+            <input type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} autoFocus />
+            <label>Password</label>
+            <input type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} />
+            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+            <button type="button" className="login-secondary-button" onClick={() => { setMode("forgot"); setMessage(""); }} disabled={busy}>Forgot password?</button>
+            {message && <div className="login-message">{message}</div>}
+          </form>
+        ) : (
+          <form onSubmit={sendPasswordReset}>
+            <label>Work email</label>
+            <input type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} autoFocus />
+            <p className="login-help-text">We’ll email you a secure link to create a new password.</p>
+            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
+            <button type="button" className="login-secondary-button" onClick={() => { setMode("signin"); setMessage(""); }} disabled={busy}>Back to sign in</button>
+            {message && <div className="login-message">{message}</div>}
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
-          <span>
-            CSG
-          </span>
-        </div>
+function ResetPassword({ onComplete }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
 
-        <h1>
-          Marketing Ticket Hub
-        </h1>
+  async function updatePassword(event) {
+    event.preventDefault();
+    if (password.length < 8) { setMessage("Your password must be at least 8 characters."); return; }
+    if (password !== confirmPassword) { setMessage("The passwords do not match."); return; }
 
-        <p>
-          One workspace for Qualicare,
-          Tutor Doctor and Code Wiz.
-        </p>
+    setBusy(true); setMessage("");
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) { setMessage(error.message); setBusy(false); return; }
 
-        <form
-          onSubmit={
-            signIn
-          }
-        >
-          <label>
-            Work email
-          </label>
+    await supabase.auth.signOut();
+    setBusy(false);
+    onComplete();
+  }
 
-          <input
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(
-              event
-            ) =>
-              setEmail(
-                event
-                  .target
-                  .value
-              )
-            }
-          />
-
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={
-              busy
-            }
-          >
-            {busy
-              ? "Sending…"
-              : "Sign in with email"}
-          </button>
-
-          {message && (
-            <div className="login-message">
-              {message}
-            </div>
-          )}
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+        <h1>Create your password</h1>
+        <p>Choose a password for your Marketing Ticket Hub account.</p>
+        <form onSubmit={updatePassword}>
+          <label>New password</label>
+          <input type="password" autoComplete="new-password" placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus />
+          <label>Confirm password</label>
+          <input type="password" autoComplete="new-password" placeholder="Enter it again" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+          <button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving…" : "Set password"}</button>
+          {message && <div className="login-message">{message}</div>}
         </form>
       </div>
     </div>
@@ -766,6 +740,12 @@ function App() {
     setAuthLoading,
   ] =
     useState(true);
+
+  const [
+    passwordRecovery,
+    setPasswordRecovery,
+  ] =
+    useState(false);
 
   const [
     tickets,
@@ -866,6 +846,12 @@ function App() {
   const [
     brandFilter,
     setBrandFilter,
+  ] =
+    useState("all");
+
+  const [
+    departmentFilter,
+    setDepartmentFilter,
   ] =
     useState("all");
 
@@ -986,6 +972,31 @@ function App() {
     setShowTagSuggestions,
   ] =
     useState(false);
+
+  const tagAutocompleteRef =
+    useRef(null);
+
+  useEffect(() => {
+    function handleTagOutsideClick(event) {
+      if (
+        tagAutocompleteRef.current &&
+        !tagAutocompleteRef.current.contains(event.target)
+      ) {
+        setShowTagSuggestions(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleTagOutsideClick
+    );
+
+    return () =>
+      document.removeEventListener(
+        "mousedown",
+        handleTagOutsideClick
+      );
+  }, []);
 
   // ====================================================
   // EMAIL COMPOSER
@@ -1155,9 +1166,18 @@ function App() {
         .auth
         .onAuthStateChange(
           (
-            _event,
+            event,
             nextSession
           ) => {
+            if (
+              event ===
+              "PASSWORD_RECOVERY"
+            ) {
+              setPasswordRecovery(
+                true
+              );
+            }
+
             setSession(
               nextSession
             );
@@ -3457,6 +3477,23 @@ function App() {
       }
 
       if (
+        brandFilter ===
+          "Tutor Doctor" &&
+        departmentFilter !==
+          "all"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              String(
+                ticket.department ||
+                  ""
+              ).trim() ===
+              departmentFilter
+          );
+      }
+
+      if (
         filter ===
         "all"
       ) {
@@ -3633,6 +3670,7 @@ function App() {
                   ticket.codewiz_agent_email,
                   ticket.status,
                   ticket.source,
+                  ticket.department,
                   ticket.description,
                 ]
                   .filter(Boolean)
@@ -3652,6 +3690,7 @@ function App() {
       tickets,
       filter,
       brandFilter,
+      departmentFilter,
       search,
       session,
     ]);
@@ -3846,11 +3885,35 @@ function App() {
     );
   }
 
+  if (
+    passwordRecovery
+  ) {
+    return (
+      <ResetPassword
+        onComplete={() => {
+          setPasswordRecovery(
+            false
+          );
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+          );
+        }}
+      />
+    );
+  }
+
   if (!session) {
     return (
       <Login
         onSignedIn={
           setSession
+        }
+        onPasswordRecovery={() =>
+          setPasswordRecovery(
+            true
+          )
         }
       />
     );
@@ -4235,520 +4298,7 @@ function App() {
   // ====================================================
 
   return (
-    <>
-      <style>{`
-        /* ============================================================
-           CSG TICKET HUB — POLISH PASS
-           Visual-only layer: preserves existing workflows and controls.
-           ============================================================ */
-        :root {
-          --hub-ink: #172033;
-          --hub-muted: #667085;
-          --hub-subtle: #98a2b3;
-          --hub-line: #e7eaf0;
-          --hub-soft: #f7f8fa;
-          --hub-panel: #ffffff;
-          --hub-accent: #315efb;
-          --hub-radius: 12px;
-        }
-
-        .app-shell {
-          background: #f5f6f8;
-          color: var(--hub-ink);
-        }
-
-        .sidebar,
-        .ticket-column,
-        .details-column,
-        .conversation-column {
-          background: var(--hub-panel);
-        }
-
-        .sidebar {
-          border-right: 1px solid var(--hub-line) !important;
-        }
-
-        .sidebar-header {
-          padding: 20px 18px !important;
-          border-bottom: 1px solid var(--hub-line);
-        }
-
-        .app-mark {
-          width: 34px !important;
-          height: 34px !important;
-          border-radius: 10px !important;
-          box-shadow: 0 4px 12px rgba(49, 94, 251, .14);
-        }
-
-        .app-title {
-          font-size: 15px !important;
-          font-weight: 700 !important;
-          letter-spacing: -.01em;
-        }
-
-        .app-subtitle {
-          color: var(--hub-subtle) !important;
-          font-size: 11px !important;
-        }
-
-        .sidebar-label {
-          color: #98a2b3 !important;
-          font-size: 10px !important;
-          font-weight: 700 !important;
-          letter-spacing: .09em !important;
-        }
-
-        .nav-item,
-        .brand-nav {
-          border-radius: 8px !important;
-          transition: background .15s ease, color .15s ease, transform .15s ease;
-        }
-
-        .nav-item:hover,
-        .brand-nav:hover {
-          background: #f5f7fb !important;
-        }
-
-        .nav-item.active {
-          background: #eef2ff !important;
-          color: #2547b8 !important;
-          font-weight: 650 !important;
-        }
-
-        .ticket-column {
-          border-right: 1px solid var(--hub-line) !important;
-          background: #fbfbfc !important;
-        }
-
-        .ticket-column-header {
-          padding: 22px 20px 14px !important;
-        }
-
-        .ticket-column-header h1 {
-          font-size: 18px !important;
-          letter-spacing: -.02em;
-        }
-
-        .ticket-column-header p {
-          color: var(--hub-muted) !important;
-          font-size: 12px !important;
-        }
-
-        .search-wrap {
-          padding: 0 16px 12px !important;
-        }
-
-        .search-input {
-          height: 38px !important;
-          border: 1px solid #e1e5eb !important;
-          border-radius: 9px !important;
-          background: #fff !important;
-          box-shadow: 0 1px 2px rgba(16,24,40,.03);
-        }
-
-        .ticket-list {
-          padding: 4px 8px 16px !important;
-        }
-
-        .ticket-row {
-          margin: 2px 0 !important;
-          padding: 13px 12px !important;
-          border: 1px solid transparent !important;
-          border-radius: 10px !important;
-          background: transparent !important;
-          transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
-        }
-
-        .ticket-row:hover {
-          background: #f7f8fa !important;
-          border-color: #eceef2 !important;
-        }
-
-        .ticket-row.selected {
-          background: #fff !important;
-          border-color: #dfe5f4 !important;
-          box-shadow: 0 2px 8px rgba(16,24,40,.05) !important;
-        }
-
-        .ticket-subject {
-          margin-top: 7px !important;
-          font-size: 13px !important;
-          font-weight: 650 !important;
-          line-height: 1.35 !important;
-          color: #202939 !important;
-        }
-
-        .ticket-summary {
-          color: #7a8494 !important;
-          font-size: 12px !important;
-          line-height: 1.4 !important;
-        }
-
-        .conversation-column {
-          background: #fff !important;
-        }
-
-        .conversation-header {
-          padding: 22px 28px 20px !important;
-          border-bottom: 1px solid var(--hub-line) !important;
-          background: #fff !important;
-        }
-
-        .conversation-meta {
-          gap: 8px !important;
-          margin-bottom: 10px !important;
-        }
-
-        .header-ticket-number {
-          color: #7b8494 !important;
-          font-size: 12px !important;
-          font-weight: 600 !important;
-        }
-
-        .conversation-heading h2 {
-          max-width: 820px;
-          margin: 0 !important;
-          color: #151b28 !important;
-          font-size: 20px !important;
-          line-height: 1.3 !important;
-          letter-spacing: -.025em;
-        }
-
-        .conversation-requester {
-          margin-top: 8px !important;
-          color: #7a8494 !important;
-          font-size: 12px !important;
-          gap: 7px !important;
-        }
-
-        .requester-name {
-          color: #344054 !important;
-          font-weight: 650 !important;
-        }
-
-        .zoho-link {
-          border: 1px solid #e1e5eb !important;
-          border-radius: 8px !important;
-          padding: 7px 10px !important;
-          color: #475467 !important;
-          background: #fff !important;
-          font-size: 11px !important;
-          font-weight: 600 !important;
-        }
-
-        .zoho-link:hover {
-          border-color: #cbd3df !important;
-          background: #f8fafc !important;
-        }
-
-        .composer-area {
-          padding: 18px 28px 8px !important;
-          background: #fff !important;
-        }
-
-        .composer-area-heading {
-          margin-bottom: 9px !important;
-        }
-
-        .composer-heading-title {
-          color: #344054 !important;
-          font-size: 12px !important;
-          font-weight: 700 !important;
-        }
-
-        .composer-heading-subtitle {
-          color: #98a2b3 !important;
-          font-size: 11px !important;
-        }
-
-        .rich-composer {
-          border: 1px solid #dfe3e9 !important;
-          border-radius: 12px !important;
-          background: #fff !important;
-          box-shadow: 0 3px 12px rgba(16,24,40,.045) !important;
-          overflow: visible !important;
-        }
-
-        .composer-mode-row {
-          min-height: 42px;
-          border-bottom: 1px solid #eef0f3 !important;
-          padding: 7px 10px !important;
-        }
-
-        .composer-mode-button {
-          border-radius: 7px !important;
-          font-weight: 650 !important;
-        }
-
-        .composer-top-actions button {
-          color: #667085 !important;
-          border-radius: 6px !important;
-        }
-
-        .recipient-section {
-          background: #fafbfc !important;
-          border-bottom: 1px solid #eef0f3 !important;
-        }
-
-        .recipient-row {
-          min-height: 32px;
-        }
-
-        .recipient-label {
-          color: #98a2b3 !important;
-          font-size: 11px !important;
-          font-weight: 700 !important;
-        }
-
-        .recipient-readonly,
-        .recipient-input {
-          color: #475467 !important;
-          font-size: 12px !important;
-        }
-
-        .timeline-section {
-          padding: 18px 28px 34px !important;
-          background: #fff !important;
-        }
-
-        .conversation-section-heading {
-          padding: 14px 0 13px !important;
-          border-bottom: 1px solid #eef0f3 !important;
-        }
-
-        .conversation-section-heading h3 {
-          color: #1d2939 !important;
-          font-size: 13px !important;
-          font-weight: 700 !important;
-          letter-spacing: -.01em;
-        }
-
-        .conversation-section-heading p {
-          margin-top: 3px !important;
-          color: #98a2b3 !important;
-          font-size: 11px !important;
-        }
-
-        .timeline-count-group span {
-          border: 1px solid #eaecf0 !important;
-          border-radius: 999px !important;
-          padding: 4px 8px !important;
-          background: #fafafa !important;
-          color: #667085 !important;
-          font-size: 10px !important;
-          font-weight: 650 !important;
-        }
-
-        .timeline {
-          position: relative;
-          padding: 16px 0 0 22px !important;
-        }
-
-        .timeline::before {
-          content: "";
-          position: absolute;
-          top: 20px;
-          bottom: 22px;
-          left: 6px;
-          width: 1px;
-          background: #e5e7eb;
-        }
-
-        .timeline-item {
-          position: relative;
-          margin: 0 0 16px !important;
-          border: 1px solid #e9ecf1 !important;
-          border-radius: 11px !important;
-          background: #fff !important;
-          box-shadow: 0 2px 7px rgba(16,24,40,.035) !important;
-        }
-
-        .timeline-rail-node {
-          position: absolute !important;
-          left: -22px !important;
-          top: 19px !important;
-          width: 12px !important;
-          height: 12px !important;
-          display: grid !important;
-          place-items: center !important;
-          border: 2px solid #fff !important;
-          border-radius: 50% !important;
-          background: #98a2b3 !important;
-          color: transparent !important;
-          box-shadow: 0 0 0 1px #d0d5dd !important;
-          z-index: 2;
-        }
-
-        .message-header,
-        .comment-header {
-          padding: 14px 16px 10px !important;
-        }
-
-        .message-avatar,
-        .comment-avatar {
-          width: 32px !important;
-          height: 32px !important;
-          border-radius: 9px !important;
-          font-size: 11px !important;
-          font-weight: 700 !important;
-        }
-
-        .message-author,
-        .comment-author {
-          color: #344054 !important;
-          font-size: 12px !important;
-          font-weight: 700 !important;
-        }
-
-        .message-time,
-        .comment-meta {
-          color: #98a2b3 !important;
-          font-size: 10px !important;
-        }
-
-        .message-direction {
-          color: #98a2b3 !important;
-          font-size: 10px !important;
-        }
-
-        .message-recipient-box {
-          margin: 0 16px 10px !important;
-          padding: 8px 10px !important;
-          border: 1px solid #f0f1f3 !important;
-          border-radius: 7px !important;
-          background: #fafbfc !important;
-        }
-
-        .message-body,
-        .comment-body {
-          padding: 4px 16px 16px !important;
-          color: #344054 !important;
-          font-size: 13px !important;
-          line-height: 1.65 !important;
-        }
-
-        .message-body img,
-        .comment-body img {
-          max-width: 100%;
-          border-radius: 7px;
-        }
-
-        .original-message {
-          background: #fafbfc !important;
-          border-style: dashed !important;
-          box-shadow: none !important;
-        }
-
-        .original-request-label {
-          margin: 12px 16px 0 !important;
-          color: #98a2b3 !important;
-          font-size: 10px !important;
-          font-weight: 750 !important;
-          letter-spacing: .07em !important;
-          text-transform: uppercase !important;
-        }
-
-        .original-node {
-          background: #fff !important;
-          color: #98a2b3 !important;
-          font-size: 8px !important;
-        }
-
-        .comment-badge {
-          border-radius: 999px !important;
-          padding: 3px 7px !important;
-          font-size: 9px !important;
-          font-weight: 700 !important;
-        }
-
-        .comment-body {
-          background: #f8f9fb !important;
-          margin: 0 12px 12px !important;
-          border-radius: 8px !important;
-          padding: 11px 12px !important;
-        }
-
-        .details-column {
-          border-left: 1px solid var(--hub-line) !important;
-          background: #fbfbfc !important;
-        }
-
-        .details-header {
-          padding: 21px 18px 15px !important;
-          border-bottom: 1px solid var(--hub-line) !important;
-          background: #fff !important;
-        }
-
-        .details-header h3 {
-          color: #1d2939 !important;
-          font-size: 13px !important;
-          font-weight: 700 !important;
-        }
-
-        .details-header p {
-          color: #98a2b3 !important;
-          font-size: 11px !important;
-        }
-
-        .details-content {
-          padding: 16px 18px 24px !important;
-        }
-
-        .detail-control {
-          min-height: 35px !important;
-          border: 1px solid #e1e5eb !important;
-          border-radius: 8px !important;
-          background: #fff !important;
-          color: #344054 !important;
-          font-size: 12px !important;
-          box-shadow: 0 1px 2px rgba(16,24,40,.02);
-        }
-
-        .details-content .detail-label,
-        .details-content label {
-          color: #98a2b3 !important;
-          font-size: 10px !important;
-          font-weight: 700 !important;
-          letter-spacing: .04em;
-          text-transform: uppercase;
-        }
-
-        .requester-detail strong {
-          color: #344054 !important;
-          font-size: 12px !important;
-        }
-
-        .requester-detail span {
-          color: #98a2b3 !important;
-          font-size: 11px !important;
-        }
-
-        .details-divider {
-          margin: 16px 0 !important;
-          border-top-color: #eaecf0 !important;
-        }
-
-        .conversation-end {
-          color: #98a2b3 !important;
-          font-size: 10px !important;
-          font-weight: 600 !important;
-          letter-spacing: .04em;
-          text-transform: uppercase;
-        }
-
-        @media (max-width: 1180px) {
-          .details-column {
-            min-width: 250px;
-          }
-          .conversation-header,
-          .composer-area,
-          .timeline-section {
-            padding-left: 20px !important;
-            padding-right: 20px !important;
-          }
-        }
-      `}</style>
-      <div className="app-shell">
+    <div className="app-shell">
 
       {/* SIDEBAR */}
 
@@ -4954,6 +4504,10 @@ function App() {
                     value
                   );
 
+                  setDepartmentFilter(
+                    "all"
+                  );
+
                   setSearch(
                     ""
                   );
@@ -4972,6 +4526,59 @@ function App() {
             )
           )}
         </div>
+
+        {brandFilter === "Tutor Doctor" && (
+          <div className="sidebar-section tutor-department-section">
+            <div className="sidebar-label">
+              DEPARTMENTS
+            </div>
+
+            {TUTOR_DOCTOR_DEPARTMENTS.map(
+              (department) => {
+                const departmentCount =
+                  tickets.filter(
+                    (ticket) =>
+                      ticket.source ===
+                        "Tutor Doctor" &&
+                      ticket.status !==
+                        "Closed" &&
+                      (department.value ===
+                        "all" ||
+                        String(
+                          ticket.department ||
+                            ""
+                        ).trim() ===
+                          department.value)
+                  ).length;
+
+                return (
+                  <button
+                    key={department.value}
+                    type="button"
+                    className={`nav-item department-nav-item ${
+                      departmentFilter ===
+                      department.value
+                        ? "active"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setDepartmentFilter(
+                        department.value
+                      );
+                      setFilter("all");
+                      setSearch("");
+                    }}
+                  >
+                    <span>{department.label}</span>
+                    <span className="nav-count">
+                      {departmentCount}
+                    </span>
+                  </button>
+                );
+              }
+            )}
+          </div>
+        )}
 
         <div className="sidebar-footer">
 
@@ -6830,6 +6437,7 @@ function App() {
                     </div>
 
                     <form
+                      ref={tagAutocompleteRef}
                       className="tag-autocomplete"
                       onSubmit={
                         addTag
@@ -6849,6 +6457,13 @@ function App() {
                               true
                             )
                           }
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              setShowTagSuggestions(false);
+                              setTagInput("");
+                              event.currentTarget.blur();
+                            }
+                          }}
                           onChange={(
                             event
                           ) => {
@@ -6872,6 +6487,40 @@ function App() {
                                 overflowY: "auto",
                               }}
                             >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  padding: "8px 10px",
+                                  borderBottom: "1px solid var(--border, #e5e7eb)",
+                                }}
+                              >
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                  Add tag
+                                </span>
+                                <button
+                                  type="button"
+                                  aria-label="Close tag suggestions"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => {
+                                    setShowTagSuggestions(false);
+                                    setTagInput("");
+                                  }}
+                                  style={{
+                                    border: 0,
+                                    background: "transparent",
+                                    cursor: "pointer",
+                                    fontSize: "18px",
+                                    lineHeight: 1,
+                                    color: "#64748b",
+                                    padding: "2px 5px",
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
 
                               {!tagInput.trim() &&
                                 suggestedTags.length > 0 && (
@@ -7111,7 +6760,6 @@ function App() {
         )}
       </aside>
     </div>
-    </>
   );
 }
 
