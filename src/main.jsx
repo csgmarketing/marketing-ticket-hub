@@ -876,12 +876,6 @@ function App() {
     useState("");
 
   const [
-    dashboardTab,
-    setDashboardTab,
-  ] =
-    useState(false);
-
-  const [
     updateBusy,
     setUpdateBusy,
   ] =
@@ -3572,50 +3566,6 @@ function App() {
 
       if (
         filter ===
-        "high"
-      ) {
-        rows = rows.filter(
-          (ticket) =>
-            ticket.status !== "Closed" &&
-            String(ticket.priority || "").toLowerCase() === "high"
-        );
-      }
-
-      if (
-        filter ===
-        "due-today"
-      ) {
-        const today = new Date();
-        rows = rows.filter((ticket) => {
-          if (ticket.status === "Closed" || !ticket.due_date) return false;
-          const d = new Date(ticket.due_date);
-          return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-        });
-      }
-
-      if (
-        filter ===
-        "aging"
-      ) {
-        rows = rows.filter((ticket) => {
-          if (ticket.status === "Closed") return false;
-          const raw = ticket.created_at_zoho || ticket.created_at;
-          return raw && (Date.now() - new Date(raw).getTime()) >= 3 * 24 * 60 * 60 * 1000;
-        });
-      }
-
-      if (
-        filter ===
-        "needs"
-      ) {
-        rows = rows.filter((ticket) =>
-          ticket.status !== "Closed" &&
-          (isOverdue(ticket) || isTicketUnassigned(ticket) || String(ticket.priority || "").toLowerCase() === "high" || ticket.status === "Escalated")
-        );
-      }
-
-      if (
-        filter ===
         "unassigned"
       ) {
         rows =
@@ -4280,55 +4230,12 @@ function App() {
     );
   }
 
-  const dashboardMetrics = useMemo(() => {
-    const active = tickets.filter((t) => t.status !== "Closed");
-    const high = active.filter((t) => String(t.priority || "").toLowerCase() === "high");
-    const overdue = active.filter(isOverdue);
-    const unassigned = active.filter(isTicketUnassigned);
-    const aging = active.filter((t) => {
-      const raw = t.created_at_zoho || t.created_at;
-      if (!raw) return false;
-      return (Date.now() - new Date(raw).getTime()) >= 3 * 24 * 60 * 60 * 1000;
-    });
-    const waiting = active.filter((t) => t.status === "Waiting");
-    const needsAttention = active.filter((t) =>
-      isOverdue(t) ||
-      isTicketUnassigned(t) ||
-      String(t.priority || "").toLowerCase() === "high" ||
-      t.status === "Escalated"
-    );
-    const byBrand = ["Qualicare", "Tutor Doctor", "Code Wiz"].map((brand) => {
-      const rows = active.filter((t) => t.source === brand);
-      return {
-        brand,
-        total: rows.length,
-        overdue: rows.filter(isOverdue).length,
-        unassigned: rows.filter(isTicketUnassigned).length,
-        high: rows.filter((t) => String(t.priority || "").toLowerCase() === "high").length,
-      };
-    });
-    const byStatus = ["Open", "In Progress", "Waiting", "On Hold", "Escalated"].map((status) => ({
-      status,
-      count: active.filter((t) => t.status === status).length,
-    }));
-    const today = new Date();
-    const dueToday = active.filter((t) => {
-      if (!t.due_date) return false;
-      const d = new Date(t.due_date);
-      return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-    });
-    return { active, high, overdue, unassigned, aging, waiting, needsAttention, byBrand, byStatus, dueToday };
-  }, [tickets]);
-
   // ====================================================
   // UI
   // ====================================================
 
   return (
     <div className="app-shell">
-      <style>{`
-        .dashboard-nav{width:calc(100% - 24px);margin:8px 12px 14px;padding:11px 12px;border:1px solid #e3e7ee;border-radius:10px;background:#fff;color:#253044;display:flex;align-items:center;gap:9px;font-weight:700;cursor:pointer;text-align:left}.dashboard-nav.active{background:#f1f5ff;border-color:#cdd9ff;color:#3156c9}.dashboard-nav-icon{font-size:17px}.dashboard-nav-arrow{margin-left:auto;font-size:18px;opacity:.55}.dashboard-page{min-width:0;flex:1;overflow:auto;background:#f7f8fb;padding:34px 38px 48px}.dashboard-topbar{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;max-width:1400px;margin:0 auto 28px}.dashboard-eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;color:#7b8495;margin-bottom:7px}.dashboard-topbar h1{font-size:28px;line-height:1.15;margin:0;color:#172033;letter-spacing:-.025em}.dashboard-topbar p{margin:7px 0 0;color:#6e7788}.dashboard-actions{display:flex;gap:9px}.dashboard-refresh,.dashboard-open-work{border:1px solid #dfe4ec;background:#fff;border-radius:9px;padding:9px 13px;font-weight:700;color:#344054;cursor:pointer}.dashboard-open-work{background:#172033;color:#fff;border-color:#172033}.dashboard-kpis{max-width:1400px;margin:0 auto 24px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.dashboard-kpi{position:relative;text-align:left;border:1px solid #e2e6ed;background:#fff;border-radius:13px;padding:16px 17px 14px;min-height:124px;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.03)}.dashboard-kpi:hover{transform:translateY(-1px);box-shadow:0 5px 18px rgba(16,24,40,.07)}.dashboard-kpi span{display:block;color:#697386;font-size:12px;font-weight:700}.dashboard-kpi strong{display:block;font-size:30px;letter-spacing:-.04em;color:#182133;margin-top:8px}.dashboard-kpi small{display:block;margin-top:10px;color:#8a93a2;font-weight:700}.dashboard-kpi.red{border-top:3px solid #dc4c4c}.dashboard-kpi.amber{border-top:3px solid #d69b24}.dashboard-kpi.purple{border-top:3px solid #7558c9}.dashboard-kpi.green{border-top:3px solid #36a269}.dashboard-kpi.blue{border-top:3px solid #4b6ee8}.dashboard-grid{max-width:1400px;margin:0 auto 18px;display:grid;gap:18px}.dashboard-grid-main{grid-template-columns:1.15fr .85fr}.dashboard-grid-lower{grid-template-columns:1.2fr .8fr}.dashboard-panel{background:#fff;border:1px solid #e1e5eb;border-radius:14px;padding:20px;box-shadow:0 1px 2px rgba(16,24,40,.025)}.dashboard-panel-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:15px}.dashboard-panel-head h2{font-size:15px;margin:0;color:#202a3c}.dashboard-panel-head p{font-size:12px;color:#818a99;margin:4px 0 0}.dashboard-panel-head button{border:0;background:none;color:#4664c5;font-weight:800;cursor:pointer}.brand-workload-row,.status-health-row,.attention-row,.age-action{width:100%;border:0;background:transparent;cursor:pointer;display:flex;align-items:center;text-align:left}.brand-workload-row{padding:12px 4px;border-top:1px solid #eef0f4;gap:12px}.brand-workload-row:first-child{border-top:0}.dashboard-brand-mark{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:12px;font-weight:900}.dashboard-brand-mark.qualicare{background:#e7f6ef;color:#148458}.dashboard-brand-mark.tutor-doctor{background:#e9f0ff;color:#3c64d6}.dashboard-brand-mark.code-wiz{background:#fff0e3;color:#d76d17}.brand-workload-name{display:flex;flex-direction:column;gap:3px;min-width:130px}.brand-workload-name strong{font-size:13px;color:#273145}.brand-workload-name span{font-size:11px;color:#8992a1}.brand-workload-stats{display:flex;gap:10px;margin-left:auto}.brand-workload-stats span{font-size:11px;color:#737d8e}.row-arrow{font-size:18px;color:#a1a8b4;margin-left:6px}.status-health-list{display:flex;flex-direction:column}.status-health-row{padding:10px 3px;gap:9px}.status-health-row>span:nth-child(2){font-size:12px;font-weight:700;color:#4a5568;width:78px}.status-health-row strong{font-size:13px;color:#222c3d;width:26px}.status-dot{width:7px;height:7px;border-radius:50%;background:#8992a1}.status-open{background:#4b6ee8}.status-in-progress{background:#8a63d2}.status-waiting{background:#d59c2d}.status-on-hold{background:#8792a2}.status-escalated{background:#d95353}.health-track{height:6px!important;flex:1;background:#eef1f5;border-radius:99px;overflow:hidden;width:auto!important}.health-track i{display:block;height:100%;background:#7288d9;border-radius:99px}.attention-list{border-top:1px solid #eef0f4}.attention-row{padding:12px 3px;gap:10px;border-bottom:1px solid #eef0f4}.attention-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}.attention-copy strong{font-size:12px;color:#273145;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.attention-copy span{font-size:10px;color:#8a93a2}.attention-reason{font-size:10px;font-weight:800;padding:5px 8px;border-radius:99px;background:#fff3df;color:#9b6715;white-space:nowrap}.age-action{justify-content:space-between;padding:15px 2px;border-top:1px solid #eef0f4}.age-action:first-of-type{border-top:0}.age-action div{display:flex;flex-direction:column;gap:3px}.age-action span:first-child{font-size:13px;font-weight:700;color:#374151}.age-action small{font-size:10px;color:#9098a5}.age-action strong{font-size:21px;color:#1d2738;margin-left:auto;margin-right:13px}.age-action>span:last-child{color:#9aa2af}.dashboard-insight{display:flex;gap:10px;align-items:center;margin-top:14px;padding:12px;border-radius:10px;background:#f7f8fb}.dashboard-insight>span{color:#42a06e}.dashboard-insight strong{font-size:12px;color:#3c4658}.dashboard-insight p{margin:2px 0 0;font-size:10px;color:#8a93a2}.dashboard-empty{padding:28px 8px;text-align:center;color:#8a93a2;font-size:12px}.dashboard-page .brand-badge{flex:none}@media(max-width:1100px){.dashboard-kpis{grid-template-columns:repeat(3,1fr)}.dashboard-grid-main,.dashboard-grid-lower{grid-template-columns:1fr}}@media(max-width:760px){.dashboard-page{padding:22px 16px}.dashboard-topbar{flex-direction:column}.dashboard-kpis{grid-template-columns:repeat(2,1fr)}.dashboard-actions{width:100%}.dashboard-refresh,.dashboard-open-work{flex:1}.brand-workload-stats{display:none}}
-      `}</style>
 
       {/* SIDEBAR */}
 
@@ -4357,18 +4264,6 @@ function App() {
             </div>
           </div>
         </div>
-
-        <button
-          className={`dashboard-nav ${dashboardTab ? "active" : ""}`}
-          onClick={() => {
-            setDashboardTab(true);
-            setSelectedKey(null);
-          }}
-        >
-          <span className="dashboard-nav-icon">▦</span>
-          <span>Dashboard</span>
-          <span className="dashboard-nav-arrow">›</span>
-        </button>
 
         <div className="sidebar-section">
 
@@ -4412,10 +4307,9 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() => {
-                  setDashboardTab(false);
-                  setFilter(id);
-                }}
+                onClick={() =>
+                  setFilter(id)
+                }
               >
                 <span>
                   {label}
@@ -4486,10 +4380,9 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() => {
-                  setDashboardTab(false);
-                  setFilter(id);
-                }}
+                onClick={() =>
+                  setFilter(id)
+                }
               >
                 <span>
                   {label}
@@ -4544,7 +4437,6 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
-                  setDashboardTab(false);
                   setBrandFilter(
                     value
                   );
@@ -4599,102 +4491,6 @@ function App() {
         </div>
       </aside>
 
-      {dashboardTab ? (
-        <section className="dashboard-page">
-          <div className="dashboard-topbar">
-            <div>
-              <div className="dashboard-eyebrow">MARKETING OPERATIONS</div>
-              <h1>Good morning. Here’s your queue.</h1>
-              <p>One view across Qualicare, Tutor Doctor and Code Wiz.</p>
-            </div>
-            <div className="dashboard-actions">
-              <button className="dashboard-refresh" onClick={() => loadTickets()}>↻ Refresh</button>
-              <button className="dashboard-open-work" onClick={() => { setDashboardTab(false); setFilter("all"); }}>Open ticket workspace →</button>
-            </div>
-          </div>
-
-          <div className="dashboard-kpis">
-            {[
-              ["Active tickets", dashboardMetrics.active.length, "all", "blue"],
-              ["Needs attention", dashboardMetrics.needsAttention.length, "needs-dashboard", "amber"],
-              ["Overdue", dashboardMetrics.overdue.length, "overdue", "red"],
-              ["High priority", dashboardMetrics.high.length, "high-dashboard", "purple"],
-              ["Due today", dashboardMetrics.dueToday.length, "due-dashboard", "green"],
-            ].map(([label, value, target, tone]) => (
-              <button key={label} className={`dashboard-kpi ${tone}`} onClick={() => {
-                setDashboardTab(false);
-                if (target === "needs-dashboard") setFilter("needs");
-                else if (target === "high-dashboard") setFilter("high");
-                else if (target === "due-dashboard") setFilter("due-today");
-                else setFilter(target);
-              }}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-                <small>View queue →</small>
-              </button>
-            ))}
-          </div>
-
-          <div className="dashboard-grid dashboard-grid-main">
-            <section className="dashboard-panel dashboard-brand-panel">
-              <div className="dashboard-panel-head"><div><h2>Workload by brand</h2><p>Where the active queue is sitting right now.</p></div></div>
-              <div className="brand-workload-list">
-                {dashboardMetrics.byBrand.map((row) => (
-                  <button key={row.brand} className="brand-workload-row" onClick={() => { setDashboardTab(false); setBrandFilter(row.brand); setFilter("all"); setSearch(""); }}>
-                    <div className={`dashboard-brand-mark ${brandSlug(row.brand)}`}>{row.brand === "Tutor Doctor" ? "TD" : row.brand === "Qualicare" ? "Q" : "CW"}</div>
-                    <div className="brand-workload-name"><strong>{row.brand}</strong><span>{row.total} active tickets</span></div>
-                    <div className="brand-workload-stats"><span>{row.high} high</span><span>{row.overdue} overdue</span><span>{row.unassigned} unassigned</span></div>
-                    <span className="row-arrow">›</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="dashboard-panel">
-              <div className="dashboard-panel-head"><div><h2>Queue health</h2><p>Active tickets by current status.</p></div></div>
-              <div className="status-health-list">
-                {dashboardMetrics.byStatus.map((row) => (
-                  <button key={row.status} className="status-health-row" onClick={() => { setDashboardTab(false); setFilter(row.status === "In Progress" ? "inprogress" : row.status.toLowerCase().replaceAll(" ", "")); }}>
-                    <span className={`status-dot status-${row.status.toLowerCase().replaceAll(" ", "-")}`}></span><span>{row.status}</span><strong>{row.count}</strong><span className="health-track"><i style={{width: `${dashboardMetrics.active.length ? Math.max(4, row.count / dashboardMetrics.active.length * 100) : 0}%`}} /></span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <div className="dashboard-grid dashboard-grid-lower">
-            <section className="dashboard-panel attention-panel">
-              <div className="dashboard-panel-head"><div><h2>Needs attention</h2><p>Tickets most likely to need action first.</p></div><button onClick={() => { setDashboardTab(false); setFilter("needs"); }}>View all →</button></div>
-              <div className="attention-list">
-                {dashboardMetrics.needsAttention.slice(0, 6).map((ticket) => (
-                  <button key={ticket.ticket_key} className="attention-row" onClick={() => { setDashboardTab(false); setFilter("all"); setSelectedKey(ticket.ticket_key); setBrandFilter("all"); }}>
-                    <BrandBadge source={ticket.source} />
-                    <div className="attention-copy"><strong>{ticket.subject || "Untitled ticket"}</strong><span>#{ticket.ticket_number} · {ticket.contact_name || ticket.contact_email || "Unknown requester"}</span></div>
-                    <span className="attention-reason">{isOverdue(ticket) ? "Overdue" : isTicketUnassigned(ticket) ? "Unassigned" : String(ticket.priority || "").toLowerCase() === "high" ? "High priority" : "Escalated"}</span>
-                    <span className="row-arrow">›</span>
-                  </button>
-                ))}
-                {dashboardMetrics.needsAttention.length === 0 && <div className="dashboard-empty">Everything looks under control.</div>}
-              </div>
-            </section>
-
-            <section className="dashboard-panel aging-panel">
-              <div className="dashboard-panel-head"><div><h2>Age & follow-up</h2><p>Keep older work moving.</p></div></div>
-              {[
-                ["Aging 3+ days", dashboardMetrics.aging.length, "aging"],
-                ["Waiting", dashboardMetrics.waiting.length, "waiting"],
-                ["Unassigned", dashboardMetrics.unassigned.length, "unassigned"],
-              ].map(([label, value, target]) => (
-                <button key={label} className="age-action" onClick={() => { setDashboardTab(false); setFilter(target); }}>
-                  <div><span>{label}</span><small>View tickets</small></div><strong>{value}</strong><span>→</span>
-                </button>
-              ))}
-              <div className="dashboard-insight"><span>●</span><div><strong>{dashboardMetrics.dueToday.length} due today</strong><p>Stay ahead of today's commitments.</p></div></div>
-            </section>
-          </div>
-        </section>
-      ) : (
-      <>
       {/* TICKETS */}
 
       <section className="ticket-column">
@@ -6801,8 +6597,6 @@ function App() {
           </>
         )}
       </aside>
-      </>
-      )}
     </div>
   );
 }
