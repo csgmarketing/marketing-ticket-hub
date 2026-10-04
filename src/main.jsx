@@ -1037,6 +1037,12 @@ function App() {
     useState("all");
 
   const [
+    dashboardTab,
+    setDashboardTab,
+  ] =
+    useState(false);
+
+  const [
     brandFilter,
     setBrandFilter,
   ] =
@@ -5220,6 +5226,17 @@ function App() {
 
         <div className="sidebar-section">
 
+          <button
+            className={`nav-item dashboard-nav-item ${dashboardTab ? "active" : ""}`}
+            onClick={() => {
+              setDashboardTab(true);
+              setSelectedKey(null);
+              setShowNotifications(false);
+            }}
+          >
+            <span>Dashboard</span>
+          </button>
+
           <div className="sidebar-label">
             MY WORK
           </div>
@@ -5230,14 +5247,15 @@ function App() {
                 ? "active"
                 : ""
             }`}
-            onClick={() =>
+            onClick={() => {
+              setDashboardTab(false);
               setShowNotifications(
                 (
                   current
                 ) =>
                   !current
-              )
-            }
+              );
+            }}
           >
             <span>
               Mentions
@@ -5286,9 +5304,10 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  setFilter(id)
-                }
+                onClick={() => {
+                  setDashboardTab(false);
+                  setFilter(id);
+                }}
               >
                 <span>
                   {label}
@@ -5303,7 +5322,7 @@ function App() {
 
           <button
             className={`nav-item ${filter === "needs" ? "active" : ""}`}
-            onClick={() => { setFilter("needs"); setSavedView("all"); }}
+            onClick={() => { setDashboardTab(false); setFilter("needs"); setSavedView("all"); }}
           >
             <span>Needs Attention</span>
             <span className="nav-count">{counts.needsAttention}</span>
@@ -5324,6 +5343,7 @@ function App() {
               key={value}
               className={`nav-item ${savedView === value && filter === "all" ? "active" : ""}`}
               onClick={() => {
+                setDashboardTab(false);
                 setSavedView(value);
                 setFilter("all");
               }}
@@ -5392,9 +5412,10 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  setFilter(id)
-                }
+                onClick={() => {
+                  setDashboardTab(false);
+                  setFilter(id);
+                }}
               >
                 <span>
                   {label}
@@ -5449,6 +5470,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
+                  setDashboardTab(false);
                   setBrandFilter(
                     value
                   );
@@ -5521,6 +5543,7 @@ function App() {
                       : ""
                   }`}
                   onClick={() => {
+                    setDashboardTab(false);
                     setDepartmentFilter(
                       value
                     );
@@ -5906,8 +5929,12 @@ function App() {
 
       {/* TICKETS */}
 
-      <section className="ticket-column">
+      <section
+        className="ticket-column"
+        style={dashboardTab ? { gridColumn: "2 / -1", width: "100%", minWidth: 0 } : undefined}
+      >
 
+        {dashboardTab && (
         <section
           style={{
             margin: "0 16px 20px",
@@ -5944,10 +5971,10 @@ function App() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "12px" }}>
             {[
-              ["Needs attention", dashboardMetrics.needsAttention, "Overdue, aging, high priority or unassigned", "#b45309", () => { setFilter("needs"); setSavedView("all"); }],
-              ["Overdue", dashboardMetrics.overdue, "Tickets past their due date", "#dc2626", () => { setFilter("overdue"); setSavedView("all"); }],
-              ["Unassigned", dashboardMetrics.unassigned, "Active tickets without an owner", "#d97706", () => { setFilter("unassigned"); setSavedView("all"); }],
-              ["Waiting 48h+", dashboardMetrics.waiting48Plus, "Waiting tickets open for 2+ days", "#7c3aed", () => { setFilter("all"); setSavedView("all"); }],
+              ["Needs attention", dashboardMetrics.needsAttention, "Overdue, aging, high priority or unassigned", "#b45309", () => { setDashboardTab(false); setFilter("needs"); setSavedView("all"); }],
+              ["Overdue", dashboardMetrics.overdue, "Tickets past their due date", "#dc2626", () => { setDashboardTab(false); setFilter("overdue"); setSavedView("all"); }],
+              ["Unassigned", dashboardMetrics.unassigned, "Active tickets without an owner", "#d97706", () => { setDashboardTab(false); setFilter("unassigned"); setSavedView("all"); }],
+              ["Waiting 48h+", dashboardMetrics.waiting48Plus, "Waiting tickets open for 2+ days", "#7c3aed", () => { setDashboardTab(false); setFilter("all"); setSavedView("all"); }],
             ].map(([label, value, subtitle, valueColor, onClick]) => (
               <button
                 key={label}
@@ -6028,11 +6055,11 @@ function App() {
             <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", padding: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                 <div><div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Needs attention</div><div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>Highest-priority tickets right now</div></div>
-                <button type="button" onClick={() => { setFilter("needs"); setSavedView("all"); }} style={{ border: 0, background: "transparent", color: "#2563eb", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>View all</button>
+                <button type="button" onClick={() => { setDashboardTab(false); setFilter("needs"); setSavedView("all"); }} style={{ border: 0, background: "transparent", color: "#2563eb", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>View all</button>
               </div>
               <div style={{ marginTop: "10px" }}>
                 {dashboardMetrics.attention.length === 0 ? <div style={{ padding: "16px 0 4px", fontSize: "12px", color: "#94a3b8" }}>Nothing currently needs attention.</div> : dashboardMetrics.attention.map((ticket) => (
-                  <button key={ticket.ticket_key} type="button" onClick={() => setSelectedKey(ticket.ticket_key)} style={{ width: "100%", border: 0, borderTop: "1px solid #f1f5f9", background: "transparent", padding: "10px 0", textAlign: "left", cursor: "pointer" }}>
+                  <button key={ticket.ticket_key} type="button" onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); }} style={{ width: "100%", border: 0, borderTop: "1px solid #f1f5f9", background: "transparent", padding: "10px 0", textAlign: "left", cursor: "pointer" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><strong style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12px", color: "#334155" }}>{ticket.subject || "Untitled ticket"}</strong><span style={{ flex: "0 0 auto", fontSize: "10px", color: isOverdue(ticket) ? "#dc2626" : "#64748b", fontWeight: 700 }}>{isOverdue(ticket) ? "OVERDUE" : formatTicketAge(ticket)}</span></div>
                     <div style={{ marginTop: "3px", fontSize: "10px", color: "#94a3b8" }}>{ticket.source} · #{ticket.ticket_number || "—"} · {getTicketOwnerName(ticket) || "Unassigned"}</div>
                   </button>
@@ -6047,7 +6074,7 @@ function App() {
               </div>
               <div style={{ marginTop: "10px" }}>
                 {dashboardMetrics.recentlyUpdated.map((ticket) => (
-                  <button key={ticket.ticket_key} type="button" onClick={() => setSelectedKey(ticket.ticket_key)} style={{ width: "100%", border: 0, borderTop: "1px solid #f1f5f9", background: "transparent", padding: "10px 0", textAlign: "left", cursor: "pointer" }}>
+                  <button key={ticket.ticket_key} type="button" onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); }} style={{ width: "100%", border: 0, borderTop: "1px solid #f1f5f9", background: "transparent", padding: "10px 0", textAlign: "left", cursor: "pointer" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><strong style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12px", color: "#334155" }}>{ticket.subject || "Untitled ticket"}</strong><span style={{ flex: "0 0 auto", fontSize: "10px", color: "#94a3b8" }}>{ticket.status}</span></div>
                     <div style={{ marginTop: "3px", fontSize: "10px", color: "#94a3b8" }}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatDateTime(ticket.updated_at_zoho || ticket.created_at_zoho || ticket.created_at)}</div>
                   </button>
@@ -6056,8 +6083,9 @@ function App() {
             </div>
           </div>
         </section>
+        )}
 
-
+        {!dashboardTab && (<>
         <div className="ticket-column-header">
 
           <div>
@@ -6216,11 +6244,13 @@ function App() {
             )
           )}
         </div>
+        </>)}
       </section>
 
       {/* WORKSPACE */}
 
       <main
+        style={dashboardTab ? { display: "none" } : undefined}
         className={`conversation-column ${
           selected
             ? brandClass(
