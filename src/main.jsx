@@ -4676,6 +4676,64 @@ function App() {
     };
   }, [tickets, brandFilter, departmentFilter]);
 
+  const dashboardMetrics = useMemo(() => {
+    const active = tickets
+      .filter(isVisibleMarketingTicket)
+      .filter((ticket) => ticket.status !== "Closed");
+
+    const byBrand = ["Tutor Doctor", "Qualicare", "Code Wiz"].map((source) => {
+      const rows = active.filter((ticket) => ticket.source === source);
+      return {
+        source,
+        active: rows.length,
+        open: rows.filter((ticket) => ticket.status === "Open").length,
+        inProgress: rows.filter((ticket) => ticket.status === "In Progress").length,
+        waiting: rows.filter((ticket) => ticket.status === "Waiting").length,
+        overdue: rows.filter(isOverdue).length,
+        unassigned: rows.filter(isTicketUnassigned).length,
+        aging: rows.filter((ticket) => ticketAgeDays(ticket) >= 3).length,
+      };
+    });
+
+    const attention = active
+      .filter(isNeedsAttention)
+      .sort((a, b) => {
+        const score = (ticket) =>
+          (isOverdue(ticket) ? 100 : 0) +
+          (isTicketUnassigned(ticket) ? 40 : 0) +
+          (String(ticket.priority || "").toLowerCase() === "high" ? 30 : 0) +
+          Math.min(30, ticketAgeDays(ticket));
+        return score(b) - score(a);
+      })
+      .slice(0, 5);
+
+    const recentlyUpdated = [...active]
+      .sort((a, b) =>
+        new Date(b.updated_at_zoho || b.created_at_zoho || b.created_at || 0).getTime() -
+        new Date(a.updated_at_zoho || a.created_at_zoho || a.created_at || 0).getTime()
+      )
+      .slice(0, 5);
+
+    const total = active.length;
+    return {
+      active: total,
+      overdue: active.filter(isOverdue).length,
+      unassigned: active.filter(isTicketUnassigned).length,
+      needsAttention: active.filter(isNeedsAttention).length,
+      highPriority: active.filter((ticket) => String(ticket.priority || "").toLowerCase() === "high").length,
+      aging3Plus: active.filter((ticket) => ticketAgeDays(ticket) >= 3).length,
+      waiting48Plus: active.filter((ticket) => ticket.status === "Waiting" && ticketAgeDays(ticket) >= 2).length,
+      open: active.filter((ticket) => ticket.status === "Open").length,
+      inProgress: active.filter((ticket) => ticket.status === "In Progress").length,
+      waiting: active.filter((ticket) => ticket.status === "Waiting").length,
+      onHold: active.filter((ticket) => ticket.status === "On Hold").length,
+      escalated: active.filter((ticket) => ticket.status === "Escalated").length,
+      byBrand,
+      attention,
+      recentlyUpdated,
+    };
+  }, [tickets]);
+
   function toggleFollowTicket(ticketKey) {
     setFollowedTickets((current) =>
       current.includes(ticketKey)
@@ -5850,6 +5908,156 @@ function App() {
 
       <section className="ticket-column">
 
+        <section
+          style={{
+            margin: "0 16px 20px",
+            borderBottom: "1px solid #e2e8f0",
+            paddingBottom: "22px",
+          }}
+        >
+          <div
+            style={{
+              padding: "6px 2px 18px",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              gap: "20px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".1em" }}>
+                Marketing Operations
+              </div>
+              <h1 style={{ margin: "5px 0 0", fontSize: "28px", lineHeight: 1.15, color: "#0f172a", fontWeight: 800 }}>
+                Dashboard
+              </h1>
+              <div style={{ marginTop: "6px", fontSize: "13px", color: "#64748b" }}>
+                A live overview of the team workload across Tutor Doctor, Qualicare and Code Wiz.
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700 }}>Active workload</div>
+              <div style={{ marginTop: "2px", fontSize: "30px", lineHeight: 1, fontWeight: 800, color: "#0f172a" }}>{dashboardMetrics.active}</div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "12px" }}>
+            {[
+              ["Needs attention", dashboardMetrics.needsAttention, "Overdue, aging, high priority or unassigned", "#b45309", () => { setFilter("needs"); setSavedView("all"); }],
+              ["Overdue", dashboardMetrics.overdue, "Tickets past their due date", "#dc2626", () => { setFilter("overdue"); setSavedView("all"); }],
+              ["Unassigned", dashboardMetrics.unassigned, "Active tickets without an owner", "#d97706", () => { setFilter("unassigned"); setSavedView("all"); }],
+              ["Waiting 48h+", dashboardMetrics.waiting48Plus, "Waiting tickets open for 2+ days", "#7c3aed", () => { setFilter("all"); setSavedView("all"); }],
+            ].map(([label, value, subtitle, valueColor, onClick]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={onClick}
+                style={{
+                  minWidth: 0,
+                  minHeight: "122px",
+                  padding: "17px",
+                  textAlign: "left",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  background: "#fff",
+                  cursor: "pointer",
+                  boxShadow: "0 1px 2px rgba(15,23,42,.03)",
+                }}
+              >
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
+                <div style={{ marginTop: "12px", fontSize: "32px", lineHeight: 1, fontWeight: 800, color: valueColor }}>{value}</div>
+                <div style={{ marginTop: "8px", fontSize: "11px", lineHeight: 1.35, color: "#94a3b8" }}>{subtitle}</div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: "14px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "14px" }}>
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", overflow: "hidden" }}>
+              <div style={{ padding: "15px 17px", borderBottom: "1px solid #eef2f7", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div>
+                  <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Workload by brand</div>
+                  <div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>Active ticket distribution and pressure points</div>
+                </div>
+                <span style={{ fontSize: "11px", color: "#64748b" }}>{dashboardMetrics.active} active</span>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "620px" }}>
+                  <thead>
+                    <tr>
+                      {["Brand", "Active", "Open", "In Progress", "Waiting", "Overdue", "3d+"] .map((label) => (
+                        <th key={label} style={{ padding: "10px 12px", textAlign: label === "Brand" ? "left" : "right", fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 800 }}>{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardMetrics.byBrand.map((row) => (
+                      <tr key={row.source}>
+                        <td style={{ padding: "12px", borderTop: "1px solid #f1f5f9", fontSize: "12px", fontWeight: 700, color: "#334155" }}>{row.source}</td>
+                        {[row.active, row.open, row.inProgress, row.waiting, row.overdue, row.aging].map((value, index) => (
+                          <td key={index} style={{ padding: "12px", borderTop: "1px solid #f1f5f9", textAlign: "right", fontSize: "12px", color: value > 0 && (index === 4 || index === 5) ? "#b45309" : "#475569", fontWeight: value > 0 ? 700 : 500 }}>{value}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", padding: "16px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Workload mix</div>
+              <div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>How the active queue is distributed by status</div>
+              <div style={{ marginTop: "16px", display: "grid", gap: "11px" }}>
+                {[
+                  ["Open", dashboardMetrics.open],
+                  ["In Progress", dashboardMetrics.inProgress],
+                  ["Waiting", dashboardMetrics.waiting],
+                  ["On Hold", dashboardMetrics.onHold],
+                  ["Escalated", dashboardMetrics.escalated],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", fontSize: "11px", color: "#64748b", marginBottom: "5px" }}><span>{label}</span><strong style={{ color: "#334155" }}>{value}</strong></div>
+                    <div style={{ height: "7px", borderRadius: "99px", background: "#eef2f7", overflow: "hidden" }}><div style={{ width: `${dashboardMetrics.active ? Math.min(100, value / dashboardMetrics.active * 100) : 0}%`, height: "100%", background: "#64748b", borderRadius: "99px" }} /></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "14px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "14px" }}>
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", padding: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div><div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Needs attention</div><div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>Highest-priority tickets right now</div></div>
+                <button type="button" onClick={() => { setFilter("needs"); setSavedView("all"); }} style={{ border: 0, background: "transparent", color: "#2563eb", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>View all</button>
+              </div>
+              <div style={{ marginTop: "10px" }}>
+                {dashboardMetrics.attention.length === 0 ? <div style={{ padding: "16px 0 4px", fontSize: "12px", color: "#94a3b8" }}>Nothing currently needs attention.</div> : dashboardMetrics.attention.map((ticket) => (
+                  <button key={ticket.ticket_key} type="button" onClick={() => setSelectedKey(ticket.ticket_key)} style={{ width: "100%", border: 0, borderTop: "1px solid #f1f5f9", background: "transparent", padding: "10px 0", textAlign: "left", cursor: "pointer" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><strong style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12px", color: "#334155" }}>{ticket.subject || "Untitled ticket"}</strong><span style={{ flex: "0 0 auto", fontSize: "10px", color: isOverdue(ticket) ? "#dc2626" : "#64748b", fontWeight: 700 }}>{isOverdue(ticket) ? "OVERDUE" : formatTicketAge(ticket)}</span></div>
+                    <div style={{ marginTop: "3px", fontSize: "10px", color: "#94a3b8" }}>{ticket.source} · #{ticket.ticket_number || "—"} · {getTicketOwnerName(ticket) || "Unassigned"}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff", padding: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div><div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Recently updated</div><div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>Latest movement across active tickets</div></div>
+                <span style={{ fontSize: "10px", color: "#94a3b8" }}>LIVE</span>
+              </div>
+              <div style={{ marginTop: "10px" }}>
+                {dashboardMetrics.recentlyUpdated.map((ticket) => (
+                  <button key={ticket.ticket_key} type="button" onClick={() => setSelectedKey(ticket.ticket_key)} style={{ width: "100%", border: 0, borderTop: "1px solid #f1f5f9", background: "transparent", padding: "10px 0", textAlign: "left", cursor: "pointer" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><strong style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12px", color: "#334155" }}>{ticket.subject || "Untitled ticket"}</strong><span style={{ flex: "0 0 auto", fontSize: "10px", color: "#94a3b8" }}>{ticket.status}</span></div>
+                    <div style={{ marginTop: "3px", fontSize: "10px", color: "#94a3b8" }}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatDateTime(ticket.updated_at_zoho || ticket.created_at_zoho || ticket.created_at)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+
         <div className="ticket-column-header">
 
           <div>
@@ -5907,135 +6115,6 @@ function App() {
           />
         </div>
 
-        <section
-          style={{
-            margin: "0 16px 18px",
-            border: "1px solid #e2e8f0",
-            borderRadius: "16px",
-            background: "#f8fafc",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "18px 20px 14px",
-              background: "#fff",
-              borderBottom: "1px solid #e2e8f0",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: "16px",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".08em" }}>
-                Operations Dashboard
-              </div>
-              <div style={{ marginTop: "4px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>
-                Ticket health at a glance
-              </div>
-              <div style={{ marginTop: "4px", fontSize: "12px", color: "#64748b" }}>
-                {brandFilter === "all" ? "All brands" : brandFilter}
-                {brandFilter === "Tutor Doctor" && departmentFilter !== "all" ? ` · ${departmentFilter === "Client_Tutor Newsletter" ? "Client/Tutor Newsletter" : departmentFilter}` : ""}
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "11px", color: "#64748b" }}>Active tickets</span>
-              <strong style={{ fontSize: "22px", color: "#0f172a" }}>{counts.active}</strong>
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "16px",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))",
-              gap: "12px",
-            }}
-          >
-            {[
-              ["Active", counts.active, "All active tickets", "#0f172a", () => { setFilter("all"); setSavedView("all"); }],
-              ["Overdue", counts.overdue, "Past due date", counts.overdue ? "#dc2626" : "#0f172a", () => { setFilter("overdue"); setSavedView("all"); }],
-              ["Needs Attention", counts.needsAttention, "Requires action", counts.needsAttention ? "#b45309" : "#0f172a", () => { setFilter("all"); setSavedView("needs"); }],
-              ["Unassigned", counts.unassigned, "No owner", counts.unassigned ? "#d97706" : "#0f172a", () => { setFilter("unassigned"); setSavedView("all"); }],
-              ["Aging 3d+", operationsMetrics.aging3Plus, "Open 3+ days", operationsMetrics.aging3Plus ? "#c2410c" : "#0f172a", () => { setFilter("all"); setSavedView("aging"); }],
-              ["Waiting 48h+", operationsMetrics.waiting48Plus, "Waiting 2+ days", operationsMetrics.waiting48Plus ? "#7c3aed" : "#0f172a", () => { setFilter("all"); setSavedView("all"); }],
-            ].map(([label, value, subtitle, valueColor, onClick]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={onClick}
-                style={{
-                  minWidth: 0,
-                  minHeight: "104px",
-                  textAlign: "left",
-                  border: "1px solid #e2e8f0",
-                  background: "#fff",
-                  borderRadius: "12px",
-                  padding: "14px",
-                  cursor: "pointer",
-                  boxShadow: "0 1px 2px rgba(15,23,42,.03)",
-                }}
-              >
-                <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</div>
-                <div style={{ marginTop: "8px", fontSize: "28px", lineHeight: 1, fontWeight: 800, color: valueColor }}>{value}</div>
-                <div style={{ marginTop: "7px", fontSize: "11px", color: "#94a3b8" }}>{subtitle}</div>
-              </button>
-            ))}
-          </div>
-
-          <div
-            style={{
-              padding: "0 16px 16px",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "12px",
-            }}
-          >
-            <div style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: "12px", padding: "15px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 800, color: "#334155" }}>Ticket aging</div>
-              <div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>How long active tickets have been open</div>
-              <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "8px" }}>
-                {[
-                  ["<1d", operationsMetrics.under1Day],
-                  ["1–3d", operationsMetrics.oneTo3Days],
-                  ["3–5d", operationsMetrics.threeTo5Days],
-                  ["5d+", operationsMetrics.fivePlusDays],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ minWidth: 0 }}>
-                    <div style={{ height: "7px", borderRadius: "99px", background: "#e2e8f0", overflow: "hidden" }}>
-                      <div style={{ width: `${counts.active ? Math.min(100, (value / counts.active) * 100) : 0}%`, height: "100%", background: "#475569", borderRadius: "99px" }} />
-                    </div>
-                    <div style={{ marginTop: "7px", fontSize: "11px", color: "#64748b" }}>{label}</div>
-                    <div style={{ marginTop: "2px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: "12px", padding: "15px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 800, color: "#334155" }}>Status mix</div>
-              <div style={{ marginTop: "3px", fontSize: "11px", color: "#94a3b8" }}>Current active workload</div>
-              <div style={{ marginTop: "13px", display: "grid", gap: "8px" }}>
-                {[
-                  ["Open", counts.open],
-                  ["In Progress", counts.inprogress],
-                  ["Waiting", counts.waiting],
-                  ["On Hold", counts.onhold],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr) 32px", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "11px", color: "#64748b" }}>{label}</span>
-                    <div style={{ height: "6px", borderRadius: "99px", background: "#e2e8f0", overflow: "hidden" }}>
-                      <div style={{ width: `${counts.active ? Math.min(100, (value / counts.active) * 100) : 0}%`, height: "100%", background: "#64748b", borderRadius: "99px" }} />
-                    </div>
-                    <strong style={{ fontSize: "11px", textAlign: "right", color: "#334155" }}>{value}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
 
         <div className="ticket-list">
 
