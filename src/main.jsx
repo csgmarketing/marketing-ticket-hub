@@ -48,13 +48,6 @@ const BRAND_STATUSES = {
   ],
 };
 
-const TUTOR_DOCTOR_DEPARTMENTS = [
-  { value: "all", label: "All departments" },
-  { value: "Marketing", label: "Marketing" },
-  { value: "Client_Tutor Newsletter", label: "Client/Tutor Newsletter" },
-  { value: "Marketing Tech", label: "Marketing Tech" },
-];
-
 const CODEWIZ_TICKET_OWNERS = [
   {
     name: "Manuela Cruz",
@@ -88,6 +81,57 @@ const CODEWIZ_DEFAULT_DEPARTMENT = {
   email: "marketing@thecodewiz.com",
 };
 
+
+const ALLOWED_LOGIN_DOMAINS = [
+  "clearsummitgroup.com",
+  "tutordoctor.org",
+  "qualicare.com",
+  "thecodewiz.com",
+];
+
+function isApprovedCompanyEmail(value) {
+  const normalized =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  const atIndex =
+    normalized.lastIndexOf("@");
+
+  if (
+    atIndex <= 0 ||
+    atIndex ===
+      normalized.length - 1
+  ) {
+    return false;
+  }
+
+  const domain =
+    normalized.slice(
+      atIndex + 1
+    );
+
+  return ALLOWED_LOGIN_DOMAINS.includes(
+    domain
+  );
+}
+
+
+const TUTOR_DOCTOR_DEPARTMENTS = [
+  {
+    value: "Marketing",
+    label: "Marketing",
+  },
+  {
+    value: "Client_Tutor Newsletter",
+    label: "Client/Tutor Newsletter",
+  },
+  {
+    value: "Marketing Tech",
+    label: "Marketing Tech",
+  },
+];
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -114,6 +158,58 @@ function formatDate(value) {
       year: "numeric",
     }
   ).format(date);
+}
+
+function formatTicketAge(ticket) {
+  if (!ticket) return "—";
+
+  const openedAt =
+    ticket.created_at_zoho ||
+    ticket.created_at;
+
+  if (!openedAt) return "—";
+
+  const openedMs = new Date(openedAt).getTime();
+  if (Number.isNaN(openedMs)) return "—";
+
+  const endMs =
+    ticket.status === "Closed" && ticket.updated_at_zoho
+      ? new Date(ticket.updated_at_zoho).getTime()
+      : Date.now();
+
+  const diffMs = Math.max(0, endMs - openedMs);
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  return `${Math.max(1, minutes)}m`;
+}
+
+function formatNotificationType(type) {
+  const labels = {
+    mention: "mentioned you",
+    assignment: "assigned you a ticket",
+    reply: "new reply",
+    comment: "new internal comment",
+    status_change: "status changed",
+    priority_change: "priority changed",
+    department_change: "department changed",
+    reopened: "ticket reopened",
+    closed: "ticket closed",
+    overdue: "ticket is overdue",
+    reminder: "reminder",
+  };
+
+  return labels[type] || "ticket activity";
 }
 
 function formatDateTime(value) {
@@ -567,107 +663,142 @@ function RecipientLine({
 }
 
 // ======================================================
-// LOGIN / PASSWORD AUTH
+// LOGIN
 // ======================================================
 
-const APPROVED_AUTH_DOMAINS = [
-  "@clearsummitgroup.com",
-  "@tutordoctor.org",
-  "@qualicare.com",
-  "@thecodewiz.com",
-];
-
-function isApprovedCompanyEmail(email) {
-  const normalized = String(email || "").trim().toLowerCase();
-  return APPROVED_AUTH_DOMAINS.some((domain) => normalized.endsWith(domain));
-}
-
-function Login({ onSignedIn, onPasswordRecovery }) {
+function Login({
+  onSignedIn,
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState("signin");
 
-  async function signIn(event) {
+  async function submit(event) {
     event.preventDefault();
+
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) { setMessage("Enter your work email address."); return; }
-    if (!isApprovedCompanyEmail(normalizedEmail)) { setMessage("Please use an approved company email address."); return; }
-    if (!password) { setMessage("Enter your password."); return; }
 
-    setBusy(true); setMessage("");
-    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
-    if (error) {
-      setMessage("That email and password combination could not be verified. If you need access, use Forgot password below.");
-    } else if (data?.session) {
-      onSignedIn(data.session);
+    if (!isApprovedCompanyEmail(normalizedEmail)) {
+      setMessage("Please use an approved company email address.");
+      return;
     }
-    setBusy(false);
-  }
 
-  async function sendPasswordReset(event) {
-    event.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) { setMessage("Enter your work email address first."); return; }
-    if (!isApprovedCompanyEmail(normalizedEmail)) { setMessage("Please use an approved company email address."); return; }
+    setBusy(true);
+    setMessage("");
 
-    setBusy(true); setMessage("");
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo: window.location.origin });
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setMessage("If an account exists for that work email, we sent a password reset link. Check your inbox.");
-    }
-    setBusy(false);
-  }
+    try {
+      if (mode === "signin") {
+        if (!password) {
+          setMessage("Enter your password.");
+          return;
+        }
 
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === "PASSWORD_RECOVERY") {
-        onPasswordRecovery();
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        });
+
+        if (error) throw error;
+        if (data.session) onSignedIn(data.session);
         return;
       }
-      if (nextSession && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
-        onSignedIn(nextSession);
-      }
-    });
-    return () => listener.subscription.unsubscribe();
-  }, [onSignedIn, onPasswordRecovery]);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        normalizedEmail,
+        { redirectTo: window.location.origin }
+      );
+
+      if (error) throw error;
+
+      setMessage(
+        mode === "create"
+          ? "Check your email for a secure link to create your password."
+          : "Check your email for a secure link to reset your password."
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+        <div className="login-logo">
+          <span className="login-logo-mountain">▲</span>
+          <span>CSG</span>
+        </div>
+
         <h1>Marketing Ticket Hub</h1>
         <p>One workspace for Qualicare, Tutor Doctor and Code Wiz.</p>
 
-        {mode === "signin" ? (
-          <form onSubmit={signIn}>
-            <label>Work email</label>
-            <input type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} autoFocus />
-            <label>Password</label>
-            <input type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} />
-            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-            <button type="button" className="login-secondary-button" onClick={() => { setMode("forgot"); setMessage(""); }} disabled={busy}>Forgot password?</button>
-            {message && <div className="login-message">{message}</div>}
-          </form>
-        ) : (
-          <form onSubmit={sendPasswordReset}>
-            <label>Work email</label>
-            <input type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} autoFocus />
-            <p className="login-help-text">We’ll email you a secure link to create a new password.</p>
-            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
-            <button type="button" className="login-secondary-button" onClick={() => { setMode("signin"); setMessage(""); }} disabled={busy}>Back to sign in</button>
-            {message && <div className="login-message">{message}</div>}
-          </form>
-        )}
+        <form onSubmit={submit}>
+          <label className="login-field-label">Work email</label>
+          <input
+            className="login-input"
+            type="email"
+            value={email}
+            autoComplete="email"
+            placeholder="you@company.com"
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
+          {mode === "signin" && (
+            <>
+              <label className="login-field-label">Password</label>
+              <input
+                className="login-input"
+                type="password"
+                value={password}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </>
+          )}
+
+          {message && <div className="login-message">{message}</div>}
+
+          <button className="login-submit" type="submit" disabled={busy}>
+            {busy
+              ? "Please wait…"
+              : mode === "signin"
+                ? "Sign in"
+                : mode === "create"
+                  ? "Send setup link"
+                  : "Send reset link"}
+          </button>
+        </form>
+
+        <div className="login-links">
+          {mode === "signin" ? (
+            <>
+              <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }}>
+                Forgot password?
+              </button>
+              <button type="button" onClick={() => { setMode("create"); setMessage(""); }}>
+                First time accessing the Hub? <strong>Create your password</strong>
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => { setMode("signin"); setMessage(""); }}>
+              ← Back to sign in
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function ResetPassword({ onComplete }) {
+function PasswordRecovery({ onComplete }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -675,40 +806,73 @@ function ResetPassword({ onComplete }) {
 
   async function updatePassword(event) {
     event.preventDefault();
-    if (password.length < 8) { setMessage("Your password must be at least 8 characters."); return; }
-    if (password !== confirmPassword) { setMessage("The passwords do not match."); return; }
 
-    setBusy(true); setMessage("");
+    if (password.length < 8) {
+      setMessage("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
     const { error } = await supabase.auth.updateUser({ password });
-    if (error) { setMessage(error.message); setBusy(false); return; }
 
-    await supabase.auth.signOut();
-    setBusy(false);
+    if (error) {
+      setMessage(error.message);
+      setBusy(false);
+      return;
+    }
+
     onComplete();
+    setBusy(false);
   }
 
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+        <div className="login-logo">
+          <span className="login-logo-mountain">▲</span>
+          <span>CSG</span>
+        </div>
         <h1>Create your password</h1>
-        <p>Choose a password for your Marketing Ticket Hub account.</p>
+        <p>Choose a password of at least 8 characters for the Marketing Ticket Hub.</p>
+
         <form onSubmit={updatePassword}>
-          <label>New password</label>
-          <input type="password" autoComplete="new-password" placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus />
-          <label>Confirm password</label>
-          <input type="password" autoComplete="new-password" placeholder="Enter it again" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
-          <button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving…" : "Set password"}</button>
+          <label className="login-field-label">New password</label>
+          <input
+            className="login-input"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            placeholder="At least 8 characters"
+            onChange={(event) => setPassword(event.target.value)}
+          />
+
+          <label className="login-field-label">Confirm password</label>
+          <input
+            className="login-input"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            placeholder="Re-enter your password"
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+
           {message && <div className="login-message">{message}</div>}
+
+          <button className="login-submit" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Create password"}
+          </button>
         </form>
       </div>
     </div>
   );
 }
-
-// ======================================================
-// APP
-// ======================================================
 
 function App() {
   const editorRef =
@@ -736,16 +900,22 @@ function App() {
     useState(null);
 
   const [
-    authLoading,
-    setAuthLoading,
-  ] =
-    useState(true);
-
-  const [
     passwordRecovery,
     setPasswordRecovery,
   ] =
     useState(false);
+
+  const [
+    ageTick,
+    setAgeTick,
+  ] =
+    useState(0);
+
+  const [
+    authLoading,
+    setAuthLoading,
+  ] =
+    useState(true);
 
   const [
     tickets,
@@ -973,31 +1143,6 @@ function App() {
   ] =
     useState(false);
 
-  const tagAutocompleteRef =
-    useRef(null);
-
-  useEffect(() => {
-    function handleTagOutsideClick(event) {
-      if (
-        tagAutocompleteRef.current &&
-        !tagAutocompleteRef.current.contains(event.target)
-      ) {
-        setShowTagSuggestions(false);
-      }
-    }
-
-    document.addEventListener(
-      "mousedown",
-      handleTagOutsideClick
-    );
-
-    return () =>
-      document.removeEventListener(
-        "mousedown",
-        handleTagOutsideClick
-      );
-  }, []);
-
   // ====================================================
   // EMAIL COMPOSER
   // ====================================================
@@ -1135,6 +1280,28 @@ function App() {
     useState("");
 
   // ====================================================
+  // NOTIFICATIONS
+  // ====================================================
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState([]);
+
+  const [
+    showNotifications,
+    setShowNotifications,
+  ] =
+    useState(false);
+
+  const [
+    loadingNotifications,
+    setLoadingNotifications,
+  ] =
+    useState(false);
+
+  // ====================================================
   // AUTH
   // ====================================================
 
@@ -1169,13 +1336,8 @@ function App() {
             event,
             nextSession
           ) => {
-            if (
-              event ===
-              "PASSWORD_RECOVERY"
-            ) {
-              setPasswordRecovery(
-                true
-              );
+            if (event === "PASSWORD_RECOVERY") {
+              setPasswordRecovery(true);
             }
 
             setSession(
@@ -1190,6 +1352,245 @@ function App() {
         .unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAgeTick((value) => value + 1);
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Keep ticket age calculations reactive while the Hub remains open.
+  void ageTick;
+
+  // ====================================================
+  // NOTIFICATIONS
+  // ====================================================
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        if (!session) {
+          setNotifications([]);
+          return;
+        }
+
+        setLoadingNotifications(
+          true
+        );
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "ticket_notifications"
+            )
+            .select("*")
+            .order(
+              "created_at",
+              {
+                ascending:
+                  false,
+              }
+            )
+            .limit(50);
+
+        if (error) {
+          console.error(
+            "Notification load error:",
+            error
+          );
+          setNotifications([]);
+        } else {
+          setNotifications(
+            data || []
+          );
+        }
+
+        setLoadingNotifications(
+          false
+        );
+      },
+      [
+        session,
+      ]
+    );
+
+  useEffect(() => {
+    if (session) {
+      loadNotifications();
+    } else {
+      setNotifications([]);
+    }
+  }, [
+    session,
+    loadNotifications,
+  ]);
+
+  const unreadNotificationCount =
+    useMemo(
+      () =>
+        notifications.filter(
+          (
+            notification
+          ) =>
+            !notification.is_read
+        ).length,
+      [
+        notifications,
+      ]
+    );
+
+  async function openNotification(
+    notification
+  ) {
+    if (!notification) {
+      return;
+    }
+
+    if (
+      !notification.is_read
+    ) {
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            "ticket_notifications"
+          )
+          .update({
+            is_read:
+              true,
+
+            read_at:
+              new Date()
+                .toISOString(),
+          })
+          .eq(
+            "id",
+            notification.id
+          );
+
+      if (!error) {
+        setNotifications(
+          (
+            current
+          ) =>
+            current.map(
+              (
+                item
+              ) =>
+                item.id ===
+                notification.id
+                  ? {
+                      ...item,
+                      is_read:
+                        true,
+                      read_at:
+                        new Date()
+                          .toISOString(),
+                    }
+                  : item
+            )
+        );
+      }
+    }
+
+    setFilter(
+      "all"
+    );
+
+    setBrandFilter(
+      notification.source ||
+      "all"
+    );
+
+    setDepartmentFilter(
+      "all"
+    );
+
+    setSearch(
+      ""
+    );
+
+    setSelectedKey(
+      notification.ticket_key
+    );
+
+    setShowNotifications(
+      false
+    );
+  }
+
+  async function markAllNotificationsRead() {
+    const unreadIds =
+      notifications
+        .filter(
+          (
+            notification
+          ) =>
+            !notification.is_read
+        )
+        .map(
+          (
+            notification
+          ) =>
+            notification.id
+        );
+
+    if (
+      unreadIds.length ===
+      0
+    ) {
+      return;
+    }
+
+    const now =
+      new Date()
+        .toISOString();
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          "ticket_notifications"
+        )
+        .update({
+          is_read:
+            true,
+
+          read_at:
+            now,
+        })
+        .in(
+          "id",
+          unreadIds
+        );
+
+    if (!error) {
+      setNotifications(
+        (
+          current
+        ) =>
+          current.map(
+            (
+              item
+            ) => ({
+              ...item,
+              is_read:
+                true,
+              read_at:
+                item.read_at ||
+                now,
+            })
+          )
+      );
+    }
+  }
 
   // ====================================================
   // TICKETS
@@ -1845,6 +2246,30 @@ function App() {
             event: "*",
             schema: "public",
             table:
+              "ticket_notifications",
+          },
+          () => {
+            loadNotifications();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
+              "ticket_notifications",
+          },
+          () => {
+            loadNotifications();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
               "ticket_tags",
           },
           (
@@ -1881,6 +2306,7 @@ function App() {
     loadThreads,
     loadComments,
     loadTags,
+    loadNotifications,
   ]);
 
   // ====================================================
@@ -2728,22 +3154,152 @@ function App() {
           .trim()
           .toLowerCase();
 
-      return agents
+      const zohoAgentOptions =
+        agents
+          .filter(
+            (
+              agent
+            ) =>
+              agent.zuid
+          )
+          .map(
+            (
+              agent
+            ) => ({
+              ...agent,
+
+              mention_type:
+                "zoho_agent",
+
+              mention_key:
+                `zoho:${agent.zoho_agent_id}`,
+            })
+          );
+
+      /*
+        Qualicare's active Zoho agents currently come back without ZUIDs.
+        They therefore cannot create native Zoho @mentions, but we still
+        expose them in the Ticket Hub mention picker and handle them as
+        Ticket Hub mentions.
+      */
+      const qualicareHubOptions =
+        selected?.source ===
+        "Qualicare"
+          ? agents
+              .filter(
+                (
+                  agent
+                ) =>
+                  !agent.zuid &&
+                  agent.active !==
+                    false &&
+                  String(
+                    agent.email ||
+                      ""
+                  ).trim()
+              )
+              .map(
+                (
+                  agent
+                ) => ({
+                  ...agent,
+
+                  mention_type:
+                    "ticket_hub_user",
+
+                  mention_key:
+                    `ticket-hub:${String(
+                      agent.email ||
+                        ""
+                    )
+                      .trim()
+                      .toLowerCase()}`,
+                })
+              )
+          : [];
+
+      const codeWizTeamOptions =
+        selected?.source ===
+        "Code Wiz"
+          ? CODEWIZ_TICKET_OWNERS.map(
+              (
+                person
+              ) => ({
+                ...person,
+
+                zoho_agent_id:
+                  null,
+
+                zuid:
+                  null,
+
+                mention_type:
+                  "ticket_hub_user",
+
+                mention_key:
+                  `ticket-hub:${person.email.toLowerCase()}`,
+              })
+            )
+          : [];
+
+      const zohoEmails =
+        new Set(
+          zohoAgentOptions
+            .map(
+              (
+                agent
+              ) =>
+                String(
+                  agent.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+            )
+            .filter(Boolean)
+        );
+
+      const combined =
+        [
+          ...codeWizTeamOptions.filter(
+            (
+              person
+            ) =>
+              !zohoEmails.has(
+                String(
+                  person.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+              )
+          ),
+          ...qualicareHubOptions.filter(
+            (
+              person
+            ) =>
+              !zohoEmails.has(
+                String(
+                  person.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+              )
+          ),
+          ...zohoAgentOptions,
+        ];
+
+      return combined
         .filter(
           (
-            agent
-          ) =>
-            agent.zuid
-        )
-        .filter(
-          (
-            agent
+            person
           ) => {
             if (!needle) {
               return true;
             }
 
-            return `${agent.name || ""} ${agent.email || ""}`
+            return `${person.name || ""} ${person.email || ""}`
               .toLowerCase()
               .includes(
                 needle
@@ -2752,11 +3308,12 @@ function App() {
         )
         .slice(
           0,
-          8
+          12
         );
     }, [
       agents,
       mentionQuery,
+      selected?.source,
       showMentionSuggestions,
     ]);
 
@@ -2788,6 +3345,24 @@ function App() {
     }
   }
 
+  function mentionIdentity(
+    mention
+  ) {
+    return (
+      mention?.mention_key ||
+      (
+        mention?.zoho_agent_id
+          ? `zoho:${mention.zoho_agent_id}`
+          : `ticket-hub:${String(
+              mention?.email ||
+                ""
+            )
+              .trim()
+              .toLowerCase()}`
+      )
+    );
+  }
+
   function selectMention(
     agent
   ) {
@@ -2806,7 +3381,7 @@ function App() {
     const display =
       agent.name ||
       agent.email ||
-      "Agent";
+      "Teammate";
 
     const before =
       commentText.slice(
@@ -2822,13 +3397,20 @@ function App() {
       (
         current
       ) => {
+        const identity =
+          mentionIdentity(
+            agent
+          );
+
         if (
           current.some(
             (
               item
             ) =>
-              item.zoho_agent_id ===
-              agent.zoho_agent_id
+              mentionIdentity(
+                item
+              ) ===
+              identity
           )
         ) {
           return current;
@@ -2837,17 +3419,27 @@ function App() {
         return [
           ...current,
           {
+            mention_type:
+              agent.mention_type ||
+              "zoho_agent",
+
+            mention_key:
+              identity,
+
             zoho_agent_id:
-              agent.zoho_agent_id,
+              agent.zoho_agent_id ||
+              null,
 
             name:
               display,
 
             email:
-              agent.email,
+              agent.email ||
+              null,
 
             zuid:
-              agent.zuid,
+              agent.zuid ||
+              null,
           },
         ];
       }
@@ -2922,13 +3514,24 @@ function App() {
         const visible =
           `@${mention.name}`;
 
+        const placeholder =
+          mention.mention_type ===
+          "ticket_hub_user"
+            ? `[[HUB_MENTION:${String(
+                mention.email ||
+                  ""
+              )
+                .trim()
+                .toLowerCase()}]]`
+            : `[[MENTION:${mention.zoho_agent_id}]]`;
+
         transformed =
           transformed
             .split(
               visible
             )
             .join(
-              `[[MENTION:${mention.zoho_agent_id}]]`
+              placeholder
             );
       }
 
@@ -2967,8 +3570,21 @@ function App() {
                     (
                       mention
                     ) => ({
+                      mention_type:
+                        mention.mention_type ||
+                        "zoho_agent",
+
                       zoho_agent_id:
-                        mention.zoho_agent_id,
+                        mention.zoho_agent_id ||
+                        null,
+
+                      name:
+                        mention.name ||
+                        null,
+
+                      email:
+                        mention.email ||
+                        null,
                     })
                   ),
 
@@ -3457,10 +4073,40 @@ function App() {
   // FILTERING
   // ====================================================
 
+  function isVisibleMarketingTicket(
+    ticket
+  ) {
+    /*
+      Code Wiz Support tickets remain synced in Supabase so a Marketing
+      ticket can still be reassigned to Support and Support agents can
+      continue to be used in the Department and @mention controls.
+
+      They are simply excluded from the Marketing Ticket Hub's ticket
+      lists, searches, My Work views, status views, and counts.
+    */
+    if (
+      ticket?.source ===
+        "Code Wiz" &&
+      String(
+        ticket?.department ||
+          ""
+      )
+        .trim()
+        .toLowerCase() ===
+        "support"
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
   const filteredTickets =
     useMemo(() => {
       let rows =
-        [...tickets];
+        tickets.filter(
+          isVisibleMarketingTicket
+        );
 
       if (
         brandFilter !==
@@ -3484,7 +4130,9 @@ function App() {
       ) {
         rows =
           rows.filter(
-            (ticket) =>
+            (
+              ticket
+            ) =>
               String(
                 ticket.department ||
                   ""
@@ -3754,17 +4402,41 @@ function App() {
           ?.email
           ?.toLowerCase();
 
-      const countTickets =
+      const visibleTickets =
+        tickets.filter(
+          isVisibleMarketingTicket
+        );
+
+      let countTickets =
         brandFilter ===
         "all"
-          ? tickets
-          : tickets.filter(
+          ? visibleTickets
+          : visibleTickets.filter(
               (
                 ticket
               ) =>
                 ticket.source ===
                 brandFilter
             );
+
+      if (
+        brandFilter ===
+          "Tutor Doctor" &&
+        departmentFilter !==
+          "all"
+      ) {
+        countTickets =
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              String(
+                ticket.department ||
+                  ""
+              ).trim() ===
+              departmentFilter
+          );
+      }
 
       return {
         active:
@@ -3867,6 +4539,7 @@ function App() {
       tickets,
       session,
       brandFilter,
+      departmentFilter,
     ]);
 
   async function signOut() {
@@ -3885,20 +4558,11 @@ function App() {
     );
   }
 
-  if (
-    passwordRecovery
-  ) {
+  if (passwordRecovery) {
     return (
-      <ResetPassword
+      <PasswordRecovery
         onComplete={() => {
-          setPasswordRecovery(
-            false
-          );
-          window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname
-          );
+          setPasswordRecovery(false);
         }}
       />
     );
@@ -3909,11 +4573,6 @@ function App() {
       <Login
         onSignedIn={
           setSession
-        }
-        onPasswordRecovery={() =>
-          setPasswordRecovery(
-            true
-          )
         }
       />
     );
@@ -4334,6 +4993,32 @@ function App() {
             MY WORK
           </div>
 
+          <button
+            className={`nav-item ${
+              showNotifications
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setShowNotifications(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+          >
+            <span>
+              Mentions
+            </span>
+
+            <span className="nav-count">
+              {
+                unreadNotificationCount
+              }
+            </span>
+          </button>
+
           {[
             [
               "mine",
@@ -4504,9 +5189,14 @@ function App() {
                     value
                   );
 
-                  setDepartmentFilter(
-                    "all"
-                  );
+                  if (
+                    value !==
+                    "Tutor Doctor"
+                  ) {
+                    setDepartmentFilter(
+                      "all"
+                    );
+                  }
 
                   setSearch(
                     ""
@@ -4527,55 +5217,59 @@ function App() {
           )}
         </div>
 
-        {brandFilter === "Tutor Doctor" && (
-          <div className="sidebar-section tutor-department-section">
+        {brandFilter ===
+          "Tutor Doctor" && (
+          <div className="sidebar-section">
+
             <div className="sidebar-label">
-              DEPARTMENTS
+              TUTOR DOCTOR DEPARTMENT
             </div>
 
-            {TUTOR_DOCTOR_DEPARTMENTS.map(
-              (department) => {
-                const departmentCount =
-                  tickets.filter(
-                    (ticket) =>
-                      ticket.source ===
-                        "Tutor Doctor" &&
-                      ticket.status !==
-                        "Closed" &&
-                      (department.value ===
-                        "all" ||
-                        String(
-                          ticket.department ||
-                            ""
-                        ).trim() ===
-                          department.value)
-                  ).length;
+            {[
+              [
+                "all",
+                "All Departments",
+              ],
+              ...TUTOR_DOCTOR_DEPARTMENTS.map(
+                (
+                  department
+                ) => [
+                  department.value,
+                  department.label,
+                ]
+              ),
+            ].map(
+              (
+                [
+                  value,
+                  label,
+                ]
+              ) => (
+                <button
+                  key={
+                    value
+                  }
+                  className={`nav-item ${
+                    departmentFilter ===
+                    value
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setDepartmentFilter(
+                      value
+                    );
 
-                return (
-                  <button
-                    key={department.value}
-                    type="button"
-                    className={`nav-item department-nav-item ${
-                      departmentFilter ===
-                      department.value
-                        ? "active"
-                        : ""
-                    }`}
-                    onClick={() => {
-                      setDepartmentFilter(
-                        department.value
-                      );
-                      setFilter("all");
-                      setSearch("");
-                    }}
-                  >
-                    <span>{department.label}</span>
-                    <span className="nav-count">
-                      {departmentCount}
-                    </span>
-                  </button>
-                );
-              }
+                    setSearch(
+                      ""
+                    );
+                  }}
+                >
+                  <span>
+                    {label}
+                  </span>
+                </button>
+              )
             )}
           </div>
         )}
@@ -4611,6 +5305,340 @@ function App() {
         </div>
       </aside>
 
+      {showNotifications && (
+        <div
+          style={{
+            position:
+              "fixed",
+            left:
+              "248px",
+            top:
+              "16px",
+            width:
+              "380px",
+            maxHeight:
+              "calc(100vh - 32px)",
+            overflowY:
+              "auto",
+            background:
+              "#ffffff",
+            border:
+              "1px solid #e5e7eb",
+            borderRadius:
+              "14px",
+            boxShadow:
+              "0 18px 45px rgba(15, 23, 42, 0.18)",
+            zIndex:
+              1000,
+          }}
+        >
+          <div
+            style={{
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "space-between",
+              gap:
+                "12px",
+              padding:
+                "16px",
+              borderBottom:
+                "1px solid #e5e7eb",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontWeight:
+                    700,
+                  fontSize:
+                    "16px",
+                }}
+              >
+                Notifications
+              </div>
+
+              <div
+                style={{
+                  fontSize:
+                    "12px",
+                  color:
+                    "#6b7280",
+                  marginTop:
+                    "2px",
+                }}
+              >
+                {
+                  unreadNotificationCount
+                } unread
+              </div>
+            </div>
+
+            <div
+              style={{
+                display:
+                  "flex",
+                gap:
+                  "8px",
+              }}
+            >
+              {unreadNotificationCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={
+                    markAllNotificationsRead
+                  }
+                  style={{
+                    border:
+                      "0",
+                    background:
+                      "transparent",
+                    fontSize:
+                      "12px",
+                    cursor:
+                      "pointer",
+                    color:
+                      "#475569",
+                  }}
+                >
+                  Mark all read
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowNotifications(
+                    false
+                  )
+                }
+                style={{
+                  border:
+                    "0",
+                  background:
+                    "transparent",
+                  fontSize:
+                    "20px",
+                  lineHeight:
+                    1,
+                  cursor:
+                    "pointer",
+                  color:
+                    "#64748b",
+                }}
+                aria-label="Close notifications"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {loadingNotifications ? (
+            <div
+              style={{
+                padding:
+                  "20px",
+                color:
+                  "#64748b",
+                fontSize:
+                  "13px",
+              }}
+            >
+              Loading notifications…
+            </div>
+          ) : notifications.length ===
+            0 ? (
+            <div
+              style={{
+                padding:
+                  "24px 18px",
+                color:
+                  "#64748b",
+                fontSize:
+                  "13px",
+              }}
+            >
+              No notifications yet.
+            </div>
+          ) : (
+            notifications.map(
+              (
+                notification
+              ) => (
+                <button
+                  key={
+                    notification.id
+                  }
+                  type="button"
+                  onClick={() =>
+                    openNotification(
+                      notification
+                    )
+                  }
+                  style={{
+                    display:
+                      "block",
+                    width:
+                      "100%",
+                    textAlign:
+                      "left",
+                    border:
+                      "0",
+                    borderBottom:
+                      "1px solid #f1f5f9",
+                    background:
+                      notification.is_read
+                        ? "#ffffff"
+                        : "#f8fafc",
+                    padding:
+                      "14px 16px",
+                    cursor:
+                      "pointer",
+                  }}
+                >
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "space-between",
+                      gap:
+                        "10px",
+                    }}
+                  >
+                    <strong
+                      style={{
+                        fontSize:
+                          "13px",
+                        color:
+                          "#0f172a",
+                      }}
+                    >
+                      {notification.source}
+                      {notification.ticket_number
+                        ? ` #${notification.ticket_number}`
+                        : ""}
+                    </strong>
+
+                    {!notification.is_read && (
+                      <span
+                        style={{
+                          width:
+                            "8px",
+                          height:
+                            "8px",
+                          borderRadius:
+                            "999px",
+                          background:
+                            "#2563eb",
+                          flex:
+                            "0 0 auto",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize:
+                        "13px",
+                      fontWeight:
+                        600,
+                      color:
+                        "#334155",
+                      marginTop:
+                        "6px",
+                    }}
+                  >
+                    {notification.actor_name || "Someone"} {formatNotificationType(notification.notification_type)}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize:
+                        "12px",
+                      color:
+                        "#64748b",
+                      marginTop:
+                        "3px",
+                    }}
+                  >
+                    {notification.subject || "Untitled ticket"}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize:
+                        "12px",
+                      color:
+                        "#475569",
+                      marginTop:
+                        "6px",
+                      lineHeight:
+                        1.45,
+                    }}
+                  >
+                    {notification.actor_name ||
+                      notification.actor_email ||
+                      "A teammate"}{" "}
+                    mentioned you
+                  </div>
+
+                  {notification.comment_text && (
+                    <div
+                      style={{
+                        fontSize:
+                          "12px",
+                        color:
+                          "#64748b",
+                        marginTop:
+                          "5px",
+                        lineHeight:
+                          1.45,
+                        display:
+                          "-webkit-box",
+                        WebkitLineClamp:
+                          2,
+                        WebkitBoxOrient:
+                          "vertical",
+                        overflow:
+                          "hidden",
+                      }}
+                    >
+                      {
+                        notification.comment_text
+                      }
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      fontSize:
+                        "11px",
+                      color:
+                        "#94a3b8",
+                      marginTop:
+                        "8px",
+                    }}
+                  >
+                    {notification.created_at
+                      ? new Date(
+                          notification.created_at
+                        ).toLocaleString()
+                      : ""}
+                  </div>
+                </button>
+              )
+            )
+          )}
+        </div>
+      )}
+
       {/* TICKETS */}
 
       <section className="ticket-column">
@@ -4622,7 +5650,21 @@ function App() {
               {brandFilter ===
               "all"
                 ? "Tickets"
-                : brandFilter}
+                : brandFilter ===
+                    "Tutor Doctor" &&
+                  departmentFilter !==
+                    "all"
+                  ? `Tutor Doctor · ${
+                      TUTOR_DOCTOR_DEPARTMENTS.find(
+                        (
+                          department
+                        ) =>
+                          department.value ===
+                          departmentFilter
+                      )?.label ||
+                      departmentFilter
+                    }`
+                  : brandFilter}
             </h1>
 
             <p>
@@ -4746,6 +5788,13 @@ function App() {
                     ) ||
                       "Unassigned"}
                   </span>
+
+                  <span
+                    className="ticket-age"
+                    title="Time since ticket opened"
+                  >
+                    {formatTicketAge(ticket)}
+                  </span>
                 </div>
               </button>
             )
@@ -4831,6 +5880,33 @@ function App() {
                         selected.contact_email
                       }
                     </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginTop: "10px",
+                    fontSize: "12px",
+                    color: "#64748b",
+                  }}
+                >
+                  <span>
+                    Opened {formatDateTime(selected.created_at_zoho || selected.created_at)}
+                  </span>
+                  <span>·</span>
+                  <strong style={{ color: "#334155" }}>
+                    Age {formatTicketAge(selected)}
+                  </strong>
+                  {selected.due_date && (
+                    <>
+                      <span>·</span>
+                      <span style={{ color: isOverdue(selected) ? "#dc2626" : "#64748b" }}>
+                        {isOverdue(selected) ? "Overdue" : `Due ${formatDate(selected.due_date)}`}
+                      </span>
+                    </>
                   )}
                 </div>
               </div>
@@ -5664,7 +6740,7 @@ function App() {
                     value={
                       commentText
                     }
-                    placeholder="Add a comment… Type @ to mention an agent."
+                    placeholder="Add a comment… Type @ to mention an agent or teammate."
                     onChange={(
                       event
                     ) =>
@@ -5688,7 +6764,9 @@ function App() {
                             <button
                               type="button"
                               key={
-                                agent.zoho_agent_id
+                                mentionIdentity(
+                                  agent
+                                )
                               }
                               onClick={() =>
                                 selectMention(
@@ -5720,6 +6798,10 @@ function App() {
                                     {
                                       agent.email
                                     }
+                                    {agent.mention_type ===
+                                      "ticket_hub_user"
+                                      ? " · Ticket Hub teammate"
+                                      : ""}
                                   </small>
                                 )}
                               </span>
@@ -5740,7 +6822,9 @@ function App() {
                       ) => (
                         <span
                           key={
-                            mention.zoho_agent_id
+                            mentionIdentity(
+                              mention
+                            )
                           }
                         >
                           @
@@ -5759,8 +6843,12 @@ function App() {
                                     (
                                       item
                                     ) =>
-                                      item.zoho_agent_id !==
-                                      mention.zoho_agent_id
+                                      mentionIdentity(
+                                        item
+                                      ) !==
+                                      mentionIdentity(
+                                        mention
+                                      )
                                   )
                               )
                             }
@@ -6437,7 +7525,6 @@ function App() {
                     </div>
 
                     <form
-                      ref={tagAutocompleteRef}
                       className="tag-autocomplete"
                       onSubmit={
                         addTag
@@ -6457,13 +7544,6 @@ function App() {
                               true
                             )
                           }
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              setShowTagSuggestions(false);
-                              setTagInput("");
-                              event.currentTarget.blur();
-                            }
-                          }}
                           onChange={(
                             event
                           ) => {
@@ -6487,40 +7567,6 @@ function App() {
                                 overflowY: "auto",
                               }}
                             >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "space-between",
-                                  gap: "8px",
-                                  padding: "8px 10px",
-                                  borderBottom: "1px solid var(--border, #e5e7eb)",
-                                }}
-                              >
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                                  Add tag
-                                </span>
-                                <button
-                                  type="button"
-                                  aria-label="Close tag suggestions"
-                                  onMouseDown={(event) => event.preventDefault()}
-                                  onClick={() => {
-                                    setShowTagSuggestions(false);
-                                    setTagInput("");
-                                  }}
-                                  style={{
-                                    border: 0,
-                                    background: "transparent",
-                                    cursor: "pointer",
-                                    fontSize: "18px",
-                                    lineHeight: 1,
-                                    color: "#64748b",
-                                    padding: "2px 5px",
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </div>
 
                               {!tagInput.trim() &&
                                 suggestedTags.length > 0 && (
@@ -6742,6 +7788,10 @@ function App() {
               <Detail label="Layout">
                 {selected.layout_name ||
                   "—"}
+              </Detail>
+
+              <Detail label="Age">
+                <strong>{formatTicketAge(selected)}</strong>
               </Detail>
 
               <Detail label="Created">
