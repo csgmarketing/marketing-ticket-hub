@@ -2616,85 +2616,10 @@ function App() {
         error ||
         !data?.success
       ) {
-        let detail =
+        throw new Error(
           data?.error ||
           error?.message ||
-          "Could not send the message.";
-
-        // Supabase's FunctionsHttpError intentionally exposes only a
-        // generic message. The actual Edge Function response is available
-        // on error.context, so surface it here for actionable diagnostics.
-        try {
-          const response =
-            error?.context ||
-            error?.response;
-
-          if (response) {
-            const status =
-              response.status;
-
-            let body = null;
-
-            if (typeof response.clone === "function") {
-              const cloned =
-                response.clone();
-
-              const contentType =
-                cloned.headers?.get(
-                  "content-type"
-                ) ||
-                "";
-
-              if (contentType.includes("application/json")) {
-                body = await cloned.json();
-              } else {
-                body = await cloned.text();
-              }
-            }
-
-            const serverMessage =
-              typeof body === "string"
-                ? body
-                : body?.error ||
-                  body?.message ||
-                  body?.detail ||
-                  body?.error_description ||
-                  body?.raw ||
-                  "";
-
-            if (serverMessage) {
-              detail = `HTTP ${status || "?"}: ${serverMessage}`;
-            } else if (status) {
-              detail = `HTTP ${status}: ${detail}`;
-            }
-
-            const errorCode =
-              response.headers?.get(
-                "sb-error-code"
-              );
-
-            if (errorCode) {
-              detail += ` [Supabase: ${errorCode}]`;
-            }
-          }
-        } catch (diagnosticError) {
-          console.error(
-            "Could not read Edge Function error response:",
-            diagnosticError
-          );
-        }
-
-        console.error(
-          "reply-to-zoho-ticket failed:",
-          {
-            error,
-            data,
-            detail,
-          }
-        );
-
-        throw new Error(
-          detail
+          "Could not send the message."
         );
       }
 
@@ -4310,7 +4235,520 @@ function App() {
   // ====================================================
 
   return (
-    <div className="app-shell">
+    <>
+      <style>{`
+        /* ============================================================
+           CSG TICKET HUB — POLISH PASS
+           Visual-only layer: preserves existing workflows and controls.
+           ============================================================ */
+        :root {
+          --hub-ink: #172033;
+          --hub-muted: #667085;
+          --hub-subtle: #98a2b3;
+          --hub-line: #e7eaf0;
+          --hub-soft: #f7f8fa;
+          --hub-panel: #ffffff;
+          --hub-accent: #315efb;
+          --hub-radius: 12px;
+        }
+
+        .app-shell {
+          background: #f5f6f8;
+          color: var(--hub-ink);
+        }
+
+        .sidebar,
+        .ticket-column,
+        .details-column,
+        .conversation-column {
+          background: var(--hub-panel);
+        }
+
+        .sidebar {
+          border-right: 1px solid var(--hub-line) !important;
+        }
+
+        .sidebar-header {
+          padding: 20px 18px !important;
+          border-bottom: 1px solid var(--hub-line);
+        }
+
+        .app-mark {
+          width: 34px !important;
+          height: 34px !important;
+          border-radius: 10px !important;
+          box-shadow: 0 4px 12px rgba(49, 94, 251, .14);
+        }
+
+        .app-title {
+          font-size: 15px !important;
+          font-weight: 700 !important;
+          letter-spacing: -.01em;
+        }
+
+        .app-subtitle {
+          color: var(--hub-subtle) !important;
+          font-size: 11px !important;
+        }
+
+        .sidebar-label {
+          color: #98a2b3 !important;
+          font-size: 10px !important;
+          font-weight: 700 !important;
+          letter-spacing: .09em !important;
+        }
+
+        .nav-item,
+        .brand-nav {
+          border-radius: 8px !important;
+          transition: background .15s ease, color .15s ease, transform .15s ease;
+        }
+
+        .nav-item:hover,
+        .brand-nav:hover {
+          background: #f5f7fb !important;
+        }
+
+        .nav-item.active {
+          background: #eef2ff !important;
+          color: #2547b8 !important;
+          font-weight: 650 !important;
+        }
+
+        .ticket-column {
+          border-right: 1px solid var(--hub-line) !important;
+          background: #fbfbfc !important;
+        }
+
+        .ticket-column-header {
+          padding: 22px 20px 14px !important;
+        }
+
+        .ticket-column-header h1 {
+          font-size: 18px !important;
+          letter-spacing: -.02em;
+        }
+
+        .ticket-column-header p {
+          color: var(--hub-muted) !important;
+          font-size: 12px !important;
+        }
+
+        .search-wrap {
+          padding: 0 16px 12px !important;
+        }
+
+        .search-input {
+          height: 38px !important;
+          border: 1px solid #e1e5eb !important;
+          border-radius: 9px !important;
+          background: #fff !important;
+          box-shadow: 0 1px 2px rgba(16,24,40,.03);
+        }
+
+        .ticket-list {
+          padding: 4px 8px 16px !important;
+        }
+
+        .ticket-row {
+          margin: 2px 0 !important;
+          padding: 13px 12px !important;
+          border: 1px solid transparent !important;
+          border-radius: 10px !important;
+          background: transparent !important;
+          transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+        }
+
+        .ticket-row:hover {
+          background: #f7f8fa !important;
+          border-color: #eceef2 !important;
+        }
+
+        .ticket-row.selected {
+          background: #fff !important;
+          border-color: #dfe5f4 !important;
+          box-shadow: 0 2px 8px rgba(16,24,40,.05) !important;
+        }
+
+        .ticket-subject {
+          margin-top: 7px !important;
+          font-size: 13px !important;
+          font-weight: 650 !important;
+          line-height: 1.35 !important;
+          color: #202939 !important;
+        }
+
+        .ticket-summary {
+          color: #7a8494 !important;
+          font-size: 12px !important;
+          line-height: 1.4 !important;
+        }
+
+        .conversation-column {
+          background: #fff !important;
+        }
+
+        .conversation-header {
+          padding: 22px 28px 20px !important;
+          border-bottom: 1px solid var(--hub-line) !important;
+          background: #fff !important;
+        }
+
+        .conversation-meta {
+          gap: 8px !important;
+          margin-bottom: 10px !important;
+        }
+
+        .header-ticket-number {
+          color: #7b8494 !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+        }
+
+        .conversation-heading h2 {
+          max-width: 820px;
+          margin: 0 !important;
+          color: #151b28 !important;
+          font-size: 20px !important;
+          line-height: 1.3 !important;
+          letter-spacing: -.025em;
+        }
+
+        .conversation-requester {
+          margin-top: 8px !important;
+          color: #7a8494 !important;
+          font-size: 12px !important;
+          gap: 7px !important;
+        }
+
+        .requester-name {
+          color: #344054 !important;
+          font-weight: 650 !important;
+        }
+
+        .zoho-link {
+          border: 1px solid #e1e5eb !important;
+          border-radius: 8px !important;
+          padding: 7px 10px !important;
+          color: #475467 !important;
+          background: #fff !important;
+          font-size: 11px !important;
+          font-weight: 600 !important;
+        }
+
+        .zoho-link:hover {
+          border-color: #cbd3df !important;
+          background: #f8fafc !important;
+        }
+
+        .composer-area {
+          padding: 18px 28px 8px !important;
+          background: #fff !important;
+        }
+
+        .composer-area-heading {
+          margin-bottom: 9px !important;
+        }
+
+        .composer-heading-title {
+          color: #344054 !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+        }
+
+        .composer-heading-subtitle {
+          color: #98a2b3 !important;
+          font-size: 11px !important;
+        }
+
+        .rich-composer {
+          border: 1px solid #dfe3e9 !important;
+          border-radius: 12px !important;
+          background: #fff !important;
+          box-shadow: 0 3px 12px rgba(16,24,40,.045) !important;
+          overflow: visible !important;
+        }
+
+        .composer-mode-row {
+          min-height: 42px;
+          border-bottom: 1px solid #eef0f3 !important;
+          padding: 7px 10px !important;
+        }
+
+        .composer-mode-button {
+          border-radius: 7px !important;
+          font-weight: 650 !important;
+        }
+
+        .composer-top-actions button {
+          color: #667085 !important;
+          border-radius: 6px !important;
+        }
+
+        .recipient-section {
+          background: #fafbfc !important;
+          border-bottom: 1px solid #eef0f3 !important;
+        }
+
+        .recipient-row {
+          min-height: 32px;
+        }
+
+        .recipient-label {
+          color: #98a2b3 !important;
+          font-size: 11px !important;
+          font-weight: 700 !important;
+        }
+
+        .recipient-readonly,
+        .recipient-input {
+          color: #475467 !important;
+          font-size: 12px !important;
+        }
+
+        .timeline-section {
+          padding: 18px 28px 34px !important;
+          background: #fff !important;
+        }
+
+        .conversation-section-heading {
+          padding: 14px 0 13px !important;
+          border-bottom: 1px solid #eef0f3 !important;
+        }
+
+        .conversation-section-heading h3 {
+          color: #1d2939 !important;
+          font-size: 13px !important;
+          font-weight: 700 !important;
+          letter-spacing: -.01em;
+        }
+
+        .conversation-section-heading p {
+          margin-top: 3px !important;
+          color: #98a2b3 !important;
+          font-size: 11px !important;
+        }
+
+        .timeline-count-group span {
+          border: 1px solid #eaecf0 !important;
+          border-radius: 999px !important;
+          padding: 4px 8px !important;
+          background: #fafafa !important;
+          color: #667085 !important;
+          font-size: 10px !important;
+          font-weight: 650 !important;
+        }
+
+        .timeline {
+          position: relative;
+          padding: 16px 0 0 22px !important;
+        }
+
+        .timeline::before {
+          content: "";
+          position: absolute;
+          top: 20px;
+          bottom: 22px;
+          left: 6px;
+          width: 1px;
+          background: #e5e7eb;
+        }
+
+        .timeline-item {
+          position: relative;
+          margin: 0 0 16px !important;
+          border: 1px solid #e9ecf1 !important;
+          border-radius: 11px !important;
+          background: #fff !important;
+          box-shadow: 0 2px 7px rgba(16,24,40,.035) !important;
+        }
+
+        .timeline-rail-node {
+          position: absolute !important;
+          left: -22px !important;
+          top: 19px !important;
+          width: 12px !important;
+          height: 12px !important;
+          display: grid !important;
+          place-items: center !important;
+          border: 2px solid #fff !important;
+          border-radius: 50% !important;
+          background: #98a2b3 !important;
+          color: transparent !important;
+          box-shadow: 0 0 0 1px #d0d5dd !important;
+          z-index: 2;
+        }
+
+        .message-header,
+        .comment-header {
+          padding: 14px 16px 10px !important;
+        }
+
+        .message-avatar,
+        .comment-avatar {
+          width: 32px !important;
+          height: 32px !important;
+          border-radius: 9px !important;
+          font-size: 11px !important;
+          font-weight: 700 !important;
+        }
+
+        .message-author,
+        .comment-author {
+          color: #344054 !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+        }
+
+        .message-time,
+        .comment-meta {
+          color: #98a2b3 !important;
+          font-size: 10px !important;
+        }
+
+        .message-direction {
+          color: #98a2b3 !important;
+          font-size: 10px !important;
+        }
+
+        .message-recipient-box {
+          margin: 0 16px 10px !important;
+          padding: 8px 10px !important;
+          border: 1px solid #f0f1f3 !important;
+          border-radius: 7px !important;
+          background: #fafbfc !important;
+        }
+
+        .message-body,
+        .comment-body {
+          padding: 4px 16px 16px !important;
+          color: #344054 !important;
+          font-size: 13px !important;
+          line-height: 1.65 !important;
+        }
+
+        .message-body img,
+        .comment-body img {
+          max-width: 100%;
+          border-radius: 7px;
+        }
+
+        .original-message {
+          background: #fafbfc !important;
+          border-style: dashed !important;
+          box-shadow: none !important;
+        }
+
+        .original-request-label {
+          margin: 12px 16px 0 !important;
+          color: #98a2b3 !important;
+          font-size: 10px !important;
+          font-weight: 750 !important;
+          letter-spacing: .07em !important;
+          text-transform: uppercase !important;
+        }
+
+        .original-node {
+          background: #fff !important;
+          color: #98a2b3 !important;
+          font-size: 8px !important;
+        }
+
+        .comment-badge {
+          border-radius: 999px !important;
+          padding: 3px 7px !important;
+          font-size: 9px !important;
+          font-weight: 700 !important;
+        }
+
+        .comment-body {
+          background: #f8f9fb !important;
+          margin: 0 12px 12px !important;
+          border-radius: 8px !important;
+          padding: 11px 12px !important;
+        }
+
+        .details-column {
+          border-left: 1px solid var(--hub-line) !important;
+          background: #fbfbfc !important;
+        }
+
+        .details-header {
+          padding: 21px 18px 15px !important;
+          border-bottom: 1px solid var(--hub-line) !important;
+          background: #fff !important;
+        }
+
+        .details-header h3 {
+          color: #1d2939 !important;
+          font-size: 13px !important;
+          font-weight: 700 !important;
+        }
+
+        .details-header p {
+          color: #98a2b3 !important;
+          font-size: 11px !important;
+        }
+
+        .details-content {
+          padding: 16px 18px 24px !important;
+        }
+
+        .detail-control {
+          min-height: 35px !important;
+          border: 1px solid #e1e5eb !important;
+          border-radius: 8px !important;
+          background: #fff !important;
+          color: #344054 !important;
+          font-size: 12px !important;
+          box-shadow: 0 1px 2px rgba(16,24,40,.02);
+        }
+
+        .details-content .detail-label,
+        .details-content label {
+          color: #98a2b3 !important;
+          font-size: 10px !important;
+          font-weight: 700 !important;
+          letter-spacing: .04em;
+          text-transform: uppercase;
+        }
+
+        .requester-detail strong {
+          color: #344054 !important;
+          font-size: 12px !important;
+        }
+
+        .requester-detail span {
+          color: #98a2b3 !important;
+          font-size: 11px !important;
+        }
+
+        .details-divider {
+          margin: 16px 0 !important;
+          border-top-color: #eaecf0 !important;
+        }
+
+        .conversation-end {
+          color: #98a2b3 !important;
+          font-size: 10px !important;
+          font-weight: 600 !important;
+          letter-spacing: .04em;
+          text-transform: uppercase;
+        }
+
+        @media (max-width: 1180px) {
+          .details-column {
+            min-width: 250px;
+          }
+          .conversation-header,
+          .composer-area,
+          .timeline-section {
+            padding-left: 20px !important;
+            padding-right: 20px !important;
+          }
+        }
+      `}</style>
+      <div className="app-shell">
 
       {/* SIDEBAR */}
 
@@ -6673,6 +7111,7 @@ function App() {
         )}
       </aside>
     </div>
+    </>
   );
 }
 
