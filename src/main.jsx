@@ -9,7 +9,6 @@ import React, {
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import "./styles.css";
-import "./styles-ticket-hub-v7.css";
 
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL;
