@@ -160,81 +160,6 @@ function formatDate(value) {
   ).format(date);
 }
 
-function formatTicketAge(ticket) {
-  if (!ticket) return "—";
-
-  const openedAt =
-    ticket.created_at_zoho ||
-    ticket.created_at;
-
-  if (!openedAt) return "—";
-
-  const openedMs = new Date(openedAt).getTime();
-  if (Number.isNaN(openedMs)) return "—";
-
-  const endMs =
-    ticket.status === "Closed" && ticket.updated_at_zoho
-      ? new Date(ticket.updated_at_zoho).getTime()
-      : Date.now();
-
-  const diffMs = Math.max(0, endMs - openedMs);
-  const totalMinutes = Math.floor(diffMs / 60000);
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-
-  if (days > 0) {
-    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  }
-
-  if (hours > 0) {
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-
-  return `${Math.max(1, minutes)}m`;
-}
-
-function formatNotificationType(type) {
-  const labels = {
-    mention: "mentioned you",
-    assignment: "assigned you a ticket",
-    reply: "new reply",
-    comment: "new internal comment",
-    status_change: "status changed",
-    priority_change: "priority changed",
-    department_change: "department changed",
-    reopened: "ticket reopened",
-    closed: "ticket closed",
-    overdue: "ticket is overdue",
-    reminder: "reminder",
-  };
-
-  return labels[type] || "ticket activity";
-}
-
-function ticketAgeDays(ticket) {
-  if (!ticket) return 0;
-  const openedAt = ticket.created_at_zoho || ticket.created_at;
-  if (!openedAt) return 0;
-  const openedMs = new Date(openedAt).getTime();
-  if (Number.isNaN(openedMs)) return 0;
-  const endMs = ticket.status === "Closed" && ticket.updated_at_zoho
-    ? new Date(ticket.updated_at_zoho).getTime()
-    : Date.now();
-  return Math.max(0, endMs - openedMs) / 86400000;
-}
-
-function isNeedsAttention(ticket) {
-  if (!ticket || ticket.status === "Closed") return false;
-  return Boolean(
-    isOverdue(ticket) ||
-    isTicketUnassigned(ticket) ||
-    ticketAgeDays(ticket) >= 3 ||
-    String(ticket.priority || "").toLowerCase() === "high" ||
-    ticket.status === "Escalated"
-  );
-}
-
 function formatDateTime(value) {
   if (!value) return "";
 
@@ -689,213 +614,180 @@ function RecipientLine({
 // LOGIN
 // ======================================================
 
-function Login({
-  onSignedIn,
-}) {
+
+function ticketAgeDays(ticket) {
+  if (!ticket) return 0;
+  const opened = ticket.created_at_zoho || ticket.created_at;
+  if (!opened) return 0;
+  const start = new Date(opened).getTime();
+  if (Number.isNaN(start)) return 0;
+  const end = ticket.status === "Closed" && ticket.updated_at_zoho
+    ? new Date(ticket.updated_at_zoho).getTime()
+    : Date.now();
+  return Math.max(0, end - start) / 86400000;
+}
+
+function formatAge(ticket) {
+  const days = ticketAgeDays(ticket);
+  if (!days) return "—";
+  if (days < 1) return `${Math.max(1, Math.floor(days * 24))}h`;
+  if (days < 7) return `${Math.floor(days)}d ${Math.floor((days % 1) * 24)}h`;
+  return `${Math.floor(days / 7)}w ${Math.floor(days % 7)}d`;
+}
+
+function lastActivityAt(threads = [], comments = [], ticket = null) {
+  const values = [
+    ticket?.updated_at_zoho,
+    ...threads.map(x => x.created_at_zoho),
+    ...comments.map(x => x.commented_at_zoho),
+  ].filter(Boolean).map(x => new Date(x).getTime()).filter(Number.isFinite);
+  return values.length ? new Date(Math.max(...values)).toISOString() : null;
+}
+
+function lastActivityLabel(threads = [], comments = [], ticket = null) {
+  const value = lastActivityAt(threads, comments, ticket);
+  if (!value) return "No activity";
+  const hours = Math.max(0, (Date.now() - new Date(value).getTime()) / 3600000);
+  if (hours < 1) return "Just now";
+  if (hours < 24) return `${Math.floor(hours)}h ago`;
+  if (hours < 168) return `${Math.floor(hours / 24)}d ago`;
+  return `${Math.floor(hours / 168)}w ago`;
+}
+
+function needsAttentionReason(ticket) {
+  if (!ticket || ticket.status === "Closed") return "";
+  if (isOverdue(ticket)) return "Overdue";
+  if (isTicketUnassigned(ticket)) return "Unassigned";
+  if (String(ticket.priority || "").toLowerCase() === "high") return "High priority";
+  if (ticketAgeDays(ticket) >= 7) return "Open 7+ days";
+  if (ticketAgeDays(ticket) >= 3) return "Open 3+ days";
+  if (ticket.status === "Escalated") return "Escalated";
+  return "";
+}
+
+function isNeedsAttentionTicket(ticket) {
+  return Boolean(needsAttentionReason(ticket));
+}
+
+function Login({ onSignedIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [mode, setMode] = useState("login");
+  const [recoverySession, setRecoverySession] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [mode, setMode] = useState("signin");
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoverySession(true);
+        setMode("reset");
+        return;
+      }
+      if (nextSession && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        onSignedIn(nextSession);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [onSignedIn]);
 
   async function submit(event) {
     event.preventDefault();
-
     const normalizedEmail = email.trim().toLowerCase();
-
-    if (!isApprovedCompanyEmail(normalizedEmail)) {
+    if (!normalizedEmail || !isApprovedCompanyEmail(normalizedEmail)) {
       setMessage("Please use an approved company email address.");
       return;
     }
-
-    setBusy(true);
-    setMessage("");
-
+    setBusy(true); setMessage("");
     try {
-      if (mode === "signin") {
-        if (!password) {
-          setMessage("Enter your password.");
-          return;
-        }
-
+      if (mode === "reset") {
+        if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+        if (password !== confirmPassword) throw new Error("Passwords do not match.");
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        setMessage("Password updated. Signing you in…");
+        const { data: refreshed } = await supabase.auth.getSession();
+        if (refreshed?.session) onSignedIn(refreshed.session);
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo: `${window.location.origin}/`,
+        });
+        if (error) throw error;
+        setMessage("If that account exists, a password reset email has been sent.");
+      } else if (mode === "create") {
+        if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+        if (password !== confirmPassword) throw new Error("Passwords do not match.");
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (error) throw error;
+        if (data?.session) onSignedIn(data.session);
+        else setMessage("Check your email to confirm your account, then sign in.");
+      } else {
+        if (!password) throw new Error("Enter your password.");
         const { data, error } = await supabase.auth.signInWithPassword({
           email: normalizedEmail,
           password,
         });
-
         if (error) throw error;
-        if (data.session) onSignedIn(data.session);
-        return;
+        if (data?.session) onSignedIn(data.session);
       }
-
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        normalizedEmail,
-        { redirectTo: window.location.origin }
-      );
-
-      if (error) throw error;
-
-      setMessage(
-        mode === "create"
-          ? "Check your email for a secure link to create your password."
-          : "Check your email for a secure link to reset your password."
-      );
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong. Please try again."
-      );
+      setMessage(error instanceof Error ? error.message : "Authentication failed.");
     } finally {
       setBusy(false);
     }
   }
 
+  const title = mode === "forgot" ? "Reset your password" : mode === "reset" ? "Choose a new password" : mode === "create" ? "Create your password" : "Welcome back";
+  const subtitle = mode === "forgot"
+    ? "Enter your work email and we’ll send you a secure reset link."
+    : mode === "reset"
+      ? "Choose a new password for your Ticket Hub account."
+      : mode === "create"
+      ? "First time accessing the Hub? Set your password here."
+      : "Your workspace for Qualicare, Tutor Doctor and Code Wiz.";
+
   return (
     <div className="login-page">
-      <div className="login-card">
-        <div className="login-logo">
-          <span className="login-logo-mountain">▲</span>
-          <span>CSG</span>
-        </div>
-
-        <h1>Marketing Ticket Hub</h1>
-        <p>One workspace for Qualicare, Tutor Doctor and Code Wiz.</p>
-
+      <div className="login-card login-card-modern">
+        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+        <div className="login-eyebrow">MARKETING OPERATIONS</div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
         <form onSubmit={submit}>
-          <label className="login-field-label">Work email</label>
-          <input
-            className="login-input"
-            type="email"
-            value={email}
-            autoComplete="email"
-            placeholder="you@company.com"
-            onChange={(event) => setEmail(event.target.value)}
-          />
-
-          {mode === "signin" && (
-            <>
-              <label className="login-field-label">Password</label>
-              <input
-                className="login-input"
-                type="password"
-                value={password}
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </>
-          )}
-
+          <label>Work email</label>
+          <input type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} />
+          {mode !== "forgot" && <>
+            <label>Password</label>
+            <input type="password" autoComplete={mode === "create" ? "new-password" : "current-password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
+          </>}
+          {mode === "create" && <>
+            <label>Confirm password</label>
+            <input type="password" autoComplete="new-password" placeholder="Repeat your password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+            <div className="password-hint">Use at least 8 characters.</div>
+          </>}
+          <button type="submit" className="primary-button" disabled={busy}>{busy ? "Please wait…" : mode === "forgot" ? "Send reset link" : mode === "create" ? "Create password" : "Sign in"}</button>
           {message && <div className="login-message">{message}</div>}
-
-          <button className="login-submit" type="submit" disabled={busy}>
-            {busy
-              ? "Please wait…"
-              : mode === "signin"
-                ? "Sign in"
-                : mode === "create"
-                  ? "Send setup link"
-                  : "Send reset link"}
-          </button>
         </form>
-
         <div className="login-links">
-          {mode === "signin" ? (
-            <>
-              <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }}>
-                Forgot password?
-              </button>
-              <button type="button" onClick={() => { setMode("create"); setMessage(""); }}>
-                First time accessing the Hub? <strong>Create your password</strong>
-              </button>
-            </>
-          ) : (
-            <button type="button" onClick={() => { setMode("signin"); setMessage(""); }}>
-              ← Back to sign in
-            </button>
-          )}
+          {mode === "login" && <>
+            <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }}>Forgot password?</button>
+            <button type="button" onClick={() => { setMode("create"); setMessage(""); }}>First time accessing the Hub? <strong>Create your password</strong></button>
+          </>}
+          {mode !== "login" && mode !== "reset" && <button type="button" onClick={() => { setMode("login"); setMessage(""); }}>← Back to sign in</button>}
         </div>
       </div>
     </div>
   );
 }
 
-function PasswordRecovery({ onComplete }) {
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function updatePassword(event) {
-    event.preventDefault();
-
-    if (password.length < 8) {
-      setMessage("Password must be at least 8 characters.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setMessage("Passwords do not match.");
-      return;
-    }
-
-    setBusy(true);
-    setMessage("");
-
-    const { error } = await supabase.auth.updateUser({ password });
-
-    if (error) {
-      setMessage(error.message);
-      setBusy(false);
-      return;
-    }
-
-    onComplete();
-    setBusy(false);
-  }
-
-  return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="login-logo">
-          <span className="login-logo-mountain">▲</span>
-          <span>CSG</span>
-        </div>
-        <h1>Create your password</h1>
-        <p>Choose a password of at least 8 characters for the Marketing Ticket Hub.</p>
-
-        <form onSubmit={updatePassword}>
-          <label className="login-field-label">New password</label>
-          <input
-            className="login-input"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            placeholder="At least 8 characters"
-            onChange={(event) => setPassword(event.target.value)}
-          />
-
-          <label className="login-field-label">Confirm password</label>
-          <input
-            className="login-input"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            placeholder="Re-enter your password"
-            onChange={(event) => setConfirmPassword(event.target.value)}
-          />
-
-          {message && <div className="login-message">{message}</div>}
-
-          <button className="login-submit" type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Create password"}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
+// ======================================================
+// APP
+// ======================================================
 
 function App() {
   const editorRef =
@@ -921,18 +813,6 @@ function App() {
     setSession,
   ] =
     useState(null);
-
-  const [
-    passwordRecovery,
-    setPasswordRecovery,
-  ] =
-    useState(false);
-
-  const [
-    ageTick,
-    setAgeTick,
-  ] =
-    useState(0);
 
   const [
     authLoading,
@@ -1037,12 +917,6 @@ function App() {
     useState("all");
 
   const [
-    dashboardTab,
-    setDashboardTab,
-  ] =
-    useState(false);
-
-  const [
     brandFilter,
     setBrandFilter,
   ] =
@@ -1055,46 +929,22 @@ function App() {
     useState("all");
 
   const [
-    followedTickets,
-    setFollowedTickets,
-  ] =
-    useState([]);
-
-  const [
-    reminders,
-    setReminders,
-  ] =
-    useState([]);
-
-  const [
-    showReminderMenu,
-    setShowReminderMenu,
-  ] =
-    useState(false);
-
-  const [
-    reminderNote,
-    setReminderNote,
-  ] =
-    useState("");
-
-  const [
-    reminderNotice,
-    setReminderNotice,
-  ] =
-    useState("");
-
-  const [
-    savedView,
-    setSavedView,
-  ] =
-    useState("all");
-
-  const [
     search,
     setSearch,
   ] =
     useState("");
+
+
+  const [dashboardTab, setDashboardTab] = useState(false);
+  const [savedView, setSavedView] = useState("all");
+  const [followedTickets, setFollowedTickets] = useState([]);
+  const [reminders, setReminders] = useState([]);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [showReminderMenu, setShowReminderMenu] = useState(false);
+  const [reminderNotice, setReminderNotice] = useState("");
+  const [draftNotice, setDraftNotice] = useState("");
+  const [ageTick, setAgeTick] = useState(Date.now());
 
   const [
     updateBusy,
@@ -1107,6 +957,72 @@ function App() {
     setUpdateNotice,
   ] =
     useState("");
+
+
+  useEffect(() => {
+    const email = session?.user?.email?.toLowerCase();
+    if (!email) return;
+    try {
+      setFollowedTickets(JSON.parse(localStorage.getItem(`csg-followed:${email}`) || "[]"));
+      setReminders(JSON.parse(localStorage.getItem(`csg-reminders:${email}`) || "[]"));
+    } catch {}
+  }, [session?.user?.email]);
+
+  useEffect(() => {
+    const email = session?.user?.email?.toLowerCase();
+    if (!email) return;
+    localStorage.setItem(`csg-followed:${email}`, JSON.stringify(followedTickets));
+  }, [followedTickets, session?.user?.email]);
+
+  useEffect(() => {
+    const email = session?.user?.email?.toLowerCase();
+    if (!email) return;
+    localStorage.setItem(`csg-reminders:${email}`, JSON.stringify(reminders));
+  }, [reminders, session?.user?.email]);
+
+  useEffect(() => {
+    const id = setInterval(() => setAgeTick(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const handler = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setShowCommandPalette(true);
+        setCommandQuery("");
+      }
+      if (event.key === "Escape") {
+        setShowCommandPalette(false);
+        setShowReminderMenu(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  function toggleFollow(ticketKey) {
+    setFollowedTickets(current => current.includes(ticketKey)
+      ? current.filter(key => key !== ticketKey)
+      : [...current, ticketKey]);
+  }
+
+  function addReminder(ticket, hours = 24) {
+    if (!ticket) return;
+    const dueAt = new Date(Date.now() + hours * 3600000).toISOString();
+    setReminders(current => [
+      ...current.filter(item => item.ticket_key !== ticket.ticket_key),
+      { id: `${ticket.ticket_key}-${Date.now()}`, ticket_key: ticket.ticket_key, due_at: dueAt, note: "", dismissed: false },
+    ]);
+    setReminderNotice(`Reminder set for ${formatDateTime(dueAt)}`);
+    setShowReminderMenu(false);
+  }
+
+  function dismissReminder(id) {
+    setReminders(current => current.map(item => item.id === id ? { ...item, dismissed: true } : item));
+  }
+
+  const activeReminders = reminders.filter(item => !item.dismissed);
 
   // ====================================================
   // ZOHO FIELD METADATA
@@ -1398,13 +1314,9 @@ function App() {
         .auth
         .onAuthStateChange(
           (
-            event,
+            _event,
             nextSession
           ) => {
-            if (event === "PASSWORD_RECOVERY") {
-              setPasswordRecovery(true);
-            }
-
             setSession(
               nextSession
             );
@@ -1417,43 +1329,6 @@ function App() {
         .unsubscribe();
     };
   }, []);
-
-  useEffect(() => {
-    if (!session?.user?.email) return;
-    const email = session.user.email.toLowerCase();
-    try {
-      setFollowedTickets(JSON.parse(localStorage.getItem(`csg-followed:${email}`) || "[]"));
-      setReminders(JSON.parse(localStorage.getItem(`csg-reminders:${email}`) || "[]"));
-    } catch {
-      setFollowedTickets([]);
-      setReminders([]);
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (!session?.user?.email) return;
-    const email = session.user.email.toLowerCase();
-    localStorage.setItem(`csg-followed:${email}`, JSON.stringify(followedTickets));
-  }, [followedTickets, session]);
-
-  useEffect(() => {
-    if (!session?.user?.email) return;
-    const email = session.user.email.toLowerCase();
-    localStorage.setItem(`csg-reminders:${email}`, JSON.stringify(reminders));
-  }, [reminders, session]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setAgeTick((value) => value + 1);
-      setReminders((current) => current.filter((reminder) => !reminder.dismissed));
-    }, 60000);
-
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // Keep ticket age calculations reactive while the Hub remains open.
-  void ageTick;
 
   // ====================================================
   // NOTIFICATIONS
@@ -2349,18 +2224,6 @@ function App() {
             event: "*",
             schema: "public",
             table:
-              "ticket_notifications",
-          },
-          () => {
-            loadNotifications();
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table:
               "ticket_tags",
           },
           (
@@ -2429,6 +2292,15 @@ function App() {
   const latestThread =
     newestThreads[0] ||
     null;
+
+  useEffect(() => {
+    if (!selected?.ticket_key || !editorRef.current) return;
+    const key = `csg-draft:${selected.ticket_key}:${session?.user?.email || ""}`;
+    const draft = localStorage.getItem(key) || "";
+    editorRef.current.innerHTML = draft;
+    setEditorHtml(draft);
+    setDraftNotice(draft ? "Draft restored" : "");
+  }, [selected?.ticket_key, session?.user?.email]);
 
   const timelineItems =
     useMemo(() => {
@@ -4359,6 +4231,23 @@ function App() {
 
       if (
         filter ===
+        "high"
+      ) {
+        rows =
+          rows.filter(
+            (ticket) =>
+              String(
+                ticket.priority ||
+                  ""
+              ).toLowerCase() ===
+              "high" &&
+              ticket.status !==
+                "Closed"
+          );
+      }
+
+      if (
+        filter ===
         "mine"
       ) {
         const userEmail =
@@ -4384,25 +4273,26 @@ function App() {
           );
       }
 
-      if (savedView === "high") {
-        rows = rows.filter((ticket) => String(ticket.priority || "").toLowerCase() === "high");
-      }
-
-      if (savedView === "aging") {
-        rows = rows.filter((ticket) => ticket.status !== "Closed" && ticketAgeDays(ticket) >= 3);
-      }
-
-      if (savedView === "followed") {
-        rows = rows.filter((ticket) => followedTickets.includes(ticket.ticket_key));
-      }
-
-      if (savedView === "reminders") {
-        const activeReminderKeys = new Set(reminders.filter((item) => !item.dismissed).map((item) => item.ticket_key));
-        rows = rows.filter((ticket) => activeReminderKeys.has(ticket.ticket_key));
-      }
 
       if (savedView === "needs") {
-        rows = rows.filter(isNeedsAttention);
+        rows = rows.filter(isNeedsAttentionTicket);
+      }
+      if (savedView === "aging") {
+        rows = rows.filter(ticket => ticket.status !== "Closed" && ticketAgeDays(ticket) >= 3);
+      }
+      if (savedView === "followed") {
+        rows = rows.filter(ticket => followedTickets.includes(ticket.ticket_key));
+      }
+      if (savedView === "reminders") {
+        const keys = new Set(activeReminders.map(item => item.ticket_key));
+        rows = rows.filter(ticket => keys.has(ticket.ticket_key));
+      }
+      if (savedView === "today") {
+        const now = new Date();
+        rows = rows.filter(ticket => {
+          const due = ticket.due_date ? new Date(ticket.due_date) : null;
+          return due && due.getFullYear() === now.getFullYear() && due.getMonth() === now.getMonth() && due.getDate() === now.getDate();
+        });
       }
 
       if (
@@ -4455,7 +4345,8 @@ function App() {
       session,
       savedView,
       followedTickets,
-      reminders,
+      activeReminders,
+      ageTick,
     ]);
 
   /*
@@ -4463,10 +4354,8 @@ function App() {
     CURRENT filtered list.
   */
   useEffect(() => {
-    if (
-      filteredTickets.length ===
-      0
-    ) {
+    if (dashboardTab) return;
+    if (filteredTickets.length === 0) {
       setSelectedKey(
         null
       );
@@ -4504,6 +4393,47 @@ function App() {
   }, [
     filteredTickets,
   ]);
+
+
+  const dashboardMetrics = useMemo(() => {
+    const visible = tickets.filter(isVisibleMarketingTicket);
+    const active = visible.filter(t => t.status !== "Closed");
+    const userEmail = session?.user?.email?.toLowerCase();
+    const mine = active.filter(t => String(getTicketOwnerEmail(t) || "").toLowerCase() === userEmail);
+    return {
+      active: active.length,
+      mine: mine.length,
+      needs: active.filter(isNeedsAttentionTicket).length,
+      overdue: active.filter(isOverdue).length,
+      unassigned: active.filter(t => isTicketUnassigned(t)).length,
+      aging: active.filter(t => ticketAgeDays(t) >= 3).length,
+      waiting: active.filter(t => t.status === "Waiting" && ticketAgeDays(t) >= 2).length,
+      high: active.filter(t => String(t.priority || "").toLowerCase() === "high").length,
+      today: active.filter(t => {
+        if (!t.due_date) return false;
+        const d = new Date(t.due_date), n = new Date();
+        return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+      }).length,
+      brands: ["Qualicare", "Tutor Doctor", "Code Wiz"].map(source => ({ source, count: active.filter(t => t.source === source).length })),
+      statuses: ["Open", "In Progress", "On Hold", "Waiting", "Escalated"].map(status => ({ status, count: active.filter(t => t.status === status).length })),
+      agingBuckets: [
+        ["0–1d", 0, 1], ["1–3d", 1, 3], ["3–5d", 3, 5], ["5–7d", 5, 7], ["7d+", 7, Infinity],
+      ].map(([label, min, max]) => ({ label, count: active.filter(t => { const d=ticketAgeDays(t); return d >= min && d < max; }).length })),
+      recent: [...active].sort((a,b) => new Date(b.updated_at_zoho || b.created_at_zoho || 0) - new Date(a.updated_at_zoho || a.created_at_zoho || 0)).slice(0, 8),
+    };
+  }, [tickets, session, ageTick]);
+
+  function openDashboardQueue(target) {
+    setDashboardTab(false);
+    setSelectedKey(null);
+    setSearch("");
+    setSavedView("all");
+    if (target === "needs") { setSavedView("needs"); setFilter("all"); }
+    else if (target === "aging") { setSavedView("aging"); setFilter("all"); }
+    else if (target === "followed") { setSavedView("followed"); setFilter("all"); }
+    else if (target === "today") { setSavedView("today"); setFilter("all"); }
+    else setFilter(target);
+  }
 
   // ====================================================
   // COUNTS
@@ -4649,11 +4579,6 @@ function App() {
               ticket.status !==
                 "Closed"
           ).length,
-
-        needsAttention:
-          countTickets.filter(
-            isNeedsAttention
-          ).length,
       };
     }, [
       tickets,
@@ -4661,139 +4586,6 @@ function App() {
       brandFilter,
       departmentFilter,
     ]);
-
-  const operationsMetrics = useMemo(() => {
-    const visibleTickets = tickets
-      .filter(isVisibleMarketingTicket)
-      .filter((ticket) => brandFilter === "all" || ticket.source === brandFilter)
-      .filter((ticket) => brandFilter !== "Tutor Doctor" || departmentFilter === "all" || String(ticket.department || "").trim() === departmentFilter)
-      .filter((ticket) => ticket.status !== "Closed");
-
-    const ages = visibleTickets.map(ticketAgeDays);
-
-    return {
-      under1Day: ages.filter((days) => days < 1).length,
-      oneTo3Days: ages.filter((days) => days >= 1 && days < 3).length,
-      threeTo5Days: ages.filter((days) => days >= 3 && days < 5).length,
-      fivePlusDays: ages.filter((days) => days >= 5).length,
-      aging3Plus: ages.filter((days) => days >= 3).length,
-      waiting48Plus: visibleTickets.filter((ticket) => ticket.status === "Waiting" && ticketAgeDays(ticket) >= 2).length,
-      highPriority: visibleTickets.filter((ticket) => String(ticket.priority || "").toLowerCase() === "high").length,
-    };
-  }, [tickets, brandFilter, departmentFilter]);
-
-  const dashboardMetrics = useMemo(() => {
-    const active = tickets
-      .filter(isVisibleMarketingTicket)
-      .filter((ticket) => ticket.status !== "Closed");
-
-    const byBrand = ["Tutor Doctor", "Qualicare", "Code Wiz"].map((source) => {
-      const rows = active.filter((ticket) => ticket.source === source);
-      return {
-        source,
-        active: rows.length,
-        open: rows.filter((ticket) => ticket.status === "Open").length,
-        inProgress: rows.filter((ticket) => ticket.status === "In Progress").length,
-        waiting: rows.filter((ticket) => ticket.status === "Waiting").length,
-        overdue: rows.filter(isOverdue).length,
-        unassigned: rows.filter(isTicketUnassigned).length,
-        aging: rows.filter((ticket) => ticketAgeDays(ticket) >= 3).length,
-      };
-    });
-
-    const attention = active
-      .filter(isNeedsAttention)
-      .sort((a, b) => {
-        const score = (ticket) =>
-          (isOverdue(ticket) ? 100 : 0) +
-          (isTicketUnassigned(ticket) ? 40 : 0) +
-          (String(ticket.priority || "").toLowerCase() === "high" ? 30 : 0) +
-          Math.min(30, ticketAgeDays(ticket));
-        return score(b) - score(a);
-      })
-      .slice(0, 5);
-
-    const recentlyUpdated = [...active]
-      .sort((a, b) =>
-        new Date(b.updated_at_zoho || b.created_at_zoho || b.created_at || 0).getTime() -
-        new Date(a.updated_at_zoho || a.created_at_zoho || a.created_at || 0).getTime()
-      )
-      .slice(0, 5);
-
-    const currentUserEmail = String(session?.user?.email || "").trim().toLowerCase();
-    const myTickets = currentUserEmail
-      ? active.filter((ticket) => getTicketOwnerEmail(ticket).trim().toLowerCase() === currentUserEmail)
-      : [];
-    const myNeedsAttention = myTickets.filter(isNeedsAttention);
-    const myOverdue = myTickets.filter(isOverdue);
-    const myWaiting = myTickets.filter((ticket) => ticket.status === "Waiting");
-    const myAging = myTickets.filter((ticket) => ticketAgeDays(ticket) >= 3);
-
-    const total = active.length;
-    return {
-      active: total,
-      overdue: active.filter(isOverdue).length,
-      unassigned: active.filter(isTicketUnassigned).length,
-      needsAttention: active.filter(isNeedsAttention).length,
-      highPriority: active.filter((ticket) => String(ticket.priority || "").toLowerCase() === "high").length,
-      aging3Plus: active.filter((ticket) => ticketAgeDays(ticket) >= 3).length,
-      waiting48Plus: active.filter((ticket) => ticket.status === "Waiting" && ticketAgeDays(ticket) >= 2).length,
-      open: active.filter((ticket) => ticket.status === "Open").length,
-      inProgress: active.filter((ticket) => ticket.status === "In Progress").length,
-      waiting: active.filter((ticket) => ticket.status === "Waiting").length,
-      onHold: active.filter((ticket) => ticket.status === "On Hold").length,
-      escalated: active.filter((ticket) => ticket.status === "Escalated").length,
-      myTickets: myTickets.length,
-      myNeedsAttention: myNeedsAttention.length,
-      myOverdue: myOverdue.length,
-      myWaiting: myWaiting.length,
-      myAging: myAging.length,
-      myRecent: [...myTickets].sort((a,b) => new Date(b.updated_at_zoho || b.created_at_zoho || b.created_at || 0).getTime() - new Date(a.updated_at_zoho || a.created_at_zoho || a.created_at || 0).getTime()).slice(0, 5),
-      myAttention: [...myNeedsAttention].sort((a,b) => ticketAgeDays(b) - ticketAgeDays(a)).slice(0, 5),
-      byBrand,
-      attention,
-      recentlyUpdated,
-    };
-  }, [tickets, session]);
-
-  function toggleFollowTicket(ticketKey) {
-    setFollowedTickets((current) =>
-      current.includes(ticketKey)
-        ? current.filter((key) => key !== ticketKey)
-        : [...current, ticketKey]
-    );
-  }
-
-  function addReminder(ticket, preset, note = "") {
-    if (!ticket) return;
-    const now = Date.now();
-    const offsets = {
-      "1h": 60 * 60 * 1000,
-      "tomorrow": 24 * 60 * 60 * 1000,
-      "3days": 3 * 24 * 60 * 60 * 1000,
-      "nextweek": 7 * 24 * 60 * 60 * 1000,
-    };
-    const dueAt = new Date(now + (offsets[preset] || offsets.tomorrow)).toISOString();
-    const reminder = {
-      id: `${ticket.ticket_key}-${now}`,
-      ticket_key: ticket.ticket_key,
-      ticket_number: ticket.ticket_number,
-      subject: ticket.subject,
-      due_at: dueAt,
-      note: note.trim(),
-      dismissed: false,
-    };
-    setReminders((current) => [...current.filter((item) => item.ticket_key !== ticket.ticket_key || item.dismissed), reminder]);
-    setReminderNotice(`Reminder set for ${formatDateTime(dueAt)}`);
-    setShowReminderMenu(false);
-    setReminderNote("");
-  }
-
-  function dismissReminder(reminderId) {
-    setReminders((current) => current.map((item) => item.id === reminderId ? { ...item, dismissed: true } : item));
-  }
-
-  const activeReminders = reminders.filter((item) => !item.dismissed);
 
   async function signOut() {
     await supabase
@@ -4808,16 +4600,6 @@ function App() {
       <div className="full-page-loading">
         Loading…
       </div>
-    );
-  }
-
-  if (passwordRecovery) {
-    return (
-      <PasswordRecovery
-        onComplete={() => {
-          setPasswordRecovery(false);
-        }}
-      />
     );
   }
 
@@ -5240,18 +5022,13 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-section">
-
-          <button
-            className={`nav-item dashboard-nav-item ${dashboardTab ? "active" : ""}`}
-            onClick={() => {
-              setDashboardTab(true);
-              setSelectedKey(null);
-              setShowNotifications(false);
-            }}
-          >
-            <span>Dashboard</span>
+        <div className="sidebar-top-actions">
+          <button className={`dashboard-nav-button ${dashboardTab ? "active" : ""}`} onClick={() => { setDashboardTab(true); setSelectedKey(null); }}>
+            <span>▦</span><strong>Dashboard</strong><span className="shortcut-hint">⌘K</span>
           </button>
+        </div>
+
+        <div className="sidebar-section">
 
           <div className="sidebar-label">
             MY WORK
@@ -5263,15 +5040,14 @@ function App() {
                 ? "active"
                 : ""
             }`}
-            onClick={() => {
-              setDashboardTab(false);
+            onClick={() =>
               setShowNotifications(
                 (
                   current
                 ) =>
                   !current
-              );
-            }}
+              )
+            }
           >
             <span>
               Mentions
@@ -5320,10 +5096,9 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() => {
-                  setDashboardTab(false);
-                  setFilter(id);
-                }}
+                onClick={() =>
+                  setFilter(id)
+                }
               >
                 <span>
                   {label}
@@ -5335,40 +5110,19 @@ function App() {
               </button>
             )
           )}
+        </div>
 
-          <button
-            className={`nav-item ${filter === "needs" ? "active" : ""}`}
-            onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("needs"); setFilter("all"); }}
-          >
-            <span>Needs Attention</span>
-            <span className="nav-count">{counts.needsAttention}</span>
-          </button>
+        <div className="sidebar-section">
+          <div className="sidebar-label">TODAY</div>
+          <button className={`nav-item ${savedView === "today" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("today"); setFilter("all"); }}><span>Due today</span><span className="nav-count">{dashboardMetrics.today}</span></button>
+          <button className={`nav-item ${savedView === "needs" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("needs"); setFilter("all"); }}><span>Needs attention</span><span className="nav-count">{dashboardMetrics.needs}</span></button>
         </div>
 
         <div className="sidebar-section">
           <div className="sidebar-label">SAVED VIEWS</div>
-          {[
-            ["all", "Active Tickets"],
-            ["high", "High Priority"],
-            ["aging", "Aging 3+ Days"],
-            ["followed", "Following"],
-            ["reminders", "My Reminders"],
-            ["needs", "Needs Attention"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              className={`nav-item ${savedView === value && filter === "all" ? "active" : ""}`}
-              onClick={() => {
-                setDashboardTab(false);
-                setSavedView(value);
-                setFilter("all");
-              }}
-            >
-              <span>{label}</span>
-              {value === "followed" && <span className="nav-count">{followedTickets.length}</span>}
-              {value === "reminders" && <span className="nav-count">{activeReminders.length}</span>}
-            </button>
-          ))}
+          <button className={`nav-item ${savedView === "followed" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("followed"); setFilter("all"); }}><span>Following</span><span className="nav-count">{followedTickets.length}</span></button>
+          <button className={`nav-item ${savedView === "reminders" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("reminders"); setFilter("all"); }}><span>My reminders</span><span className="nav-count">{activeReminders.length}</span></button>
+          <button className={`nav-item ${savedView === "aging" ? "active" : ""}`} onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("aging"); setFilter("all"); }}><span>Aging 3+ days</span><span className="nav-count">{dashboardMetrics.aging}</span></button>
         </div>
 
         <div className="sidebar-section">
@@ -5428,10 +5182,9 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() => {
-                  setDashboardTab(false);
-                  setFilter(id);
-                }}
+                onClick={() =>
+                  setFilter(id)
+                }
               >
                 <span>
                   {label}
@@ -5486,11 +5239,9 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
-                  setDashboardTab(false);
                   setBrandFilter(
                     value
                   );
-                  setSavedView("all");
 
                   if (
                     value !==
@@ -5559,7 +5310,6 @@ function App() {
                       : ""
                   }`}
                   onClick={() => {
-                    setDashboardTab(false);
                     setDepartmentFilter(
                       value
                     );
@@ -5661,7 +5411,7 @@ function App() {
                     "16px",
                 }}
               >
-                Notifications
+                Mentions
               </div>
 
               <div
@@ -5751,7 +5501,7 @@ function App() {
                   "13px",
               }}
             >
-              Loading notifications…
+              Loading mentions…
             </div>
           ) : notifications.length ===
             0 ? (
@@ -5765,7 +5515,7 @@ function App() {
                   "13px",
               }}
             >
-              No notifications yet.
+              No mentions yet.
             </div>
           ) : (
             notifications.map(
@@ -5859,20 +5609,10 @@ function App() {
                         "6px",
                     }}
                   >
-                    {notification.actor_name || "Someone"} {formatNotificationType(notification.notification_type)}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize:
-                        "12px",
-                      color:
-                        "#64748b",
-                      marginTop:
-                        "3px",
-                    }}
-                  >
-                    {notification.subject || "Untitled ticket"}
+                    {
+                      notification.subject ||
+                      "Ticket mention"
+                    }
                   </div>
 
                   <div
@@ -5945,235 +5685,8 @@ function App() {
 
       {/* TICKETS */}
 
-      <section
-        className="ticket-column"
-        style={dashboardTab ? { gridColumn: "2 / -1", width: "100%", minWidth: 0, display: "block", overflow: "auto", background: "#f8fafc" } : undefined}
-      >
+      <section className="ticket-column">
 
-        {dashboardTab && (
-          <section
-            style={{
-              minHeight: "100%",
-              padding: "30px 34px 46px",
-              background: "#f7f9fc",
-              boxSizing: "border-box",
-            }}
-          >
-            <div style={{ maxWidth: "1540px", margin: "0 auto" }}>
-              {/* DASHBOARD HEADER */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: "24px",
-                  marginBottom: "24px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "9px", color: "#64748b", fontSize: "10px", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase" }}>
-                    <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 0 4px #dcfce7" }} />
-                    Marketing Operations
-                  </div>
-                  <h1 style={{ margin: "9px 0 0", color: "#0f172a", fontSize: "34px", lineHeight: 1.05, letterSpacing: "-.04em", fontWeight: 850 }}>
-                    Dashboard
-                  </h1>
-                  <p style={{ margin: "8px 0 0", maxWidth: "720px", color: "#64748b", fontSize: "12px", lineHeight: 1.55 }}>
-                    A live view of workload, risk, your queue and where the team should focus next.
-                  </p>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("all"); setFilter("mine"); }}
-                    style={{ border: "1px solid #dbe3ec", borderRadius: "9px", background: "#fff", padding: "9px 12px", color: "#334155", fontSize: "10px", fontWeight: 800, cursor: "pointer" }}
-                  >
-                    My tickets
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("needs"); setFilter("all"); }}
-                    style={{ border: "0", borderRadius: "9px", background: "#0f172a", padding: "10px 13px", color: "#fff", fontSize: "10px", fontWeight: 800, cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.12)" }}
-                  >
-                    View needs attention
-                  </button>
-                </div>
-              </div>
-
-              {/* KPI ROW */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: "11px", marginBottom: "18px" }}>
-                {[
-                  ["Active", dashboardMetrics.active, "Current backlog", "#0f172a", "all"],
-                  ["Needs attention", dashboardMetrics.needsAttention, "Action required", "#b45309", "needs"],
-                  ["Overdue", dashboardMetrics.overdue, "Past due", "#dc2626", "overdue"],
-                  ["Unassigned", dashboardMetrics.unassigned, "No owner", "#d97706", "unassigned"],
-                  ["Aging 3d+", dashboardMetrics.aging3Plus, "Older workload", "#7c3aed", "aging"],
-                  ["Waiting 48h+", dashboardMetrics.waiting48Plus, "Waiting too long", "#6d28d9", "waiting"],
-                ].map(([label, value, subtitle, color, target]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => {
-                      setDashboardTab(false);
-                      setSelectedKey(null);
-                      if (target === "aging") { setSavedView("aging"); setFilter("all"); }
-                      else if (target === "needs") { setSavedView("needs"); setFilter("all"); }
-                      else if (target === "waiting") { setSavedView("all"); setFilter("waiting"); }
-                      else { setSavedView("all"); setFilter(target); }
-                    }}
-                    style={{ textAlign: "left", minWidth: 0, border: "1px solid #e2e8f0", borderRadius: "13px", background: "#fff", padding: "15px 16px", cursor: "pointer", boxShadow: "0 1px 2px rgba(15,23,42,.025)" }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "7px" }}>
-                      <span style={{ color: "#64748b", fontSize: "9px", fontWeight: 850, letterSpacing: ".065em", textTransform: "uppercase" }}>{label}</span>
-                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: color }} />
-                    </div>
-                    <div style={{ marginTop: "10px", color, fontSize: "27px", lineHeight: 1, fontWeight: 850, letterSpacing: "-.035em" }}>{value}</div>
-                    <div style={{ marginTop: "6px", color: "#94a3b8", fontSize: "9px" }}>{subtitle}</div>
-                  </button>
-                ))}
-              </div>
-
-              {/* MY DAY + QUEUE HEALTH */}
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(330px, .65fr)", gap: "16px", marginBottom: "16px" }}>
-                <section style={{ overflow: "hidden", borderRadius: "17px", background: "linear-gradient(135deg,#0f172a 0%,#1e293b 58%,#26374a 100%)", color: "#fff", boxShadow: "0 8px 25px rgba(15,23,42,.12)" }}>
-                  <div style={{ padding: "22px 23px 20px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "20px", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: 850, letterSpacing: ".12em", textTransform: "uppercase" }}>Your work</div>
-                        <div style={{ marginTop: "6px", color: "#fff", fontSize: "24px", lineHeight: 1.1, fontWeight: 850, letterSpacing: "-.03em" }}>
-                          {dashboardMetrics.myTickets} active ticket{dashboardMetrics.myTickets === 1 ? "" : "s"}
-                        </div>
-                        <div style={{ marginTop: "7px", color: "#94a3b8", fontSize: "11px" }}>The work currently owned by your account.</div>
-                      </div>
-                      <div style={{ padding: "7px 9px", border: "1px solid rgba(255,255,255,.09)", borderRadius: "8px", background: "rgba(255,255,255,.06)", color: "#cbd5e1", fontSize: "9px", fontWeight: 800 }}>MY QUEUE</div>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "9px", marginTop: "21px" }}>
-                      {[
-                        ["Needs attention", dashboardMetrics.myNeedsAttention, "#fbbf24"],
-                        ["Overdue", dashboardMetrics.myOverdue, "#fb7185"],
-                        ["Waiting", dashboardMetrics.myWaiting, "#c4b5fd"],
-                        ["Aging 3d+", dashboardMetrics.myAging, "#93c5fd"],
-                      ].map(([label, value, color]) => (
-                        <div key={label} style={{ padding: "12px", borderRadius: "10px", background: "rgba(255,255,255,.055)", border: "1px solid rgba(255,255,255,.055)" }}>
-                          <div style={{ color, fontSize: "20px", lineHeight: 1, fontWeight: 850 }}>{value}</div>
-                          <div style={{ marginTop: "6px", color: "#94a3b8", fontSize: "8px", fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ marginTop: "16px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,.08)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "7px" }}>
-                        <span style={{ color: "#94a3b8", fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}>My workload risk</span>
-                        <strong style={{ color: dashboardMetrics.myNeedsAttention ? "#fbbf24" : "#86efac", fontSize: "10px" }}>{dashboardMetrics.myNeedsAttention ? "Needs review" : "Healthy"}</strong>
-                      </div>
-                      <div style={{ height: "7px", borderRadius: "99px", background: "rgba(255,255,255,.08)", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${dashboardMetrics.myTickets ? Math.min(100, Math.round((dashboardMetrics.myNeedsAttention / dashboardMetrics.myTickets) * 100)) : 0}%`, background: dashboardMetrics.myNeedsAttention ? "#fbbf24" : "#4ade80", borderRadius: "99px" }} />
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section style={{ border: "1px solid #e2e8f0", borderRadius: "17px", background: "#fff", padding: "20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ color: "#0f172a", fontSize: "13px", fontWeight: 850 }}>Queue health</div>
-                      <div style={{ marginTop: "4px", color: "#94a3b8", fontSize: "10px" }}>How the active backlog is distributed</div>
-                    </div>
-                    <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: `conic-gradient(#0f172a 0 ${(dashboardMetrics.active ? dashboardMetrics.open / dashboardMetrics.active * 100 : 0)}%, #60a5fa 0 ${(dashboardMetrics.active ? (dashboardMetrics.open + dashboardMetrics.inProgress) / dashboardMetrics.active * 100 : 0)}%, #a78bfa 0 ${(dashboardMetrics.active ? (dashboardMetrics.open + dashboardMetrics.inProgress + dashboardMetrics.waiting) / dashboardMetrics.active * 100 : 0)}%, #f59e0b 0 ${(dashboardMetrics.active ? (dashboardMetrics.open + dashboardMetrics.inProgress + dashboardMetrics.waiting + dashboardMetrics.onHold) / dashboardMetrics.active * 100 : 0)}%, #e2e8f0 0 100%)`, position: "relative", flex: "0 0 auto" }}>
-                      <div style={{ position: "absolute", inset: "7px", borderRadius: "50%", background: "#fff" }} />
-                    </div>
-                  </div>
-                  <div style={{ marginTop: "17px", display: "grid", gap: "9px" }}>
-                    {["Open","In Progress","Waiting","On Hold","Escalated"].map((label, index) => {
-                      const value = {"Open":dashboardMetrics.open,"In Progress":dashboardMetrics.inProgress,"Waiting":dashboardMetrics.waiting,"On Hold":dashboardMetrics.onHold,"Escalated":dashboardMetrics.escalated}[label];
-                      const color = ["#0f172a","#60a5fa","#a78bfa","#f59e0b","#f87171"][index];
-                      return <div key={label}>
-                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"4px", fontSize:"9px", color:"#64748b" }}><span>{label}</span><strong style={{color:"#334155"}}>{value}</strong></div>
-                        <div style={{height:"5px",borderRadius:"99px",background:"#f1f5f9",overflow:"hidden"}}><div style={{height:"100%",width:`${dashboardMetrics.active ? Math.max(value ? 2 : 0, Math.min(100,(value/dashboardMetrics.active)*100)) : 0}%`,background:color,borderRadius:"99px"}} /></div>
-                      </div>;
-                    })}
-                  </div>
-                </section>
-              </div>
-
-              {/* BRAND HEALTH */}
-              <section style={{ border: "1px solid #e2e8f0", borderRadius: "17px", background: "#fff", marginBottom: "16px", overflow: "hidden" }}>
-                <div style={{ padding: "19px 20px 15px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "20px" }}>
-                  <div>
-                    <div style={{ color: "#0f172a", fontSize: "13px", fontWeight: 850 }}>Brand workload</div>
-                    <div style={{ marginTop: "4px", color: "#94a3b8", fontSize: "10px" }}>Compare workload pressure across the three brands.</div>
-                  </div>
-                  <span style={{ color: "#94a3b8", fontSize: "9px" }}>Live active workload · all brands</span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", borderTop: "1px solid #eef2f7" }}>
-                  {dashboardMetrics.byBrand.map((row, index) => {
-                    const accent = index === 0 ? "#2563eb" : index === 1 ? "#16a34a" : "#d97706";
-                    const risk = row.overdue + row.unassigned + row.aging;
-                    return <div key={row.source} style={{ padding: "18px 20px", borderRight: index < 2 ? "1px solid #eef2f7" : "0" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:accent}}/><strong style={{fontSize:"11px",color:"#334155"}}>{row.source}</strong></div>
-                        <span style={{fontSize:"9px",fontWeight:800,color:risk ? "#b45309" : "#16a34a"}}>{risk ? `${risk} risk signals` : "Healthy"}</span>
-                      </div>
-                      <div style={{marginTop:13,display:"flex",alignItems:"baseline",gap:6}}><strong style={{fontSize:"28px",letterSpacing:"-.03em",color:"#0f172a"}}>{row.active}</strong><span style={{fontSize:"9px",color:"#94a3b8"}}>active</span></div>
-                      <div style={{marginTop:12,display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:7}}>
-                        {[['Open',row.open],['Waiting',row.waiting],['Overdue',row.overdue],['3d+',row.aging]].map(([label,value])=><div key={label} style={{padding:"8px 7px",borderRadius:8,background:"#f8fafc"}}><div style={{fontSize:"15px",fontWeight:800,color:value && (label==='Overdue'||label==='3d+') ? "#b45309":"#334155"}}>{value}</div><div style={{marginTop:3,fontSize:"7px",color:"#94a3b8",fontWeight:800,textTransform:"uppercase"}}>{label}</div></div>)}
-                      </div>
-                    </div>;
-                  })}
-                </div>
-              </section>
-
-              {/* AGING + MY RECENT */}
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: "16px", marginBottom: "16px" }}>
-                <section style={{ border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px" }}>
-                  <div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Backlog age</div>
-                  <div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>How long active tickets have been open</div>
-                  <div style={{marginTop:20,display:"grid",gap:13}}>
-                    {[["Under 1 day",operationsMetrics.under1Day,"#22c55e"],["1–3 days",operationsMetrics.oneTo3Days,"#60a5fa"],["3–5 days",operationsMetrics.threeTo5Days,"#f59e0b"],["5+ days",operationsMetrics.fivePlusDays,"#ef4444"]].map(([label,value,color])=>{
-                      const pct=operationsMetrics.under1Day+operationsMetrics.oneTo3Days+operationsMetrics.threeTo5Days+operationsMetrics.fivePlusDays ? (value/dashboardMetrics.active)*100 : 0;
-                      return <div key={label}><div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",color:"#64748b",marginBottom:5}}><span>{label}</span><strong style={{color:"#334155"}}>{value}</strong></div><div style={{height:8,borderRadius:99,background:"#f1f5f9",overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(100,pct)}%`,background:color,borderRadius:99}}/></div></div>;
-                    })}
-                  </div>
-                  <div style={{marginTop:18,paddingTop:13,borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",fontSize:"9px"}}><span style={{color:"#94a3b8"}}>Tickets 3+ days</span><strong style={{color:operationsMetrics.aging3Plus ? "#b45309":"#16a34a"}}>{operationsMetrics.aging3Plus}</strong></div>
-                </section>
-
-                <section style={{ border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px" }}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Your latest work</div><div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>Most recently updated tickets assigned to you</div></div><button type="button" onClick={()=>{setDashboardTab(false);setFilter("mine");}} style={{border:0;background:"transparent",color:"#2563eb",fontSize:"9px",fontWeight:800,cursor:"pointer"}}>View all →</button></div>
-                  <div style={{marginTop:8}}>{dashboardMetrics.myRecent.length ? dashboardMetrics.myRecent.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"11px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"10px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"8px",fontWeight:750,color:isOverdue(ticket)?"#dc2626":"#64748b",whiteSpace:"nowrap"}}>{isOverdue(ticket)?"OVERDUE":ticket.status}</span></div><div style={{marginTop:4,fontSize:"8px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatTicketAge(ticket)}</div></button>) : <div style={{padding:"18px 0",fontSize:"10px",color:"#94a3b8"}}>No active tickets are assigned to you.</div>}</div>
-                </section>
-              </div>
-
-              {/* ACTION QUEUES */}
-              <div style={{ display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:"16px" }}>
-                <section style={{border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Needs attention</div><div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>The highest-risk tickets right now.</div></div><span style={{padding:"5px 8px",borderRadius:99,background:"#fff7ed",color:"#b45309",fontSize:"9px",fontWeight:850}}>{dashboardMetrics.needsAttention}</span></div>
-                  <div style={{marginTop:8}}>{dashboardMetrics.attention.length ? dashboardMetrics.attention.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"11px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"10px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"8px",fontWeight:800,color:isOverdue(ticket)?"#dc2626":"#64748b",whiteSpace:"nowrap"}}>{isOverdue(ticket)?"OVERDUE":formatTicketAge(ticket)}</span></div><div style={{marginTop:4,fontSize:"8px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {getTicketOwnerName(ticket) || "Unassigned"}</div></button>) : <div style={{padding:"18px 0",fontSize:"10px",color:"#94a3b8"}}>Nothing urgent right now.</div>}</div>
-                </section>
-
-                <section style={{border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Recently updated</div><div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>Latest activity across the active queue.</div></div><span style={{display:"inline-flex",alignItems:"center",gap:5,color:"#16a34a",fontSize:"8px",fontWeight:850}}><span style={{width:6,height:6,borderRadius:"50%",background:"#22c55e"}}/> LIVE</span></div>
-                  <div style={{marginTop:8}}>{dashboardMetrics.recentlyUpdated.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"11px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"10px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"8px",color:"#64748b",whiteSpace:"nowrap"}}>{ticket.status}</span></div><div style={{marginTop:4,fontSize:"8px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatDateTime(ticket.updated_at_zoho || ticket.created_at_zoho || ticket.created_at)}</div></button>)}</div>
-                </section>
-              </div>
-
-              {/* FUTURE METRICS */}
-              <div style={{marginTop:"18px",padding:"14px 17px",border:"1px solid #e2e8f0",borderRadius:"13px",background:"#fbfcfe",display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap"}}>
-                <strong style={{fontSize:"9px",color:"#475569",textTransform:"uppercase",letterSpacing:".08em"}}>Next intelligence layer</strong>
-                <span style={{fontSize:"9px",color:"#64748b"}}>First response time</span>
-                <span style={{fontSize:"9px",color:"#64748b"}}>Resolution time</span>
-                <span style={{fontSize:"9px",color:"#64748b"}}>Opened vs. closed</span>
-                <span style={{fontSize:"9px",color:"#64748b"}}>SLA risk</span>
-                <span style={{fontSize:"9px",color:"#64748b"}}>Team workload balance</span>
-                <span style={{fontSize:"9px",color:"#64748b"}}>Daily activity</span>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {!dashboardTab && (<>
         <div className="ticket-column-header">
 
           <div>
@@ -6230,7 +5743,6 @@ function App() {
             }
           />
         </div>
-
 
         <div className="ticket-list">
 
@@ -6320,25 +5832,50 @@ function App() {
                     ) ||
                       "Unassigned"}
                   </span>
-
-                  <span
-                    className="ticket-age"
-                    title="Time since ticket opened"
-                  >
-                    {formatTicketAge(ticket)}
-                  </span>
                 </div>
               </button>
             )
           )}
         </div>
-        </>)}
       </section>
 
+      {dashboardTab ? (
+        <main className="dashboard-workspace">
+          <div className="dashboard-page">
+            <div className="dashboard-page-header">
+              <div><div className="dashboard-eyebrow">CSG · MARKETING OPERATIONS</div><h1>Good work starts with knowing what needs attention.</h1><p>Your operational view across Qualicare, Tutor Doctor and Code Wiz.</p></div>
+              <div className="dashboard-header-actions"><button onClick={() => openDashboardQueue("mine")}>My tickets</button><button onClick={() => openDashboardQueue("needs")}>Needs attention</button></div>
+            </div>
+            <div className="dashboard-grid">
+              {[
+                ["Active", dashboardMetrics.active, "Current workload", "all"],
+                ["Needs attention", dashboardMetrics.needs, "Action required", "needs"],
+                ["Overdue", dashboardMetrics.overdue, "Past due", "overdue"],
+                ["Due today", dashboardMetrics.today, "Needs action today", "today"],
+                ["Unassigned", dashboardMetrics.unassigned, "No owner", "unassigned"],
+                ["Aging 3d+", dashboardMetrics.aging, "Older workload", "aging"],
+              ].map(([label,count,sub,target]) => <button key={label} className="dashboard-kpi" onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><small>{sub} →</small></button>)}
+            </div>
+            <div className="dashboard-columns">
+              <section className="dashboard-panel dashboard-panel-wide"><div className="panel-heading"><div><h2>My work</h2><p>Queues that matter most to you.</p></div></div><div className="dashboard-list">
+                {[["My tickets",dashboardMetrics.mine,"mine"],["Needs attention",dashboardMetrics.needs,"needs"],["Overdue",dashboardMetrics.overdue,"overdue"],["Due today",dashboardMetrics.today,"today"],["High priority",dashboardMetrics.high,"high"],["Following",followedTickets.length,"followed"]].map(([label,count,target]) => <button key={label} onClick={() => openDashboardQueue(target)}><span>{label}</span><strong>{count}</strong><em>View →</em></button>)}
+              </div></section>
+              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Workload by brand</h2><p>Active tickets.</p></div></div>{dashboardMetrics.brands.map(item => <button className="dashboard-bar-row" key={item.source} onClick={() => { setBrandFilter(item.source); openDashboardQueue("all"); }}><span>{item.source}</span><div><i style={{width:`${dashboardMetrics.active ? Math.max(3,(item.count/dashboardMetrics.active)*100) : 0}%`}} /></div><strong>{item.count}</strong></button>)}</section>
+            </div>
+            <div className="dashboard-columns">
+              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Queue health</h2><p>Current status mix.</p></div></div>{dashboardMetrics.statuses.map(item => <button className="dashboard-simple-row" key={item.status} onClick={() => { setDashboardTab(false); setFilter(item.status === "In Progress" ? "inprogress" : item.status.toLowerCase().replace(" ","")); }}><span>{item.status}</span><strong>{item.count}</strong></button>)}</section>
+              <section className="dashboard-panel"><div className="panel-heading"><div><h2>Ticket age</h2><p>Where the backlog is accumulating.</p></div></div>{dashboardMetrics.agingBuckets.map(item => <button className="dashboard-simple-row" key={item.label} onClick={() => openDashboardQueue(item.label === "7d+" ? "aging" : "aging")}><span>{item.label}</span><strong>{item.count}</strong></button>)}</section>
+            </div>
+            <section className="dashboard-panel"><div className="panel-heading"><div><h2>Recently updated</h2><p>Jump straight back into active work.</p></div></div><div className="recent-grid">{dashboardMetrics.recent.map(ticket => <button key={ticket.ticket_key} onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); }}><div><BrandBadge source={ticket.source}/><strong>#{ticket.ticket_number}</strong></div><h3>{ticket.subject || "Untitled ticket"}</h3><p>{ticket.contact_name || "Unknown requester"} · {formatAge(ticket)} old</p><span>{needsAttentionReason(ticket) || ticket.status}</span></button>)}</div></section>
+          </div>
+        </main>
+      ) : null}
+
+      {!dashboardTab && (
+      <>
       {/* WORKSPACE */}
 
       <main
-        style={dashboardTab ? { display: "none" } : undefined}
         className={`conversation-column ${
           selected
             ? brandClass(
@@ -6416,72 +5953,16 @@ function App() {
                     </span>
                   )}
                 </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    marginTop: "10px",
-                    fontSize: "12px",
-                    color: "#64748b",
-                  }}
-                >
-                  <span>
-                    Opened {formatDateTime(selected.created_at_zoho || selected.created_at)}
-                  </span>
-                  <span>·</span>
-                  <strong style={{ color: "#334155" }}>
-                    Age {formatTicketAge(selected)}
-                  </strong>
-                  {selected.due_date && (
-                    <>
-                      <span>·</span>
-                      <span style={{ color: isOverdue(selected) ? "#dc2626" : "#64748b" }}>
-                        {isOverdue(selected) ? "Overdue" : `Due ${formatDate(selected.due_date)}`}
-                      </span>
-                    </>
-                  )}
-                </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "14px", position: "relative" }}>
-                <button
-                  type="button"
-                  className="zoho-link"
-                  onClick={() => toggleFollowTicket(selected.ticket_key)}
-                  style={{ border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer" }}
-                >
-                  {followedTickets.includes(selected.ticket_key) ? "★ Following" : "☆ Follow"}
-                </button>
-                <button
-                  type="button"
-                  className="zoho-link"
-                  onClick={() => { setShowReminderMenu((current) => !current); setReminderNotice(""); }}
-                  style={{ border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer" }}
-                >
-                  ⏰ Remind me
-                </button>
-                {showReminderMenu && (
-                  <div style={{ position: "absolute", right: 0, top: "42px", width: "280px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", boxShadow: "0 16px 35px rgba(15,23,42,.16)", padding: "12px", zIndex: 50 }}>
-                    <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "8px" }}>Remind me</div>
-                    <input
-                      value={reminderNote}
-                      onChange={(event) => setReminderNote(event.target.value)}
-                      placeholder="Optional note"
-                      style={{ width: "100%", boxSizing: "border-box", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "8px", marginBottom: "8px" }}
-                    />
-                    {[ ["1h", "In 1 hour"], ["tomorrow", "Tomorrow"], ["3days", "In 3 days"], ["nextweek", "Next week"] ].map(([value, label]) => (
-                      <button key={value} type="button" onClick={() => addReminder(selected, value, reminderNote)} style={{ display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "8px 6px", borderRadius: "7px", cursor: "pointer" }}>{label}</button>
-                    ))}
-                  </div>
-                )}
+              <div className="ticket-header-insights">
+                <span>Opened <strong>{formatAge(selected)}</strong></span>
+                <span>Last activity <strong>{lastActivityLabel(threads, comments, selected)}</strong></span>
+                {selected.due_date && <span>Due <strong>{formatDate(selected.due_date)}</strong></span>}
+                <button type="button" onClick={() => toggleFollow(selected.ticket_key)}>{followedTickets.includes(selected.ticket_key) ? "★ Following" : "☆ Follow"}</button>
+                <button type="button" onClick={() => setShowReminderMenu(v => !v)}>⏰ Remind</button>
+                {showReminderMenu && <div className="reminder-menu"><button onClick={() => addReminder(selected,1)}>In 1 hour</button><button onClick={() => addReminder(selected,24)}>Tomorrow</button><button onClick={() => addReminder(selected,72)}>In 3 days</button><button onClick={() => addReminder(selected,168)}>Next week</button></div>}
               </div>
-
-              {reminderNotice && (
-                <div style={{ marginTop: "7px", fontSize: "12px", color: "#64748b" }}>{reminderNotice}</div>
-              )}
-
               {selected.ticket_url && (
                 <a
                   className="zoho-link"
@@ -8332,6 +7813,10 @@ function App() {
 
               <div className="details-divider" />
 
+              {activeReminders.filter(item => item.ticket_key === selected.ticket_key).map(item => (
+                <Detail label="Reminder" key={item.id}><div className="reminder-detail"><strong>{formatDateTime(item.due_at)}</strong><button type="button" onClick={() => dismissReminder(item.id)}>Dismiss</button></div></Detail>
+              ))}
+
               <Detail label="Requester">
 
                 <div className="requester-detail">
@@ -8361,24 +7846,6 @@ function App() {
                   "—"}
               </Detail>
 
-              <Detail label="Age">
-                <strong>{formatTicketAge(selected)}</strong>
-              </Detail>
-
-              <Detail label="Reminder">
-                {activeReminders.filter((item) => item.ticket_key === selected.ticket_key).length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {activeReminders.filter((item) => item.ticket_key === selected.ticket_key).map((item) => (
-                      <div key={item.id} style={{ fontSize: "12px" }}>
-                        <strong>{formatDateTime(item.due_at)}</strong>
-                        {item.note && <div style={{ color: "#64748b", marginTop: "2px" }}>{item.note}</div>}
-                        <button type="button" onClick={() => dismissReminder(item.id)} style={{ marginTop: "5px", border: 0, background: "transparent", padding: 0, color: "#64748b", cursor: "pointer", fontSize: "11px" }}>Dismiss</button>
-                      </div>
-                    ))}
-                  </div>
-                ) : <span style={{ color: "#94a3b8" }}>None</span>}
-              </Detail>
-
               <Detail label="Created">
                 {formatDate(
                   selected.created_at_zoho
@@ -8394,7 +7861,18 @@ function App() {
           </>
         )}
       </aside>
+      </>
+      )}
     </div>
+      {showCommandPalette && (
+        <div className="command-overlay" onMouseDown={() => setShowCommandPalette(false)}>
+          <div className="command-palette" onMouseDown={e => e.stopPropagation()}>
+            <div className="command-input-wrap"><span>⌘K</span><input autoFocus value={commandQuery} onChange={e => setCommandQuery(e.target.value)} placeholder="Search tickets, customers, emails, tags…" /></div>
+            <div className="command-results">{tickets.filter(isVisibleMarketingTicket).filter(ticket => `${ticket.ticket_number} ${ticket.subject} ${ticket.contact_name} ${ticket.contact_email} ${ticket.ticket_key}`.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,10).map(ticket => <button key={ticket.ticket_key} onClick={() => { setDashboardTab(false); setSelectedKey(ticket.ticket_key); setShowCommandPalette(false); }}><span>#{ticket.ticket_number}</span><strong>{ticket.subject || "Untitled ticket"}</strong><small>{ticket.contact_name || ""} · {ticket.source}</small></button>)}</div>
+            {!commandQuery && <div className="command-hints"><span>Search tickets and customers</span><span>Esc to close</span></div>}
+          </div>
+        </div>
+      )}
   );
 }
 
