@@ -5338,7 +5338,7 @@ function App() {
 
           <button
             className={`nav-item ${filter === "needs" ? "active" : ""}`}
-            onClick={() => { setDashboardTab(false); setFilter("needs"); setSavedView("all"); }}
+            onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("needs"); setFilter("all"); }}
           >
             <span>Needs Attention</span>
             <span className="nav-count">{counts.needsAttention}</span>
@@ -5954,118 +5954,220 @@ function App() {
           <section
             style={{
               minHeight: "100%",
-              padding: "28px 30px 42px",
-              background: "#f8fafc",
+              padding: "30px 34px 46px",
+              background: "#f7f9fc",
               boxSizing: "border-box",
             }}
           >
-            <div style={{ maxWidth: "1480px", margin: "0 auto" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "24px", flexWrap: "wrap", marginBottom: "24px" }}>
+            <div style={{ maxWidth: "1540px", margin: "0 auto" }}>
+              {/* DASHBOARD HEADER */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: "24px",
+                  marginBottom: "24px",
+                  flexWrap: "wrap",
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".12em" }}>CSG MARKETING OPERATIONS</div>
-                  <h1 style={{ margin: "6px 0 0", fontSize: "32px", lineHeight: 1.1, letterSpacing: "-.03em", color: "#0f172a", fontWeight: 800 }}>Good overview, {session?.user?.email?.split("@")[0] || "there"}</h1>
-                  <div style={{ marginTop: "7px", fontSize: "13px", color: "#64748b" }}>Your command centre for workload, priorities, response queues and team activity.</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "9px", color: "#64748b", fontSize: "10px", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase" }}>
+                    <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 0 4px #dcfce7" }} />
+                    Marketing Operations
+                  </div>
+                  <h1 style={{ margin: "9px 0 0", color: "#0f172a", fontSize: "34px", lineHeight: 1.05, letterSpacing: "-.04em", fontWeight: 850 }}>
+                    Dashboard
+                  </h1>
+                  <p style={{ margin: "8px 0 0", maxWidth: "720px", color: "#64748b", fontSize: "12px", lineHeight: 1.55 }}>
+                    A live view of workload, risk, your queue and where the team should focus next.
+                  </p>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "9px", padding: "9px 12px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px" }}>
-                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#16a34a" }}></span>
-                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>Live workload</span>
-                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{dashboardMetrics.active} active</span>
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("all"); setFilter("mine"); }}
+                    style={{ border: "1px solid #dbe3ec", borderRadius: "9px", background: "#fff", padding: "9px 12px", color: "#334155", fontSize: "10px", fontWeight: 800, cursor: "pointer" }}
+                  >
+                    My tickets
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setDashboardTab(false); setSelectedKey(null); setSavedView("needs"); setFilter("all"); }}
+                    style={{ border: "0", borderRadius: "9px", background: "#0f172a", padding: "10px 13px", color: "#fff", fontSize: "10px", fontWeight: 800, cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.12)" }}
+                  >
+                    View needs attention
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: "14px", marginBottom: "18px" }}>
+              {/* KPI ROW */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: "11px", marginBottom: "18px" }}>
                 {[
-                  ["Active", dashboardMetrics.active, "Total open workload", "#0f172a"],
-                  ["Needs attention", dashboardMetrics.needsAttention, "Priority queue", "#b45309"],
-                  ["Overdue", dashboardMetrics.overdue, "Past due date", "#dc2626"],
-                  ["Unassigned", dashboardMetrics.unassigned, "Need an owner", "#d97706"],
-                  ["Aging 3d+", dashboardMetrics.aging3Plus, "Open for 3+ days", "#7c3aed"],
-                  ["Waiting 48h+", dashboardMetrics.waiting48Plus, "Waiting too long", "#6d28d9"],
-                ].map(([label, value, subtitle, color]) => (
-                  <div key={label} style={{ gridColumn: "span 2", minWidth: 0, background: "#fff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "16px 17px", boxShadow: "0 1px 2px rgba(15,23,42,.025)" }}>
-                    <div style={{ fontSize: "10px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".07em" }}>{label}</div>
-                    <div style={{ marginTop: "9px", fontSize: "28px", lineHeight: 1, fontWeight: 800, letterSpacing: "-.03em", color }}>{value}</div>
-                    <div style={{ marginTop: "7px", fontSize: "10px", color: "#94a3b8" }}>{subtitle}</div>
-                  </div>
+                  ["Active", dashboardMetrics.active, "Current backlog", "#0f172a", "all"],
+                  ["Needs attention", dashboardMetrics.needsAttention, "Action required", "#b45309", "needs"],
+                  ["Overdue", dashboardMetrics.overdue, "Past due", "#dc2626", "overdue"],
+                  ["Unassigned", dashboardMetrics.unassigned, "No owner", "#d97706", "unassigned"],
+                  ["Aging 3d+", dashboardMetrics.aging3Plus, "Older workload", "#7c3aed", "aging"],
+                  ["Waiting 48h+", dashboardMetrics.waiting48Plus, "Waiting too long", "#6d28d9", "waiting"],
+                ].map(([label, value, subtitle, color, target]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setDashboardTab(false);
+                      setSelectedKey(null);
+                      if (target === "aging") { setSavedView("aging"); setFilter("all"); }
+                      else if (target === "needs") { setSavedView("needs"); setFilter("all"); }
+                      else if (target === "waiting") { setSavedView("all"); setFilter("waiting"); }
+                      else { setSavedView("all"); setFilter(target); }
+                    }}
+                    style={{ textAlign: "left", minWidth: 0, border: "1px solid #e2e8f0", borderRadius: "13px", background: "#fff", padding: "15px 16px", cursor: "pointer", boxShadow: "0 1px 2px rgba(15,23,42,.025)" }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "7px" }}>
+                      <span style={{ color: "#64748b", fontSize: "9px", fontWeight: 850, letterSpacing: ".065em", textTransform: "uppercase" }}>{label}</span>
+                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: color }} />
+                    </div>
+                    <div style={{ marginTop: "10px", color, fontSize: "27px", lineHeight: 1, fontWeight: 850, letterSpacing: "-.035em" }}>{value}</div>
+                    <div style={{ marginTop: "6px", color: "#94a3b8", fontSize: "9px" }}>{subtitle}</div>
+                  </button>
                 ))}
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.5fr) minmax(300px, .9fr)", gap: "16px", marginBottom: "16px" }}>
-                <div style={{ background: "linear-gradient(135deg,#111827 0%,#1e293b 100%)", borderRadius: "16px", padding: "21px", color: "#fff", minHeight: "190px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "18px", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ fontSize: "10px", fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "#94a3b8" }}>Your work</div>
-                      <div style={{ marginTop: "5px", fontSize: "24px", fontWeight: 800, letterSpacing: "-.025em" }}>{dashboardMetrics.myTickets} active tickets assigned to you</div>
-                      <div style={{ marginTop: "6px", fontSize: "11px", color: "#94a3b8" }}>Personal workload, risk and recent activity.</div>
+              {/* MY DAY + QUEUE HEALTH */}
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(330px, .65fr)", gap: "16px", marginBottom: "16px" }}>
+                <section style={{ overflow: "hidden", borderRadius: "17px", background: "linear-gradient(135deg,#0f172a 0%,#1e293b 58%,#26374a 100%)", color: "#fff", boxShadow: "0 8px 25px rgba(15,23,42,.12)" }}>
+                  <div style={{ padding: "22px 23px 20px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "20px", alignItems: "flex-start" }}>
+                      <div>
+                        <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: 850, letterSpacing: ".12em", textTransform: "uppercase" }}>Your work</div>
+                        <div style={{ marginTop: "6px", color: "#fff", fontSize: "24px", lineHeight: 1.1, fontWeight: 850, letterSpacing: "-.03em" }}>
+                          {dashboardMetrics.myTickets} active ticket{dashboardMetrics.myTickets === 1 ? "" : "s"}
+                        </div>
+                        <div style={{ marginTop: "7px", color: "#94a3b8", fontSize: "11px" }}>The work currently owned by your account.</div>
+                      </div>
+                      <div style={{ padding: "7px 9px", border: "1px solid rgba(255,255,255,.09)", borderRadius: "8px", background: "rgba(255,255,255,.06)", color: "#cbd5e1", fontSize: "9px", fontWeight: 800 }}>MY QUEUE</div>
                     </div>
-                    <div style={{ padding: "8px 10px", borderRadius: "9px", background: "rgba(255,255,255,.08)", fontSize: "10px", color: "#cbd5e1", whiteSpace: "nowrap" }}>MY WORK</div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "10px", marginTop: "20px" }}>
-                    {[["Needs attention", dashboardMetrics.myNeedsAttention, "#fbbf24"],["Overdue", dashboardMetrics.myOverdue, "#f87171"],["Waiting", dashboardMetrics.myWaiting, "#c4b5fd"],["Aging 3d+", dashboardMetrics.myAging, "#93c5fd"]].map(([label,value,color]) => (
-                      <div key={label} style={{ padding: "11px", borderRadius: "10px", background: "rgba(255,255,255,.06)" }}>
-                        <div style={{ fontSize: "19px", fontWeight: 800, color }}>{value}</div>
-                        <div style={{ marginTop: "4px", fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "9px", marginTop: "21px" }}>
+                      {[
+                        ["Needs attention", dashboardMetrics.myNeedsAttention, "#fbbf24"],
+                        ["Overdue", dashboardMetrics.myOverdue, "#fb7185"],
+                        ["Waiting", dashboardMetrics.myWaiting, "#c4b5fd"],
+                        ["Aging 3d+", dashboardMetrics.myAging, "#93c5fd"],
+                      ].map(([label, value, color]) => (
+                        <div key={label} style={{ padding: "12px", borderRadius: "10px", background: "rgba(255,255,255,.055)", border: "1px solid rgba(255,255,255,.055)" }}>
+                          <div style={{ color, fontSize: "20px", lineHeight: 1, fontWeight: 850 }}>{value}</div>
+                          <div style={{ marginTop: "6px", color: "#94a3b8", fontSize: "8px", fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginTop: "16px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,.08)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "7px" }}>
+                        <span style={{ color: "#94a3b8", fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}>My workload risk</span>
+                        <strong style={{ color: dashboardMetrics.myNeedsAttention ? "#fbbf24" : "#86efac", fontSize: "10px" }}>{dashboardMetrics.myNeedsAttention ? "Needs review" : "Healthy"}</strong>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "19px" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Queue health</div>
-                  <div style={{ marginTop: "4px", fontSize: "11px", color: "#94a3b8" }}>Where the active workload sits today</div>
-                  <div style={{ marginTop: "16px", display: "grid", gap: "11px" }}>
-                    {[["Open",dashboardMetrics.open],["In Progress",dashboardMetrics.inProgress],["Waiting",dashboardMetrics.waiting],["On Hold",dashboardMetrics.onHold],["Escalated",dashboardMetrics.escalated]].map(([label,value]) => (
-                      <div key={label}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#64748b", marginBottom: "4px" }}><span>{label}</span><strong style={{ color: "#334155" }}>{value}</strong></div>
-                        <div style={{ height: "6px", borderRadius: "99px", background: "#f1f5f9", overflow: "hidden" }}><div style={{ height: "100%", width: `${dashboardMetrics.active ? Math.max(2, Math.min(100, (value / dashboardMetrics.active) * 100)) : 0}%`, background: "#94a3b8", borderRadius: "99px" }}></div></div>
+                      <div style={{ height: "7px", borderRadius: "99px", background: "rgba(255,255,255,.08)", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${dashboardMetrics.myTickets ? Math.min(100, Math.round((dashboardMetrics.myNeedsAttention / dashboardMetrics.myTickets) * 100)) : 0}%`, background: dashboardMetrics.myNeedsAttention ? "#fbbf24" : "#4ade80", borderRadius: "99px" }} />
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
+                </section>
+
+                <section style={{ border: "1px solid #e2e8f0", borderRadius: "17px", background: "#fff", padding: "20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ color: "#0f172a", fontSize: "13px", fontWeight: 850 }}>Queue health</div>
+                      <div style={{ marginTop: "4px", color: "#94a3b8", fontSize: "10px" }}>How the active backlog is distributed</div>
+                    </div>
+                    <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: `conic-gradient(#0f172a 0 ${(dashboardMetrics.active ? dashboardMetrics.open / dashboardMetrics.active * 100 : 0)}%, #60a5fa 0 ${(dashboardMetrics.active ? (dashboardMetrics.open + dashboardMetrics.inProgress) / dashboardMetrics.active * 100 : 0)}%, #a78bfa 0 ${(dashboardMetrics.active ? (dashboardMetrics.open + dashboardMetrics.inProgress + dashboardMetrics.waiting) / dashboardMetrics.active * 100 : 0)}%, #f59e0b 0 ${(dashboardMetrics.active ? (dashboardMetrics.open + dashboardMetrics.inProgress + dashboardMetrics.waiting + dashboardMetrics.onHold) / dashboardMetrics.active * 100 : 0)}%, #e2e8f0 0 100%)`, position: "relative", flex: "0 0 auto" }}>
+                      <div style={{ position: "absolute", inset: "7px", borderRadius: "50%", background: "#fff" }} />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "17px", display: "grid", gap: "9px" }}>
+                    {["Open","In Progress","Waiting","On Hold","Escalated"].map((label, index) => {
+                      const value = {"Open":dashboardMetrics.open,"In Progress":dashboardMetrics.inProgress,"Waiting":dashboardMetrics.waiting,"On Hold":dashboardMetrics.onHold,"Escalated":dashboardMetrics.escalated}[label];
+                      const color = ["#0f172a","#60a5fa","#a78bfa","#f59e0b","#f87171"][index];
+                      return <div key={label}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"4px", fontSize:"9px", color:"#64748b" }}><span>{label}</span><strong style={{color:"#334155"}}>{value}</strong></div>
+                        <div style={{height:"5px",borderRadius:"99px",background:"#f1f5f9",overflow:"hidden"}}><div style={{height:"100%",width:`${dashboardMetrics.active ? Math.max(value ? 2 : 0, Math.min(100,(value/dashboardMetrics.active)*100)) : 0}%`,background:color,borderRadius:"99px"}} /></div>
+                      </div>;
+                    })}
+                  </div>
+                </section>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.15fr) minmax(0,.85fr)", gap: "16px", marginBottom: "16px" }}>
-                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", overflow: "hidden" }}>
-                  <div style={{ padding: "17px 19px", borderBottom: "1px solid #eef2f7", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div><div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Workload by brand</div><div style={{ marginTop: "3px", fontSize: "10px", color: "#94a3b8" }}>Active tickets, ownership and pressure</div></div>
+              {/* BRAND HEALTH */}
+              <section style={{ border: "1px solid #e2e8f0", borderRadius: "17px", background: "#fff", marginBottom: "16px", overflow: "hidden" }}>
+                <div style={{ padding: "19px 20px 15px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "20px" }}>
+                  <div>
+                    <div style={{ color: "#0f172a", fontSize: "13px", fontWeight: 850 }}>Brand workload</div>
+                    <div style={{ marginTop: "4px", color: "#94a3b8", fontSize: "10px" }}>Compare workload pressure across the three brands.</div>
                   </div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "620px" }}>
-                      <thead><tr>{["Brand","Active","Open","Waiting","Overdue","Unassigned","3d+"].map((label)=><th key={label} style={{ padding: "10px 12px", textAlign: label === "Brand" ? "left" : "right", fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 800 }}>{label}</th>)}</tr></thead>
-                      <tbody>{dashboardMetrics.byBrand.map((row)=><tr key={row.source}>
-                        <td style={{ padding: "12px", borderTop: "1px solid #f1f5f9", fontSize: "11px", fontWeight: 750, color: "#334155" }}>{row.source}</td>
-                        {[row.active,row.open,row.waiting,row.overdue,row.unassigned,row.aging].map((value,index)=><td key={index} style={{ padding: "12px", borderTop: "1px solid #f1f5f9", textAlign: "right", fontSize: "11px", color: value && (index===3||index===4||index===5) ? "#b45309" : "#475569", fontWeight: value ? 750 : 500 }}>{value}</td>)}
-                      </tr>)}</tbody>
-                    </table>
-                  </div>
+                  <span style={{ color: "#94a3b8", fontSize: "9px" }}>Live active workload · all brands</span>
                 </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", borderTop: "1px solid #eef2f7" }}>
+                  {dashboardMetrics.byBrand.map((row, index) => {
+                    const accent = index === 0 ? "#2563eb" : index === 1 ? "#16a34a" : "#d97706";
+                    const risk = row.overdue + row.unassigned + row.aging;
+                    return <div key={row.source} style={{ padding: "18px 20px", borderRight: index < 2 ? "1px solid #eef2f7" : "0" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:accent}}/><strong style={{fontSize:"11px",color:"#334155"}}>{row.source}</strong></div>
+                        <span style={{fontSize:"9px",fontWeight:800,color:risk ? "#b45309" : "#16a34a"}}>{risk ? `${risk} risk signals` : "Healthy"}</span>
+                      </div>
+                      <div style={{marginTop:13,display:"flex",alignItems:"baseline",gap:6}}><strong style={{fontSize:"28px",letterSpacing:"-.03em",color:"#0f172a"}}>{row.active}</strong><span style={{fontSize:"9px",color:"#94a3b8"}}>active</span></div>
+                      <div style={{marginTop:12,display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:7}}>
+                        {[['Open',row.open],['Waiting',row.waiting],['Overdue',row.overdue],['3d+',row.aging]].map(([label,value])=><div key={label} style={{padding:"8px 7px",borderRadius:8,background:"#f8fafc"}}><div style={{fontSize:"15px",fontWeight:800,color:value && (label==='Overdue'||label==='3d+') ? "#b45309":"#334155"}}>{value}</div><div style={{marginTop:3,fontSize:"7px",color:"#94a3b8",fontWeight:800,textTransform:"uppercase"}}>{label}</div></div>)}
+                      </div>
+                    </div>;
+                  })}
+                </div>
+              </section>
 
-                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px" }}>
-                  <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Your most recent tickets</div>
-                  <div style={{ marginTop: "3px", fontSize: "10px", color: "#94a3b8" }}>The tickets currently assigned to you</div>
-                  <div style={{ marginTop: "9px" }}>
-                    {dashboardMetrics.myRecent.length ? dashboardMetrics.myRecent.map((ticket)=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{ width:"100%", border:0, borderTop:"1px solid #f1f5f9", background:"transparent", padding:"10px 0", textAlign:"left", cursor:"pointer" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}><strong style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:"11px", color:"#334155" }}>{ticket.subject || "Untitled ticket"}</strong><span style={{ fontSize:"9px", color:"#64748b", whiteSpace:"nowrap" }}>{ticket.status}</span></div>
-                      <div style={{ marginTop:3, fontSize:"9px", color:"#94a3b8" }}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatTicketAge(ticket)}</div>
-                    </button>) : <div style={{ padding:"16px 0", fontSize:"11px", color:"#94a3b8" }}>No active tickets are assigned to you.</div>}
+              {/* AGING + MY RECENT */}
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: "16px", marginBottom: "16px" }}>
+                <section style={{ border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px" }}>
+                  <div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Backlog age</div>
+                  <div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>How long active tickets have been open</div>
+                  <div style={{marginTop:20,display:"grid",gap:13}}>
+                    {[["Under 1 day",operationsMetrics.under1Day,"#22c55e"],["1–3 days",operationsMetrics.oneTo3Days,"#60a5fa"],["3–5 days",operationsMetrics.threeTo5Days,"#f59e0b"],["5+ days",operationsMetrics.fivePlusDays,"#ef4444"]].map(([label,value,color])=>{
+                      const pct=operationsMetrics.under1Day+operationsMetrics.oneTo3Days+operationsMetrics.threeTo5Days+operationsMetrics.fivePlusDays ? (value/dashboardMetrics.active)*100 : 0;
+                      return <div key={label}><div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",color:"#64748b",marginBottom:5}}><span>{label}</span><strong style={{color:"#334155"}}>{value}</strong></div><div style={{height:8,borderRadius:99,background:"#f1f5f9",overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(100,pct)}%`,background:color,borderRadius:99}}/></div></div>;
+                    })}
                   </div>
-                </div>
+                  <div style={{marginTop:18,paddingTop:13,borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",fontSize:"9px"}}><span style={{color:"#94a3b8"}}>Tickets 3+ days</span><strong style={{color:operationsMetrics.aging3Plus ? "#b45309":"#16a34a"}}>{operationsMetrics.aging3Plus}</strong></div>
+                </section>
+
+                <section style={{ border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px" }}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Your latest work</div><div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>Most recently updated tickets assigned to you</div></div><button type="button" onClick={()=>{setDashboardTab(false);setFilter("mine");}} style={{border:0;background:"transparent",color:"#2563eb",fontSize:"9px",fontWeight:800,cursor:"pointer"}}>View all →</button></div>
+                  <div style={{marginTop:8}}>{dashboardMetrics.myRecent.length ? dashboardMetrics.myRecent.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"11px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"10px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"8px",fontWeight:750,color:isOverdue(ticket)?"#dc2626":"#64748b",whiteSpace:"nowrap"}}>{isOverdue(ticket)?"OVERDUE":ticket.status}</span></div><div style={{marginTop:4,fontSize:"8px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatTicketAge(ticket)}</div></button>) : <div style={{padding:"18px 0",fontSize:"10px",color:"#94a3b8"}}>No active tickets are assigned to you.</div>}</div>
+                </section>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "16px" }}>
-                <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:"16px", padding:"18px" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{fontSize:"13px",fontWeight:800,color:"#0f172a"}}>Needs attention</div><div style={{marginTop:3,fontSize:"10px",color:"#94a3b8"}}>Tickets most likely to require action now</div></div><span style={{fontSize:"10px",fontWeight:800,color:"#b45309"}}>{dashboardMetrics.needsAttention}</span></div>
-                  <div style={{marginTop:8}}>{dashboardMetrics.attention.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"10px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"11px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"9px",color:isOverdue(ticket)?"#dc2626":"#64748b",fontWeight:750}}>{isOverdue(ticket)?"OVERDUE":formatTicketAge(ticket)}</span></div><div style={{marginTop:3,fontSize:"9px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {getTicketOwnerName(ticket) || "Unassigned"}</div></button>)}</div>
-                </div>
-                <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:"16px", padding:"18px" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{fontSize:"13px",fontWeight:800,color:"#0f172a"}}>Recently updated</div><div style={{marginTop:3,fontSize:"10px",color:"#94a3b8"}}>Latest movement across the team</div></div><span style={{fontSize:"9px",fontWeight:800,color:"#16a34a"}}>LIVE</span></div>
-                  <div style={{marginTop:8}}>{dashboardMetrics.recentlyUpdated.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"10px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"11px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"9px",color:"#64748b"}}>{ticket.status}</span></div><div style={{marginTop:3,fontSize:"9px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatDateTime(ticket.updated_at_zoho || ticket.created_at_zoho || ticket.created_at)}</div></button>)}</div>
-                </div>
+              {/* ACTION QUEUES */}
+              <div style={{ display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:"16px" }}>
+                <section style={{border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Needs attention</div><div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>The highest-risk tickets right now.</div></div><span style={{padding:"5px 8px",borderRadius:99,background:"#fff7ed",color:"#b45309",fontSize:"9px",fontWeight:850}}>{dashboardMetrics.needsAttention}</span></div>
+                  <div style={{marginTop:8}}>{dashboardMetrics.attention.length ? dashboardMetrics.attention.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"11px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"10px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"8px",fontWeight:800,color:isOverdue(ticket)?"#dc2626":"#64748b",whiteSpace:"nowrap"}}>{isOverdue(ticket)?"OVERDUE":formatTicketAge(ticket)}</span></div><div style={{marginTop:4,fontSize:"8px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {getTicketOwnerName(ticket) || "Unassigned"}</div></button>) : <div style={{padding:"18px 0",fontSize:"10px",color:"#94a3b8"}}>Nothing urgent right now.</div>}</div>
+                </section>
+
+                <section style={{border:"1px solid #e2e8f0",borderRadius:"17px",background:"#fff",padding:"20px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:"13px",fontWeight:850,color:"#0f172a"}}>Recently updated</div><div style={{marginTop:4,fontSize:"10px",color:"#94a3b8"}}>Latest activity across the active queue.</div></div><span style={{display:"inline-flex",alignItems:"center",gap:5,color:"#16a34a",fontSize:"8px",fontWeight:850}}><span style={{width:6,height:6,borderRadius:"50%",background:"#22c55e"}}/> LIVE</span></div>
+                  <div style={{marginTop:8}}>{dashboardMetrics.recentlyUpdated.map(ticket=><button key={ticket.ticket_key} type="button" onClick={()=>{setDashboardTab(false);setSelectedKey(ticket.ticket_key);}} style={{width:"100%",border:0,borderTop:"1px solid #f1f5f9",background:"transparent",padding:"11px 0",textAlign:"left",cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:10}}><strong style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:"10px",color:"#334155"}}>{ticket.subject || "Untitled ticket"}</strong><span style={{fontSize:"8px",color:"#64748b",whiteSpace:"nowrap"}}>{ticket.status}</span></div><div style={{marginTop:4,fontSize:"8px",color:"#94a3b8"}}>{ticket.source} · #{ticket.ticket_number || "—"} · {formatDateTime(ticket.updated_at_zoho || ticket.created_at_zoho || ticket.created_at)}</div></button>)}</div>
+                </section>
               </div>
 
-              <div style={{ marginTop:"18px", padding:"15px 17px", background:"#eef2ff", border:"1px solid #e0e7ff", borderRadius:"12px", display:"flex", flexWrap:"wrap", gap:"10px 22px", alignItems:"center" }}>
-                <strong style={{fontSize:"11px",color:"#3730a3"}}>Recommended next metrics</strong>
-                <span style={{fontSize:"10px",color:"#6366f1"}}>First response time</span><span style={{fontSize:"10px",color:"#6366f1"}}>Resolution time</span><span style={{fontSize:"10px",color:"#6366f1"}}>Tickets opened vs closed</span><span style={{fontSize:"10px",color:"#6366f1"}}>SLA risk</span><span style={{fontSize:"10px",color:"#6366f1"}}>Team workload balance</span><span style={{fontSize:"10px",color:"#6366f1"}}>Daily activity</span>
+              {/* FUTURE METRICS */}
+              <div style={{marginTop:"18px",padding:"14px 17px",border:"1px solid #e2e8f0",borderRadius:"13px",background:"#fbfcfe",display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap"}}>
+                <strong style={{fontSize:"9px",color:"#475569",textTransform:"uppercase",letterSpacing:".08em"}}>Next intelligence layer</strong>
+                <span style={{fontSize:"9px",color:"#64748b"}}>First response time</span>
+                <span style={{fontSize:"9px",color:"#64748b"}}>Resolution time</span>
+                <span style={{fontSize:"9px",color:"#64748b"}}>Opened vs. closed</span>
+                <span style={{fontSize:"9px",color:"#64748b"}}>SLA risk</span>
+                <span style={{fontSize:"9px",color:"#64748b"}}>Team workload balance</span>
+                <span style={{fontSize:"9px",color:"#64748b"}}>Daily activity</span>
               </div>
             </div>
           </section>
