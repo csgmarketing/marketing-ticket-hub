@@ -3306,3 +3306,54 @@ button:hover {
 .command-overlay{position:fixed;inset:0;background:rgba(15,23,42,.35);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;z-index:100}.command-palette{width:min(680px,calc(100vw - 32px));background:#fff;border:1px solid var(--hub-line);border-radius:16px;box-shadow:0 30px 80px rgba(15,23,42,.25);overflow:hidden}.command-input-wrap{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #eef2f7}.command-input-wrap span{font-size:11px;color:#94a3b8;border:1px solid #e2e8f0;border-radius:5px;padding:3px 5px}.command-input-wrap input{border:0;outline:0;font-size:15px;flex:1}.command-results{max-height:55vh;overflow:auto;padding:6px}.command-results button{display:grid;grid-template-columns:70px 1fr;grid-template-rows:auto auto;width:100%;text-align:left;border:0;background:#fff;border-radius:9px;padding:11px;cursor:pointer}.command-results button:hover{background:#f8fafc}.command-results button span{grid-row:1/3;color:#64748b;font-size:12px}.command-results button strong{font-size:13px;color:#0f172a}.command-results button small{font-size:11px;color:#94a3b8;margin-top:3px}.command-hints{padding:10px 16px;color:#94a3b8;font-size:11px;display:flex;justify-content:space-between;border-top:1px solid #f1f5f9}
 @media(max-width:1200px){.dashboard-grid{grid-template-columns:repeat(3,1fr)}.recent-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:800px){.dashboard-page{padding:22px}.dashboard-page-header{flex-direction:column}.dashboard-columns{grid-template-columns:1fr}.dashboard-grid{grid-template-columns:repeat(2,1fr)}.recent-grid{grid-template-columns:1fr}.dashboard-list{grid-template-columns:1fr}}
+
+/* V7 — ticket view switcher, compact ticket rows, and distinctive brand marks */
+.ticket-column-header{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.ticket-view-switcher{display:flex;align-items:center;gap:2px;border:1px solid #dbe3ec;background:#fff;border-radius:9px;padding:3px;flex:0 0 auto}
+.ticket-view-label{font-size:11px;font-weight:650;color:#94a3b8;padding:0 7px 0 6px}
+.ticket-view-switcher button{border:0;background:transparent;color:#64748b;border-radius:6px;padding:6px 9px;font-size:11px;font-weight:650;cursor:pointer}
+.ticket-view-switcher button:hover{color:#0f172a;background:#f8fafc}
+.ticket-view-switcher button.active{background:#eef4ff;color:#1d4ed8;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+
+/* Brand labels are intentionally not pills: each has its own visual signature. */
+.brand-badge{display:inline-flex;align-items:center;gap:6px;vertical-align:middle;white-space:nowrap;background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;font-weight:700;letter-spacing:-.01em}
+.brand-mark{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;font-size:9px;line-height:1;font-weight:800;letter-spacing:-.04em}
+.brand-name{font-size:11px;line-height:1}
+.brand-qualicare .brand-mark{background:#eef8f3;color:#16805a;border:1px solid #ccebdd}
+.brand-qualicare .brand-name{color:#16805a}
+.brand-tutordoctor .brand-mark{background:#eef4ff;color:#2857b9;border:1px solid #cddcff}
+.brand-tutordoctor .brand-name{color:#2857b9}
+.brand-codewiz .brand-mark{background:#fff3e8;color:#b85d16;border:1px solid #f5d5b6}
+.brand-codewiz .brand-name{color:#b85d16}
+.brand-unknown .brand-mark{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
+.brand-unknown .brand-name{color:#64748b}
+.brand-badge-compact{gap:4px}
+.brand-badge-compact .brand-mark{width:16px;height:16px;border-radius:5px;font-size:8px}
+.brand-badge-compact .brand-name{font-size:10px}
+
+.ticket-list-compact{border-top:1px solid #edf2f7}
+.ticket-row-compact{display:grid!important;grid-template-columns:34px minmax(280px,1.4fr) minmax(190px,.9fr) auto minmax(110px,.35fr);align-items:center;gap:13px;width:100%;min-height:66px;padding:9px 14px!important;border:0!important;border-bottom:1px solid #edf2f7!important;border-radius:0!important;background:#fff!important;text-align:left!important;box-shadow:none!important;cursor:pointer}
+.ticket-row-compact:hover{background:#f8fbff!important}
+.ticket-row-compact.selected{background:#f3f7ff!important;box-shadow:inset 3px 0 0 #3b82f6!important}
+.compact-ticket-icon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #d9e1eb;border-radius:50%;font-size:14px;color:#64748b;background:#fff}
+.compact-ticket-main{min-width:0;display:flex;flex-direction:column;gap:5px}
+.compact-ticket-subject{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650;line-height:1.25;color:#172033}
+.compact-ticket-meta{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;color:#7b8798;font-size:10px;line-height:1.2}
+.compact-ticket-meta>span:not(.brand-badge){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.compact-meta-separator{color:#c4ccd7!important;flex:0 0 auto!important}
+.compact-ticket-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#718096;font-size:11px}
+.compact-ticket-status{justify-self:start;white-space:nowrap}
+.compact-ticket-owner{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#64748b;font-size:11px;text-align:right}
+.ticket-list-compact .status-badge{font-size:10px!important;padding:4px 7px!important}
+
+@media(max-width:1100px){
+  .ticket-row-compact{grid-template-columns:32px minmax(240px,1fr) auto auto}
+  .compact-ticket-summary{display:none}
+}
+@media(max-width:700px){
+  .ticket-column-header{align-items:flex-start}
+  .ticket-view-label{display:none}
+  .ticket-row-compact{grid-template-columns:30px minmax(0,1fr) auto;gap:9px;padding:9px 10px!important}
+  .compact-ticket-status{display:none}
+  .compact-ticket-owner{display:none}
+}
