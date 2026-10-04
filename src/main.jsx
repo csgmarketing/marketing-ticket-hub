@@ -81,57 +81,6 @@ const CODEWIZ_DEFAULT_DEPARTMENT = {
   email: "marketing@thecodewiz.com",
 };
 
-
-const ALLOWED_LOGIN_DOMAINS = [
-  "clearsummitgroup.com",
-  "tutordoctor.org",
-  "qualicare.com",
-  "thecodewiz.com",
-];
-
-function isApprovedCompanyEmail(value) {
-  const normalized =
-    String(value || "")
-      .trim()
-      .toLowerCase();
-
-  const atIndex =
-    normalized.lastIndexOf("@");
-
-  if (
-    atIndex <= 0 ||
-    atIndex ===
-      normalized.length - 1
-  ) {
-    return false;
-  }
-
-  const domain =
-    normalized.slice(
-      atIndex + 1
-    );
-
-  return ALLOWED_LOGIN_DOMAINS.includes(
-    domain
-  );
-}
-
-
-const TUTOR_DOCTOR_DEPARTMENTS = [
-  {
-    value: "Marketing",
-    label: "Marketing",
-  },
-  {
-    value: "Client_Tutor Newsletter",
-    label: "Client/Tutor Newsletter",
-  },
-  {
-    value: "Marketing Tech",
-    label: "Marketing Tech",
-  },
-];
-
 // ======================================================
 // HELPERS
 // ======================================================
@@ -640,30 +589,9 @@ function Login({
   ) {
     event.preventDefault();
 
-    const normalizedEmail =
-      email
-        .trim()
-        .toLowerCase();
-
     if (
-      !normalizedEmail
+      !email.trim()
     ) {
-      setMessage(
-        "Enter your work email address."
-      );
-
-      return;
-    }
-
-    if (
-      !isApprovedCompanyEmail(
-        normalizedEmail
-      )
-    ) {
-      setMessage(
-        "Please use an approved company email address."
-      );
-
       return;
     }
 
@@ -676,7 +604,7 @@ function Login({
       await supabase.auth.signInWithOtp(
         {
           email:
-            normalizedEmail,
+            email.trim(),
 
           options: {
             emailRedirectTo:
@@ -942,12 +870,6 @@ function App() {
     useState("all");
 
   const [
-    departmentFilter,
-    setDepartmentFilter,
-  ] =
-    useState("all");
-
-  const [
     search,
     setSearch,
   ] =
@@ -1202,28 +1124,6 @@ function App() {
     useState("");
 
   // ====================================================
-  // NOTIFICATIONS
-  // ====================================================
-
-  const [
-    notifications,
-    setNotifications,
-  ] =
-    useState([]);
-
-  const [
-    showNotifications,
-    setShowNotifications,
-  ] =
-    useState(false);
-
-  const [
-    loadingNotifications,
-    setLoadingNotifications,
-  ] =
-    useState(false);
-
-  // ====================================================
   // AUTH
   // ====================================================
 
@@ -1270,234 +1170,6 @@ function App() {
         .unsubscribe();
     };
   }, []);
-
-  // ====================================================
-  // NOTIFICATIONS
-  // ====================================================
-
-  const loadNotifications =
-    useCallback(
-      async () => {
-        if (!session) {
-          setNotifications([]);
-          return;
-        }
-
-        setLoadingNotifications(
-          true
-        );
-
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "ticket_notifications"
-            )
-            .select("*")
-            .order(
-              "created_at",
-              {
-                ascending:
-                  false,
-              }
-            )
-            .limit(50);
-
-        if (error) {
-          console.error(
-            "Notification load error:",
-            error
-          );
-          setNotifications([]);
-        } else {
-          setNotifications(
-            data || []
-          );
-        }
-
-        setLoadingNotifications(
-          false
-        );
-      },
-      [
-        session,
-      ]
-    );
-
-  useEffect(() => {
-    if (session) {
-      loadNotifications();
-    } else {
-      setNotifications([]);
-    }
-  }, [
-    session,
-    loadNotifications,
-  ]);
-
-  const unreadNotificationCount =
-    useMemo(
-      () =>
-        notifications.filter(
-          (
-            notification
-          ) =>
-            !notification.is_read
-        ).length,
-      [
-        notifications,
-      ]
-    );
-
-  async function openNotification(
-    notification
-  ) {
-    if (!notification) {
-      return;
-    }
-
-    if (
-      !notification.is_read
-    ) {
-      const {
-        error,
-      } =
-        await supabase
-          .from(
-            "ticket_notifications"
-          )
-          .update({
-            is_read:
-              true,
-
-            read_at:
-              new Date()
-                .toISOString(),
-          })
-          .eq(
-            "id",
-            notification.id
-          );
-
-      if (!error) {
-        setNotifications(
-          (
-            current
-          ) =>
-            current.map(
-              (
-                item
-              ) =>
-                item.id ===
-                notification.id
-                  ? {
-                      ...item,
-                      is_read:
-                        true,
-                      read_at:
-                        new Date()
-                          .toISOString(),
-                    }
-                  : item
-            )
-        );
-      }
-    }
-
-    setFilter(
-      "all"
-    );
-
-    setBrandFilter(
-      notification.source ||
-      "all"
-    );
-
-    setDepartmentFilter(
-      "all"
-    );
-
-    setSearch(
-      ""
-    );
-
-    setSelectedKey(
-      notification.ticket_key
-    );
-
-    setShowNotifications(
-      false
-    );
-  }
-
-  async function markAllNotificationsRead() {
-    const unreadIds =
-      notifications
-        .filter(
-          (
-            notification
-          ) =>
-            !notification.is_read
-        )
-        .map(
-          (
-            notification
-          ) =>
-            notification.id
-        );
-
-    if (
-      unreadIds.length ===
-      0
-    ) {
-      return;
-    }
-
-    const now =
-      new Date()
-        .toISOString();
-
-    const {
-      error,
-    } =
-      await supabase
-        .from(
-          "ticket_notifications"
-        )
-        .update({
-          is_read:
-            true,
-
-          read_at:
-            now,
-        })
-        .in(
-          "id",
-          unreadIds
-        );
-
-    if (!error) {
-      setNotifications(
-        (
-          current
-        ) =>
-          current.map(
-            (
-              item
-            ) => ({
-              ...item,
-              is_read:
-                true,
-              read_at:
-                item.read_at ||
-                now,
-            })
-          )
-      );
-    }
-  }
 
   // ====================================================
   // TICKETS
@@ -2153,18 +1825,6 @@ function App() {
             event: "*",
             schema: "public",
             table:
-              "ticket_notifications",
-          },
-          () => {
-            loadNotifications();
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table:
               "ticket_tags",
           },
           (
@@ -2201,7 +1861,6 @@ function App() {
     loadThreads,
     loadComments,
     loadTags,
-    loadNotifications,
   ]);
 
   // ====================================================
@@ -2957,10 +2616,85 @@ function App() {
         error ||
         !data?.success
       ) {
-        throw new Error(
+        let detail =
           data?.error ||
           error?.message ||
-          "Could not send the message."
+          "Could not send the message.";
+
+        // Supabase's FunctionsHttpError intentionally exposes only a
+        // generic message. The actual Edge Function response is available
+        // on error.context, so surface it here for actionable diagnostics.
+        try {
+          const response =
+            error?.context ||
+            error?.response;
+
+          if (response) {
+            const status =
+              response.status;
+
+            let body = null;
+
+            if (typeof response.clone === "function") {
+              const cloned =
+                response.clone();
+
+              const contentType =
+                cloned.headers?.get(
+                  "content-type"
+                ) ||
+                "";
+
+              if (contentType.includes("application/json")) {
+                body = await cloned.json();
+              } else {
+                body = await cloned.text();
+              }
+            }
+
+            const serverMessage =
+              typeof body === "string"
+                ? body
+                : body?.error ||
+                  body?.message ||
+                  body?.detail ||
+                  body?.error_description ||
+                  body?.raw ||
+                  "";
+
+            if (serverMessage) {
+              detail = `HTTP ${status || "?"}: ${serverMessage}`;
+            } else if (status) {
+              detail = `HTTP ${status}: ${detail}`;
+            }
+
+            const errorCode =
+              response.headers?.get(
+                "sb-error-code"
+              );
+
+            if (errorCode) {
+              detail += ` [Supabase: ${errorCode}]`;
+            }
+          }
+        } catch (diagnosticError) {
+          console.error(
+            "Could not read Edge Function error response:",
+            diagnosticError
+          );
+        }
+
+        console.error(
+          "reply-to-zoho-ticket failed:",
+          {
+            error,
+            data,
+            detail,
+          }
+        );
+
+        throw new Error(
+          detail
         );
       }
 
@@ -3049,152 +2783,22 @@ function App() {
           .trim()
           .toLowerCase();
 
-      const zohoAgentOptions =
-        agents
-          .filter(
-            (
-              agent
-            ) =>
-              agent.zuid
-          )
-          .map(
-            (
-              agent
-            ) => ({
-              ...agent,
-
-              mention_type:
-                "zoho_agent",
-
-              mention_key:
-                `zoho:${agent.zoho_agent_id}`,
-            })
-          );
-
-      /*
-        Qualicare's active Zoho agents currently come back without ZUIDs.
-        They therefore cannot create native Zoho @mentions, but we still
-        expose them in the Ticket Hub mention picker and handle them as
-        Ticket Hub mentions.
-      */
-      const qualicareHubOptions =
-        selected?.source ===
-        "Qualicare"
-          ? agents
-              .filter(
-                (
-                  agent
-                ) =>
-                  !agent.zuid &&
-                  agent.active !==
-                    false &&
-                  String(
-                    agent.email ||
-                      ""
-                  ).trim()
-              )
-              .map(
-                (
-                  agent
-                ) => ({
-                  ...agent,
-
-                  mention_type:
-                    "ticket_hub_user",
-
-                  mention_key:
-                    `ticket-hub:${String(
-                      agent.email ||
-                        ""
-                    )
-                      .trim()
-                      .toLowerCase()}`,
-                })
-              )
-          : [];
-
-      const codeWizTeamOptions =
-        selected?.source ===
-        "Code Wiz"
-          ? CODEWIZ_TICKET_OWNERS.map(
-              (
-                person
-              ) => ({
-                ...person,
-
-                zoho_agent_id:
-                  null,
-
-                zuid:
-                  null,
-
-                mention_type:
-                  "ticket_hub_user",
-
-                mention_key:
-                  `ticket-hub:${person.email.toLowerCase()}`,
-              })
-            )
-          : [];
-
-      const zohoEmails =
-        new Set(
-          zohoAgentOptions
-            .map(
-              (
-                agent
-              ) =>
-                String(
-                  agent.email ||
-                    ""
-                )
-                  .trim()
-                  .toLowerCase()
-            )
-            .filter(Boolean)
-        );
-
-      const combined =
-        [
-          ...codeWizTeamOptions.filter(
-            (
-              person
-            ) =>
-              !zohoEmails.has(
-                String(
-                  person.email ||
-                    ""
-                )
-                  .trim()
-                  .toLowerCase()
-              )
-          ),
-          ...qualicareHubOptions.filter(
-            (
-              person
-            ) =>
-              !zohoEmails.has(
-                String(
-                  person.email ||
-                    ""
-                )
-                  .trim()
-                  .toLowerCase()
-              )
-          ),
-          ...zohoAgentOptions,
-        ];
-
-      return combined
+      return agents
         .filter(
           (
-            person
+            agent
+          ) =>
+            agent.zuid
+        )
+        .filter(
+          (
+            agent
           ) => {
             if (!needle) {
               return true;
             }
 
-            return `${person.name || ""} ${person.email || ""}`
+            return `${agent.name || ""} ${agent.email || ""}`
               .toLowerCase()
               .includes(
                 needle
@@ -3203,12 +2807,11 @@ function App() {
         )
         .slice(
           0,
-          12
+          8
         );
     }, [
       agents,
       mentionQuery,
-      selected?.source,
       showMentionSuggestions,
     ]);
 
@@ -3240,24 +2843,6 @@ function App() {
     }
   }
 
-  function mentionIdentity(
-    mention
-  ) {
-    return (
-      mention?.mention_key ||
-      (
-        mention?.zoho_agent_id
-          ? `zoho:${mention.zoho_agent_id}`
-          : `ticket-hub:${String(
-              mention?.email ||
-                ""
-            )
-              .trim()
-              .toLowerCase()}`
-      )
-    );
-  }
-
   function selectMention(
     agent
   ) {
@@ -3276,7 +2861,7 @@ function App() {
     const display =
       agent.name ||
       agent.email ||
-      "Teammate";
+      "Agent";
 
     const before =
       commentText.slice(
@@ -3292,20 +2877,13 @@ function App() {
       (
         current
       ) => {
-        const identity =
-          mentionIdentity(
-            agent
-          );
-
         if (
           current.some(
             (
               item
             ) =>
-              mentionIdentity(
-                item
-              ) ===
-              identity
+              item.zoho_agent_id ===
+              agent.zoho_agent_id
           )
         ) {
           return current;
@@ -3314,27 +2892,17 @@ function App() {
         return [
           ...current,
           {
-            mention_type:
-              agent.mention_type ||
-              "zoho_agent",
-
-            mention_key:
-              identity,
-
             zoho_agent_id:
-              agent.zoho_agent_id ||
-              null,
+              agent.zoho_agent_id,
 
             name:
               display,
 
             email:
-              agent.email ||
-              null,
+              agent.email,
 
             zuid:
-              agent.zuid ||
-              null,
+              agent.zuid,
           },
         ];
       }
@@ -3409,24 +2977,13 @@ function App() {
         const visible =
           `@${mention.name}`;
 
-        const placeholder =
-          mention.mention_type ===
-          "ticket_hub_user"
-            ? `[[HUB_MENTION:${String(
-                mention.email ||
-                  ""
-              )
-                .trim()
-                .toLowerCase()}]]`
-            : `[[MENTION:${mention.zoho_agent_id}]]`;
-
         transformed =
           transformed
             .split(
               visible
             )
             .join(
-              placeholder
+              `[[MENTION:${mention.zoho_agent_id}]]`
             );
       }
 
@@ -3465,21 +3022,8 @@ function App() {
                     (
                       mention
                     ) => ({
-                      mention_type:
-                        mention.mention_type ||
-                        "zoho_agent",
-
                       zoho_agent_id:
-                        mention.zoho_agent_id ||
-                        null,
-
-                      name:
-                        mention.name ||
-                        null,
-
-                      email:
-                        mention.email ||
-                        null,
+                        mention.zoho_agent_id,
                     })
                   ),
 
@@ -3968,40 +3512,10 @@ function App() {
   // FILTERING
   // ====================================================
 
-  function isVisibleMarketingTicket(
-    ticket
-  ) {
-    /*
-      Code Wiz Support tickets remain synced in Supabase so a Marketing
-      ticket can still be reassigned to Support and Support agents can
-      continue to be used in the Department and @mention controls.
-
-      They are simply excluded from the Marketing Ticket Hub's ticket
-      lists, searches, My Work views, status views, and counts.
-    */
-    if (
-      ticket?.source ===
-        "Code Wiz" &&
-      String(
-        ticket?.department ||
-          ""
-      )
-        .trim()
-        .toLowerCase() ===
-        "support"
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
   const filteredTickets =
     useMemo(() => {
       let rows =
-        tickets.filter(
-          isVisibleMarketingTicket
-        );
+        [...tickets];
 
       if (
         brandFilter !==
@@ -4014,25 +3528,6 @@ function App() {
             ) =>
               ticket.source ===
               brandFilter
-          );
-      }
-
-      if (
-        brandFilter ===
-          "Tutor Doctor" &&
-        departmentFilter !==
-          "all"
-      ) {
-        rows =
-          rows.filter(
-            (
-              ticket
-            ) =>
-              String(
-                ticket.department ||
-                  ""
-              ).trim() ===
-              departmentFilter
           );
       }
 
@@ -4213,7 +3708,6 @@ function App() {
                   ticket.codewiz_agent_email,
                   ticket.status,
                   ticket.source,
-                  ticket.department,
                   ticket.description,
                 ]
                   .filter(Boolean)
@@ -4233,7 +3727,6 @@ function App() {
       tickets,
       filter,
       brandFilter,
-      departmentFilter,
       search,
       session,
     ]);
@@ -4297,41 +3790,17 @@ function App() {
           ?.email
           ?.toLowerCase();
 
-      const visibleTickets =
-        tickets.filter(
-          isVisibleMarketingTicket
-        );
-
-      let countTickets =
+      const countTickets =
         brandFilter ===
         "all"
-          ? visibleTickets
-          : visibleTickets.filter(
+          ? tickets
+          : tickets.filter(
               (
                 ticket
               ) =>
                 ticket.source ===
                 brandFilter
             );
-
-      if (
-        brandFilter ===
-          "Tutor Doctor" &&
-        departmentFilter !==
-          "all"
-      ) {
-        countTickets =
-          countTickets.filter(
-            (
-              ticket
-            ) =>
-              String(
-                ticket.department ||
-                  ""
-              ).trim() ===
-              departmentFilter
-          );
-      }
 
       return {
         active:
@@ -4434,7 +3903,6 @@ function App() {
       tickets,
       session,
       brandFilter,
-      departmentFilter,
     ]);
 
   async function signOut() {
@@ -4878,32 +4346,6 @@ function App() {
             MY WORK
           </div>
 
-          <button
-            className={`nav-item ${
-              showNotifications
-                ? "active"
-                : ""
-            }`}
-            onClick={() =>
-              setShowNotifications(
-                (
-                  current
-                ) =>
-                  !current
-              )
-            }
-          >
-            <span>
-              Mentions
-            </span>
-
-            <span className="nav-count">
-              {
-                unreadNotificationCount
-              }
-            </span>
-          </button>
-
           {[
             [
               "mine",
@@ -5074,15 +4516,6 @@ function App() {
                     value
                   );
 
-                  if (
-                    value !==
-                    "Tutor Doctor"
-                  ) {
-                    setDepartmentFilter(
-                      "all"
-                    );
-                  }
-
                   setSearch(
                     ""
                   );
@@ -5101,63 +4534,6 @@ function App() {
             )
           )}
         </div>
-
-        {brandFilter ===
-          "Tutor Doctor" && (
-          <div className="sidebar-section">
-
-            <div className="sidebar-label">
-              TUTOR DOCTOR DEPARTMENT
-            </div>
-
-            {[
-              [
-                "all",
-                "All Departments",
-              ],
-              ...TUTOR_DOCTOR_DEPARTMENTS.map(
-                (
-                  department
-                ) => [
-                  department.value,
-                  department.label,
-                ]
-              ),
-            ].map(
-              (
-                [
-                  value,
-                  label,
-                ]
-              ) => (
-                <button
-                  key={
-                    value
-                  }
-                  className={`nav-item ${
-                    departmentFilter ===
-                    value
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    setDepartmentFilter(
-                      value
-                    );
-
-                    setSearch(
-                      ""
-                    );
-                  }}
-                >
-                  <span>
-                    {label}
-                  </span>
-                </button>
-              )
-            )}
-          </div>
-        )}
 
         <div className="sidebar-footer">
 
@@ -5190,330 +4566,6 @@ function App() {
         </div>
       </aside>
 
-      {showNotifications && (
-        <div
-          style={{
-            position:
-              "fixed",
-            left:
-              "248px",
-            top:
-              "16px",
-            width:
-              "380px",
-            maxHeight:
-              "calc(100vh - 32px)",
-            overflowY:
-              "auto",
-            background:
-              "#ffffff",
-            border:
-              "1px solid #e5e7eb",
-            borderRadius:
-              "14px",
-            boxShadow:
-              "0 18px 45px rgba(15, 23, 42, 0.18)",
-            zIndex:
-              1000,
-          }}
-        >
-          <div
-            style={{
-              display:
-                "flex",
-              alignItems:
-                "center",
-              justifyContent:
-                "space-between",
-              gap:
-                "12px",
-              padding:
-                "16px",
-              borderBottom:
-                "1px solid #e5e7eb",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontWeight:
-                    700,
-                  fontSize:
-                    "16px",
-                }}
-              >
-                Mentions
-              </div>
-
-              <div
-                style={{
-                  fontSize:
-                    "12px",
-                  color:
-                    "#6b7280",
-                  marginTop:
-                    "2px",
-                }}
-              >
-                {
-                  unreadNotificationCount
-                } unread
-              </div>
-            </div>
-
-            <div
-              style={{
-                display:
-                  "flex",
-                gap:
-                  "8px",
-              }}
-            >
-              {unreadNotificationCount >
-                0 && (
-                <button
-                  type="button"
-                  onClick={
-                    markAllNotificationsRead
-                  }
-                  style={{
-                    border:
-                      "0",
-                    background:
-                      "transparent",
-                    fontSize:
-                      "12px",
-                    cursor:
-                      "pointer",
-                    color:
-                      "#475569",
-                  }}
-                >
-                  Mark all read
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowNotifications(
-                    false
-                  )
-                }
-                style={{
-                  border:
-                    "0",
-                  background:
-                    "transparent",
-                  fontSize:
-                    "20px",
-                  lineHeight:
-                    1,
-                  cursor:
-                    "pointer",
-                  color:
-                    "#64748b",
-                }}
-                aria-label="Close notifications"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-
-          {loadingNotifications ? (
-            <div
-              style={{
-                padding:
-                  "20px",
-                color:
-                  "#64748b",
-                fontSize:
-                  "13px",
-              }}
-            >
-              Loading mentions…
-            </div>
-          ) : notifications.length ===
-            0 ? (
-            <div
-              style={{
-                padding:
-                  "24px 18px",
-                color:
-                  "#64748b",
-                fontSize:
-                  "13px",
-              }}
-            >
-              No mentions yet.
-            </div>
-          ) : (
-            notifications.map(
-              (
-                notification
-              ) => (
-                <button
-                  key={
-                    notification.id
-                  }
-                  type="button"
-                  onClick={() =>
-                    openNotification(
-                      notification
-                    )
-                  }
-                  style={{
-                    display:
-                      "block",
-                    width:
-                      "100%",
-                    textAlign:
-                      "left",
-                    border:
-                      "0",
-                    borderBottom:
-                      "1px solid #f1f5f9",
-                    background:
-                      notification.is_read
-                        ? "#ffffff"
-                        : "#f8fafc",
-                    padding:
-                      "14px 16px",
-                    cursor:
-                      "pointer",
-                  }}
-                >
-                  <div
-                    style={{
-                      display:
-                        "flex",
-                      alignItems:
-                        "center",
-                      justifyContent:
-                        "space-between",
-                      gap:
-                        "10px",
-                    }}
-                  >
-                    <strong
-                      style={{
-                        fontSize:
-                          "13px",
-                        color:
-                          "#0f172a",
-                      }}
-                    >
-                      {notification.source}
-                      {notification.ticket_number
-                        ? ` #${notification.ticket_number}`
-                        : ""}
-                    </strong>
-
-                    {!notification.is_read && (
-                      <span
-                        style={{
-                          width:
-                            "8px",
-                          height:
-                            "8px",
-                          borderRadius:
-                            "999px",
-                          background:
-                            "#2563eb",
-                          flex:
-                            "0 0 auto",
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize:
-                        "13px",
-                      fontWeight:
-                        600,
-                      color:
-                        "#334155",
-                      marginTop:
-                        "6px",
-                    }}
-                  >
-                    {
-                      notification.subject ||
-                      "Ticket mention"
-                    }
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize:
-                        "12px",
-                      color:
-                        "#475569",
-                      marginTop:
-                        "6px",
-                      lineHeight:
-                        1.45,
-                    }}
-                  >
-                    {notification.actor_name ||
-                      notification.actor_email ||
-                      "A teammate"}{" "}
-                    mentioned you
-                  </div>
-
-                  {notification.comment_text && (
-                    <div
-                      style={{
-                        fontSize:
-                          "12px",
-                        color:
-                          "#64748b",
-                        marginTop:
-                          "5px",
-                        lineHeight:
-                          1.45,
-                        display:
-                          "-webkit-box",
-                        WebkitLineClamp:
-                          2,
-                        WebkitBoxOrient:
-                          "vertical",
-                        overflow:
-                          "hidden",
-                      }}
-                    >
-                      {
-                        notification.comment_text
-                      }
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      fontSize:
-                        "11px",
-                      color:
-                        "#94a3b8",
-                      marginTop:
-                        "8px",
-                    }}
-                  >
-                    {notification.created_at
-                      ? new Date(
-                          notification.created_at
-                        ).toLocaleString()
-                      : ""}
-                  </div>
-                </button>
-              )
-            )
-          )}
-        </div>
-      )}
-
       {/* TICKETS */}
 
       <section className="ticket-column">
@@ -5525,21 +4577,7 @@ function App() {
               {brandFilter ===
               "all"
                 ? "Tickets"
-                : brandFilter ===
-                    "Tutor Doctor" &&
-                  departmentFilter !==
-                    "all"
-                  ? `Tutor Doctor · ${
-                      TUTOR_DOCTOR_DEPARTMENTS.find(
-                        (
-                          department
-                        ) =>
-                          department.value ===
-                          departmentFilter
-                      )?.label ||
-                      departmentFilter
-                    }`
-                  : brandFilter}
+                : brandFilter}
             </h1>
 
             <p>
@@ -6581,7 +5619,7 @@ function App() {
                     value={
                       commentText
                     }
-                    placeholder="Add a comment… Type @ to mention an agent or teammate."
+                    placeholder="Add a comment… Type @ to mention an agent."
                     onChange={(
                       event
                     ) =>
@@ -6605,9 +5643,7 @@ function App() {
                             <button
                               type="button"
                               key={
-                                mentionIdentity(
-                                  agent
-                                )
+                                agent.zoho_agent_id
                               }
                               onClick={() =>
                                 selectMention(
@@ -6639,10 +5675,6 @@ function App() {
                                     {
                                       agent.email
                                     }
-                                    {agent.mention_type ===
-                                      "ticket_hub_user"
-                                      ? " · Ticket Hub teammate"
-                                      : ""}
                                   </small>
                                 )}
                               </span>
@@ -6663,9 +5695,7 @@ function App() {
                       ) => (
                         <span
                           key={
-                            mentionIdentity(
-                              mention
-                            )
+                            mention.zoho_agent_id
                           }
                         >
                           @
@@ -6684,12 +5714,8 @@ function App() {
                                     (
                                       item
                                     ) =>
-                                      mentionIdentity(
-                                        item
-                                      ) !==
-                                      mentionIdentity(
-                                        mention
-                                      )
+                                      item.zoho_agent_id !==
+                                      mention.zoho_agent_id
                                   )
                               )
                             }
