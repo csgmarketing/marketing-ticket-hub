@@ -908,6 +908,24 @@ function App() {
     useState("all");
 
   const [
+    assigneeFilter,
+    setAssigneeFilter,
+  ] =
+    useState("all");
+
+  const [
+    showDashboard,
+    setShowDashboard,
+  ] =
+    useState(true);
+
+  const [
+    favoriteKeys,
+    setFavoriteKeys,
+  ] =
+    useState([]);
+
+  const [
     brandFilter,
     setBrandFilter,
   ] =
@@ -1236,6 +1254,32 @@ function App() {
     useState("");
 
   // ====================================================
+  // FAVORITES / STARRED TICKETS
+
+  useEffect(() => {
+    if (!session?.user?.email) {
+      setFavoriteKeys([]);
+      return;
+    }
+    try {
+      const storageKey = `csg-ticket-favorites:${String(session.user.email).trim().toLowerCase()}`;
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      setFavoriteKeys(Array.isArray(saved) ? saved : []);
+    } catch {
+      setFavoriteKeys([]);
+    }
+  }, [session?.user?.email]);
+
+  function toggleFavorite(ticketKey) {
+    if (!ticketKey || !session?.user?.email) return;
+    const storageKey = `csg-ticket-favorites:${String(session.user.email).trim().toLowerCase()}`;
+    setFavoriteKeys((current) => {
+      const next = current.includes(ticketKey) ? current.filter((key) => key !== ticketKey) : [...current, ticketKey];
+      try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
   // AUTH
   // ====================================================
 
@@ -4189,71 +4233,20 @@ function App() {
         filter ===
         "inprogress"
       ) {
-        rows =
-          rows.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-                "In Progress" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                ""
-              )
-                .trim()
-                .toLowerCase() ===
-                currentUserEmail
-          );
+        rows = rows.filter((ticket) => ticket.status === "In Progress");
       }
-
       if (
         filter ===
         "onhold"
       ) {
-        rows =
-          rows.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-                "On Hold" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                ""
-              )
-                .trim()
-                .toLowerCase() ===
-                currentUserEmail
-          );
+        rows = rows.filter((ticket) => ticket.status === "On Hold");
       }
-
       if (
         filter ===
         "waiting"
       ) {
-        rows =
-          rows.filter(
-            (
-              ticket
-            ) =>
-              ticket.status ===
-                "Waiting" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                ""
-              )
-                .trim()
-                .toLowerCase() ===
-                currentUserEmail
-          );
+        rows = rows.filter((ticket) => ticket.status === "Waiting");
       }
-
       if (
         filter ===
         "escalated"
@@ -4313,27 +4306,17 @@ function App() {
         filter ===
         "mine"
       ) {
-        const userEmail =
-          session
-            ?.user
-            ?.email
-            ?.toLowerCase();
+        const userEmail = session?.user?.email?.toLowerCase();
+        rows = rows.filter((ticket) => String(getTicketOwnerEmail(ticket) || "").toLowerCase() === userEmail && ticket.status !== "Closed");
+      }
 
-        rows =
-          rows.filter(
-            (
-              ticket
-            ) =>
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                  ""
-              ).toLowerCase() ===
-                userEmail &&
-              ticket.status !==
-                "Closed"
-          );
+      if (assigneeFilter !== "all") {
+        const ownerEmail = assigneeFilter === "mine" ? currentUserEmail : String(assigneeFilter).trim().toLowerCase();
+        rows = rows.filter((ticket) => String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === ownerEmail);
+      }
+
+      if (filter === "favorites") {
+        rows = rows.filter((ticket) => favoriteKeys.includes(ticket.ticket_key));
       }
 
       if (
@@ -4382,6 +4365,8 @@ function App() {
       filter,
       brandFilter,
       departmentFilter,
+      assigneeFilter,
+      favoriteKeys,
       search,
       session,
     ]);
@@ -4434,6 +4419,22 @@ function App() {
   ]);
 
   // ====================================================
+  const teamMemberOptions = useMemo(() => {
+    const byEmail = new Map();
+    tickets.filter(isVisibleMarketingTicket).forEach((ticket) => {
+      const email = String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase();
+      const name = getTicketOwnerName(ticket);
+      if (email && name) byEmail.set(email, { email, name });
+    });
+    CODEWIZ_TICKET_OWNERS.forEach((person) => {
+      const email = String(person.email || "").trim().toLowerCase();
+      if (email) byEmail.set(email, { email, name: person.name });
+    });
+    return Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [tickets]);
+
+  const favoriteCount = favoriteKeys.length;
+
   // COUNTS
   // ====================================================
 
@@ -4522,14 +4523,7 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-                "In Progress" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                ""
-              ).toLowerCase() ===
-                userEmail
+                "In Progress"
           ).length,
 
         onhold:
@@ -4538,14 +4532,7 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-                "On Hold" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                ""
-              ).toLowerCase() ===
-                userEmail
+                "On Hold"
           ).length,
 
         waiting:
@@ -4554,14 +4541,7 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-                "Waiting" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                ""
-              ).toLowerCase() ===
-                userEmail
+                "Waiting"
           ).length,
 
         escalated:
@@ -5048,6 +5028,21 @@ function App() {
           </div>
 
           <button
+            className={`nav-item ${showDashboard ? "active" : ""}`}
+            onClick={() => setShowDashboard(true)}
+          >
+            <span>Dashboard</span>
+          </button>
+
+          <button
+            className={`nav-item ${filter === "favorites" && !showDashboard ? "active" : ""}`}
+            onClick={() => { setShowDashboard(false); setFilter("favorites"); setAssigneeFilter("all"); }}
+          >
+            <span>Favorites</span>
+            <span className="nav-count">{favoriteCount}</span>
+          </button>
+
+          <button
             className={`nav-item ${
               showNotifications
                 ? "active"
@@ -5117,9 +5112,10 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  setFilter(id)
-                }
+                onClick={() => {
+                  setShowDashboard(false);
+                  setFilter(id);
+                }}
               >
                 <span>
                   {label}
@@ -5147,17 +5143,17 @@ function App() {
             ],
             [
               "inprogress",
-              "My In Progress",
+              "In Progress",
               counts.inprogress,
             ],
             [
               "onhold",
-              "My On Hold",
+              "On Hold",
               counts.onhold,
             ],
             [
               "waiting",
-              "My Waiting",
+              "Waiting",
               counts.waiting,
             ],
             [
@@ -5190,9 +5186,10 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  setFilter(id)
-                }
+                onClick={() => {
+                  setShowDashboard(false);
+                  setFilter(id);
+                }}
               >
                 <span>
                   {label}
@@ -5204,6 +5201,17 @@ function App() {
               </button>
             )
           )}
+        </div>
+
+        <div className="sidebar-section">
+          <div className="sidebar-label">TEAM MEMBER</div>
+          <select className="team-member-select" value={assigneeFilter} onChange={(event) => { setShowDashboard(false); setAssigneeFilter(event.target.value); }}>
+            <option value="all">View all combined</option>
+            <option value="mine">Mine</option>
+            {teamMemberOptions.map((member) => (
+              <option key={member.email} value={member.email}>{member.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="sidebar-section">
@@ -5247,6 +5255,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
+                  setShowDashboard(false);
                   setBrandFilter(
                     value
                   );
@@ -5912,7 +5921,37 @@ function App() {
         }`}
       >
 
-        {!selected ? (
+        {showDashboard ? (
+          <section className="dashboard-view">
+            <div className="dashboard-header">
+              <div><div className="dashboard-eyebrow">MARKETING OPERATIONS</div><h1>Dashboard</h1><p>Overview of your marketing ticket workload across all three brands.</p></div>
+              <button type="button" className="primary-button" onClick={() => setShowDashboard(false)}>Open ticket workspace</button>
+            </div>
+            <div className="dashboard-brand-grid">
+              {["Qualicare", "Tutor Doctor", "Code Wiz"].map((brand) => { const count = tickets.filter(t => isVisibleMarketingTicket(t) && t.source === brand && t.status !== "Closed").length; return (
+                <button key={brand} type="button" className={`dashboard-brand-card ${brandClass(brand)}`} onClick={() => { setBrandFilter(brand); setFilter("all"); setAssigneeFilter("all"); setShowDashboard(false); }}>
+                  <BrandBadge source={brand} /><strong>{count}</strong><span>active tickets</span>
+                </button>
+              ); })}
+            </div>
+            <div className="dashboard-kpi-grid">
+              <div className="dashboard-kpi"><span>Active</span><strong>{counts.active}</strong></div>
+              <div className="dashboard-kpi"><span>Needs attention</span><strong>{counts.overdue + counts.unassigned}</strong></div>
+              <div className="dashboard-kpi"><span>Overdue</span><strong>{counts.overdue}</strong></div>
+              <div className="dashboard-kpi"><span>High priority</span><strong>{tickets.filter(t => isVisibleMarketingTicket(t) && t.status !== "Closed" && String(t.priority || "").toLowerCase() === "high").length}</strong></div>
+              <div className="dashboard-kpi"><span>Due today</span><strong>{tickets.filter(t => isVisibleMarketingTicket(t) && t.status !== "Closed" && t.due_date && new Date(t.due_date).toDateString() === new Date().toDateString()).length}</strong></div>
+              <div className="dashboard-kpi"><span>Favorites</span><strong>{favoriteCount}</strong></div>
+            </div>
+            <div className="dashboard-section-card">
+              <div className="dashboard-section-title">Your tickets</div>
+              {tickets.filter(t => isVisibleMarketingTicket(t) && String(getTicketOwnerEmail(t) || "").toLowerCase() === String(session?.user?.email || "").toLowerCase() && t.status !== "Closed").slice(0, 8).map(ticket => (
+                <button key={ticket.ticket_key} type="button" className="dashboard-ticket-row" onClick={() => { setSelectedKey(ticket.ticket_key); setShowDashboard(false); setFilter("all"); }}>
+                  <BrandBadge source={ticket.source} /><span className="dashboard-ticket-subject">#{ticket.ticket_number} · {ticket.subject || "Untitled ticket"}</span><StatusBadge status={ticket.status} /><span>{isOverdue(ticket) ? "Overdue" : getTicketOwnerName(ticket) || "Unassigned"}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : !selected ? (
           <div className="conversation-empty">
 
             <div className="conversation-empty-card">
@@ -5984,6 +6023,7 @@ function App() {
 
               <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
                 <button type="button" onClick={() => openReminderForTicket(selected)} style={{border:"1px solid #dbe3ec",background:"#fff",color:"#334155",borderRadius:"7px",padding:"8px 10px",fontSize:"11px",fontWeight:650,cursor:"pointer"}}>⏰ Remind me</button>
+                <button type="button" onClick={() => toggleFavorite(selected.ticket_key)} aria-label={favoriteKeys.includes(selected.ticket_key) ? "Remove from favorites" : "Add to favorites"} title={favoriteKeys.includes(selected.ticket_key) ? "Remove from favorites" : "Add to favorites"} className="favorite-button">{favoriteKeys.includes(selected.ticket_key) ? "★" : "☆"}</button>
                 {selected.ticket_url && (
                   <a
                   className="zoho-link"
