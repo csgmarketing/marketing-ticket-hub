@@ -4402,3 +4402,29 @@ button:hover {
 .app-shell.ticket-reading-mode .message-body{max-height:none;overflow:visible}
 @media(max-width:1050px){.app-shell.ticket-reading-mode{grid-template-columns:180px minmax(0,1fr)}.app-shell.ticket-reading-mode .details-column{display:none}}
 @media(max-width:700px){.app-shell.ticket-reading-mode{grid-template-columns:minmax(0,1fr)}.app-shell.ticket-reading-mode .sidebar{display:none}.hub-ticket-reading-bar button{font-size:12px;padding:8px}}
+
+/* Ticket reading: uncluttered header, independent email layout and details drawer. */
+.app-shell.ticket-reading-mode{grid-template-columns:200px minmax(0,1fr)}
+.app-shell.ticket-reading-mode .conversation-column{padding:0 28px 48px;background:#f6f8fb;overflow-x:auto}
+.app-shell.ticket-reading-mode .conversation-column::before{display:none}
+.hub-ticket-reading-bar{position:sticky;top:0;z-index:20;margin:0 -28px 0;padding:14px 28px;background:#fff;border-bottom:1px solid #e5eaf0}
+.hub-ticket-reading-bar button{font-size:13px;padding:8px 12px;white-space:nowrap}
+.hub-ticket-reading-bar>div button:first-child{background:#fff;color:#334155;border-color:#dbe3ec}
+.hub-ticket-reading-bar .hub-primary-reply{background:#4338ca;color:#fff;border-color:#4338ca}
+.app-shell.ticket-reading-mode .conversation-header{padding:24px 0;background:transparent;align-items:flex-start;gap:20px;flex-wrap:wrap;border-bottom:1px solid #e5eaf0}
+.app-shell.ticket-reading-mode .conversation-heading{flex:1;min-width:250px}
+.app-shell.ticket-reading-mode .conversation-heading h2{font-size:23px;line-height:1.35;overflow-wrap:anywhere;margin:12px 0}
+.app-shell.ticket-reading-mode .conversation-header>div:last-child{flex-wrap:wrap;justify-content:flex-start}
+.app-shell.ticket-reading-mode .conversation-header button,.app-shell.ticket-reading-mode .zoho-link{white-space:nowrap;font-size:12px;padding:8px 10px;min-width:0}
+.app-shell.ticket-reading-mode .timeline-section{padding:24px 0}
+.app-shell.ticket-reading-mode .timeline{padding-right:0}
+.app-shell.ticket-reading-mode .email-timeline-item{padding:20px;border-radius:12px;min-width:0;overflow:visible;box-shadow:0 2px 8px #0f172a04}
+.app-shell.ticket-reading-mode .message-author{font-size:14px}
+.app-shell.ticket-reading-mode .message-recipient-box{font-size:12px}
+.hub-email-frame{display:block;width:100%;max-width:100%;border:0;background:#fff;margin:14px 0 0;min-height:120px}
+.app-shell.ticket-reading-mode .details-column{display:none;position:fixed;inset:0 0 0 auto;width:min(380px,92vw);height:100dvh;z-index:100;background:white;overflow-y:auto;box-shadow:-12px 0 40px #0f172a20}
+.app-shell.ticket-reading-mode.ticket-details-open .details-column{display:block}
+.hub-details-overlay{position:fixed;inset:0;z-index:90;border:0;background:#0f172a30;cursor:pointer}
+.hub-close-details{display:none}.ticket-reading-mode .hub-close-details{display:block;margin:16px 20px 0 auto;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
+@media(max-width:1050px){.app-shell.ticket-reading-mode{grid-template-columns:180px minmax(0,1fr)}}
+@media(max-width:700px){.app-shell.ticket-reading-mode{grid-template-columns:minmax(0,1fr)}.app-shell.ticket-reading-mode .conversation-column{padding:0 14px 32px}.hub-ticket-reading-bar{margin:0 -14px;padding:12px 14px;position:relative}.app-shell.ticket-reading-mode .conversation-heading{min-width:0;flex-basis:100%}.app-shell.ticket-reading-mode .conversation-heading h2{font-size:19px}.app-shell.ticket-reading-mode .email-timeline-item{padding:12px}.hub-ticket-reading-bar>div{flex-wrap:wrap}}
