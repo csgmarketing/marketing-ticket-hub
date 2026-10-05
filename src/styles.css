@@ -4175,3 +4175,38 @@ button:hover {
 .ticket-board-card-footer .list-status-control{margin-right:auto}
 .ticket-board-card-footer .list-status-menu{left:0;top:calc(100% + 5px)}
 .classic-ticket-status .list-status-menu{left:0}
+
+/* ======================================================
+   BOARD SCROLL + COMPACT QUICK STATUS
+   ====================================================== */
+.app-shell.board-mode .ticket-column{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.app-shell.board-mode .ticket-list{
+  display:flex;
+  flex:1 1 auto;
+  min-height:0;
+  height:auto;
+  overflow:hidden;
+}
+.app-shell.board-mode .ticket-board{
+  flex:1 1 auto;
+  min-height:0;
+  height:auto;
+  overflow:hidden;
+}
+.app-shell.board-mode .ticket-board-column{
+  min-height:0;
+  height:100%;
+}
+.app-shell.board-mode .ticket-board-column-body{
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+}
+.compact-status-control{flex:0 0 auto}
+.compact-status-menu{z-index:80}
+.ticket-row .ticket-row-bottom .list-status-control{position:relative}
