@@ -4374,3 +4374,15 @@ button:hover {
 @media(max-width:1100px){.hub-moments-grid{grid-template-columns:1fr 1fr}.hub-mood-card{grid-column:span 2}.hub-kudos-wall>div:last-child{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.hub-moments-grid,.hub-kudos-wall>div:last-child{grid-template-columns:1fr}.hub-mood-card{grid-column:auto}.hub-celebration{right:16px;bottom:16px}}
 @media(prefers-reduced-motion:reduce){.hub-confetti{display:none}}
+
+.hub-delete-ticket{background:#fff7f7;border:1px solid #ecd1d7;color:#ab5d6d;border-radius:7px;padding:8px 10px;font-size:11px;font-weight:600;cursor:pointer}.hub-delete-ticket:disabled{opacity:.5;cursor:wait}.hub-delete-error{padding:10px 18px;background:#fff4f4;border-bottom:1px solid #f1dfe3;color:#a44f61;font-size:12px;margin:0;overflow-wrap:anywhere}
+
+.hub-my-signatures{margin:12px 16px;padding:10px 14px;background:#fff;border:1px solid #dce4ef;border-radius:10px;text-align:left;color:#334155;cursor:pointer;font-weight:600}
+.hub-signature-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.48);display:flex;align-items:center;justify-content:center;padding:20px}
+.hub-signature-modal{width:min(820px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:20px;padding:28px;box-shadow:0 24px 80px #0f172a40;color:#334155}
+.hub-signature-modal header,.hub-signature-modal footer{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.hub-signature-modal h2{margin:3px 0 8px;color:#0f172a;font-size:26px}.hub-signature-modal p{font-size:14px;line-height:1.6}.hub-signature-eyebrow{font-size:11px!important;letter-spacing:.12em;font-weight:700;color:#64748b;margin:0}
+.hub-signature-modal button{cursor:pointer;border:1px solid #dce4ef;background:#fff;border-radius:8px;padding:8px 12px;color:#334155}.hub-signature-modal button:disabled{opacity:.5;cursor:default}
+.hub-signature-tabs{display:flex;gap:8px;margin:18px 0;flex-wrap:wrap}.hub-signature-tabs .active{background:#eef2ff;border-color:#a5b4fc;color:#4338ca;font-weight:700}
+.hub-signature-tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.hub-signature-editor,.hub-signature-preview{padding:18px;border:1px solid #dce4ef;border-radius:10px;min-height:130px;overflow:auto;background:#fff}.hub-signature-editor:focus{outline:2px solid #a5b4fc}.hub-signature-editor img,.hub-signature-preview img{max-width:100%;height:auto}.hub-signature-auto{display:flex;gap:10px;align-items:center;font-size:14px;margin:18px 0}.hub-signature-auto input{width:auto}.hub-signature-modal h3{font-size:14px}.hub-signature-modal footer{margin-top:20px;font-size:14px}.hub-signature-modal footer .primary-button{background:#4338ca;color:white;border-color:#4338ca}
+@media(max-width:600px){.hub-signature-modal{padding:18px}.hub-signature-backdrop{padding:8px}.hub-signature-modal header{align-items:flex-start}}
