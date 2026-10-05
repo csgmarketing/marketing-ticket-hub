@@ -4675,17 +4675,6 @@ function App() {
                     ? "selected"
                     : ""
                 }`}
-                style={{
-                  borderLeft: `3px solid ${
-                    ticket.source === "Qualicare"
-                      ? "#16835b"
-                      : ticket.source === "Tutor Doctor"
-                        ? "#2563eb"
-                        : ticket.source === "Code Wiz"
-                          ? "#ea6a16"
-                          : "#98a2b3"
-                  }`,
-                }}
                 onClick={() =>
                   setSelectedKey(
                     ticket.ticket_key
