@@ -544,14 +544,31 @@ function normalizeMentionList(value) {
 function BrandBadge({
   source,
 }) {
+  const brand = String(source || "").trim();
+  const mark =
+    brand === "Tutor Doctor"
+      ? "TD"
+      : brand === "Qualicare"
+      ? "QC"
+      : brand === "Code Wiz"
+      ? "CW"
+      : "?";
+
+  const name =
+    brand || "Unknown";
+
   return (
     <span
       className={`brand-badge ${brandClass(
         source
       )}`}
     >
-      {source ||
-        "Unknown"}
+      <span className="brand-mark" aria-hidden="true">
+        {mark}
+      </span>
+      <span className="brand-name">
+        {name}
+      </span>
     </span>
   );
 }
@@ -5028,7 +5045,7 @@ function App() {
   // ====================================================
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""}`}>
 
       {/* SIDEBAR */}
 
@@ -5880,7 +5897,10 @@ function App() {
             <button
               type="button"
               className={ticketViewMode === "classic" ? "active" : ""}
-              onClick={() => setTicketViewMode("classic")}
+              onClick={() => {
+                setTicketViewMode("classic");
+                setSelectedKey(null);
+              }}
             >
               Classic
             </button>
@@ -5905,6 +5925,19 @@ function App() {
               </div>
             )}
 
+          {ticketViewMode === "classic" && filteredTickets.length > 0 && (
+            <div className="classic-ticket-header" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span>SUBJECT / REQUESTER</span>
+              <span>STATUS</span>
+              <span>ACTIVITY</span>
+              <span></span>
+              <span>FAVORITE</span>
+              <span>ASSIGNED TO</span>
+            </div>
+          )}
+
           {filteredTickets.map((ticket) => {
             const isSelected = selectedKey === ticket.ticket_key;
             const isFavorite = favoriteKeys.includes(ticket.ticket_key);
@@ -5915,11 +5948,7 @@ function App() {
               return (
                 <div
                   key={ticket.ticket_key}
-                  className={`ticket-row-classic ${brandClass(ticket.source)} ${isSelected ? "selected" : ""}`}
-                  onClick={() => setSelectedKey(ticket.ticket_key)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedKey(ticket.ticket_key); }}
+                  className={`ticket-row-classic ${brandClass(ticket.source)}`}
                 >
                   <div className="classic-ticket-check">
                     <input type="checkbox" onClick={(event) => event.stopPropagation()} aria-label={`Select ticket ${ticket.ticket_number || ""}`} />
@@ -5954,7 +5983,10 @@ function App() {
                   >
                     {isFavorite ? "★" : "☆"}
                   </button>
-                  <div className="classic-ticket-owner" title={ownerName}>{initials}</div>
+                  <div className="classic-ticket-owner" title={ownerName}>
+                    <span className="classic-ticket-owner-avatar">{initials}</span>
+                    <span className="classic-ticket-owner-name">{ownerName}</span>
+                  </div>
                 </div>
               );
             }
