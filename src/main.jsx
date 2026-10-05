@@ -650,42 +650,6 @@ function RecipientLine({
   );
 }
 
-function emailDisplayDocument(html) {
-  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
-  doc.querySelectorAll("script,iframe,object,embed,form,input,button,base,meta[http-equiv]").forEach(node=>node.remove());
-  doc.querySelectorAll("*").forEach(node=>{
-    for (const attr of [...node.attributes]) if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
-  });
-  doc.querySelectorAll("a").forEach(link=>{
-    if (!/^(https?:\/\/|mailto:|tel:)/i.test(link.getAttribute("href") || "")) link.removeAttribute("href");
-    link.setAttribute("target", "_blank"); link.setAttribute("rel", "noopener noreferrer");
-  });
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">${doc.head.innerHTML}<style>html,body{margin:0!important;padding:0!important;min-width:0!important;width:100%!important;height:auto!important;min-height:0!important;overflow-wrap:anywhere;font:14px/1.6 Arial,sans-serif;color:#334155;box-sizing:border-box}body{padding:12px 4px!important}img{max-width:100%!important;height:auto!important}table{max-width:100%!important}pre{white-space:pre-wrap}*{box-sizing:border-box}a{color:#2563eb}</style></head><body>${doc.body.innerHTML}</body></html>`;
-}
-function TicketEmailBody({html}) {
-  const frame = useRef(null);
-  const [height, setHeight] = useState(180);
-  const source = useMemo(()=>emailDisplayDocument(html),[html]);
-  useEffect(()=>{
-    const iframe=frame.current;let observer;let active=true;
-    function measure() {
-      if (!active) return;
-      const doc=iframe?.contentDocument;
-      if(doc?.body) setHeight(Math.max(120,Math.ceil(doc.body.getBoundingClientRect().height)+8));
-    }
-    function loaded() {
-      observer?.disconnect(); measure();
-      const doc=iframe?.contentDocument;
-      if(doc?.body && typeof ResizeObserver!=="undefined") { observer=new ResizeObserver(measure);observer.observe(doc.body); }
-      doc?.querySelectorAll("img").forEach(img=>img.addEventListener("load",measure,{once:true}));
-    }
-    iframe?.addEventListener("load",loaded);
-    loaded();
-    return ()=>{active=false;observer?.disconnect();iframe?.removeEventListener("load",loaded);};
-  },[source]);
-  return <iframe ref={frame} className="hub-email-frame" title="Ticket email content" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" srcDoc={source} style={{height}} />;
-}
-
 const SIGNATURE_BRANDS = ["Tutor Doctor", "Qualicare", "Code Wiz"];
 function sanitizeSignatureHtml(value) {
   const doc = new DOMParser().parseFromString(String(value || ""), "text/html");
@@ -1113,7 +1077,6 @@ function App() {
   const [deleteBusy,setDeleteBusy]=useState(false);
   const [deleteNotice,setDeleteNotice]=useState("");
   const [opsPage, setOpsPage] = useState(null);
-  const [ticketDetailsOpen, setTicketDetailsOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [showSignatures, setShowSignatures] = useState(false);
   const [signatures, setSignatures] = useState({});
@@ -3043,7 +3006,6 @@ function App() {
   useEffect(() => {
     resetComposer();
     setComposerOpen(false);
-    setTicketDetailsOpen(false);
   }, [
     selectedKey,
     resetComposer,
@@ -5431,7 +5393,13 @@ function App() {
         )}
 
         {thread.content_html ? (
-          <TicketEmailBody html={thread.content_html} />
+          <div
+            className="message-body"
+            dangerouslySetInnerHTML={{
+              __html:
+                thread.content_html,
+            }}
+          />
         ) : (
           <div className="message-body text-message">
             {thread.content_text ||
@@ -5641,7 +5609,7 @@ function App() {
   // ====================================================
 
   return (
-    <div className={`app-shell ${selected && !showDashboard && !opsPage ? `ticket-reading-mode ${ticketDetailsOpen ? "ticket-details-open" : ""}` : ""} ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
+    <div className={`app-shell ${selected && !showDashboard && !opsPage ? "ticket-reading-mode" : ""} ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
       <CompletionCelebration session={session} />
       {showSignatures && <MySignatures session={session} signatures={signatures} loadError={signatureError} onClose={()=>setShowSignatures(false)}
@@ -6899,7 +6867,7 @@ function App() {
 
             <div className="hub-ticket-reading-bar">
               <button type="button" onClick={()=>{setSelectedKey(null);setComposerOpen(false);}}>← Back to tickets</button>
-              <div><button type="button" onClick={()=>{const editor=document.getElementById("hub-internal-comment-editor");if(editor){editor.open=true;editor.scrollIntoView({behavior:"smooth",block:"start"});commentInputRef.current?.focus({preventScroll:true});}}}>Add comment</button><button type="button" onClick={()=>setTicketDetailsOpen(value=>!value)} aria-expanded={ticketDetailsOpen}>Ticket details</button><button type="button" className="hub-primary-reply" onClick={()=>configureComposer("reply")}>Reply</button><button type="button" onClick={()=>configureComposer("reply_all")}>Reply All</button><button type="button" onClick={()=>configureComposer("forward")}>Forward</button></div>
+              <div><button type="button" onClick={()=>configureComposer("reply")}>Reply</button><button type="button" onClick={()=>configureComposer("reply_all")}>Reply All</button><button type="button" onClick={()=>configureComposer("forward")}>Forward</button></div>
             </div>
             <header className="conversation-header">
 
@@ -6973,6 +6941,154 @@ function App() {
 
             {deleteNotice && <p className="hub-delete-error" role="alert">{deleteNotice}</p>}
 
+            {/* UNIFIED TIMELINE */}
+
+            <section className="timeline-section">
+
+              <div className="conversation-section-heading">
+
+                <div>
+                  <h3>
+                    Ticket timeline
+                  </h3>
+
+                  <p>
+                    Emails and comments in the exact order they happened
+                  </p>
+                </div>
+
+                <div className="timeline-count-group">
+
+                  <span>
+                    {
+                      threads.length
+                    }{" "}
+                    email
+                    {threads.length ===
+                    1
+                      ? ""
+                      : "s"}
+                  </span>
+
+                  <span>
+                    {
+                      comments.length
+                    }{" "}
+                    comment
+                    {comments.length ===
+                    1
+                      ? ""
+                      : "s"}
+                  </span>
+                </div>
+              </div>
+
+              {(loadingThreads ||
+                loadingComments) && (
+                <div className="loading-threads">
+                  Loading timeline…
+                </div>
+              )}
+
+              <div className="timeline">
+
+                {timelineItems.map(
+                  (
+                    item
+                  ) => (
+                    <React.Fragment
+                      key={
+                        item.key
+                      }
+                    >
+                      {item.type ===
+                      "email"
+                        ? renderEmailItem(
+                            item.data
+                          )
+                        : renderCommentItem(
+                            item.data
+                          )}
+                    </React.Fragment>
+                  )
+                )}
+
+                {/* ORIGINAL REQUEST ALWAYS LAST */}
+
+                {selected.description && (
+                  <article className="timeline-item original-message">
+
+                    <div className="timeline-rail-node original-node">
+                      ★
+                    </div>
+
+                    <div className="original-request-label">
+                      Original request
+                    </div>
+
+                    <div className="message-header">
+
+                      <div className="message-author-area">
+
+                        <div className="message-avatar customer-avatar">
+                          {(
+                            selected.contact_name ||
+                            selected.contact_email ||
+                            "?"
+                          )
+                            .charAt(
+                              0
+                            )
+                            .toUpperCase()}
+                        </div>
+
+                        <div>
+                          <div className="message-author">
+                            {selected.contact_name ||
+                              selected.contact_email ||
+                              "Requester"}
+                          </div>
+
+                          <div className="message-direction">
+                            Ticket created
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className="message-time">
+                        {formatDateTime(
+                          selected.created_at_zoho
+                        )}
+                      </span>
+                    </div>
+
+                    {selected.contact_email && (
+                      <div className="message-recipient-box">
+
+                        <RecipientLine
+                          label="From"
+                          value={
+                            selected.contact_email
+                          }
+                        />
+                      </div>
+                    )}
+
+                    <div
+                      className="message-body"
+                      dangerouslySetInnerHTML={{
+                        __html:
+                          selected.description,
+                      }}
+                    />
+                  </article>
+                )}
+
+                <div className="conversation-end">
+                  Start of ticket
+                </div>
+              </div>
+            </section>
             {/* REPLY COMPOSER */}
 
             <div
@@ -7725,7 +7841,7 @@ function App() {
               </div>
             </div>
 
-            <details className="hub-internal-notes" id="hub-internal-comment-editor"><summary>Add an internal note</summary>
+            <details className="hub-internal-notes"><summary>Add an internal note</summary>
             {/* COMMENT COMPOSER */}
 
             <section className="comment-composer-section">
@@ -8020,159 +8136,13 @@ function App() {
             </section>
 
             </details>
-
-            {/* UNIFIED TIMELINE */}
-
-            <section className="timeline-section">
-
-              <div className="conversation-section-heading">
-
-                <div>
-                  <h3>
-                    Conversation
-                  </h3>
-
-                  <p>
-                    Emails and comments in the exact order they happened
-                  </p>
-                </div>
-
-                <div className="timeline-count-group">
-
-                  <span>
-                    {
-                      threads.length
-                    }{" "}
-                    email
-                    {threads.length ===
-                    1
-                      ? ""
-                      : "s"}
-                  </span>
-
-                  <span>
-                    {
-                      comments.length
-                    }{" "}
-                    comment
-                    {comments.length ===
-                    1
-                      ? ""
-                      : "s"}
-                  </span>
-                </div>
-              </div>
-
-              {(loadingThreads ||
-                loadingComments) && (
-                <div className="loading-threads">
-                  Loading timeline…
-                </div>
-              )}
-
-              <div className="timeline">
-
-                {timelineItems.map(
-                  (
-                    item
-                  ) => (
-                    <React.Fragment
-                      key={
-                        item.key
-                      }
-                    >
-                      {item.type ===
-                      "email"
-                        ? renderEmailItem(
-                            item.data
-                          )
-                        : renderCommentItem(
-                            item.data
-                          )}
-                    </React.Fragment>
-                  )
-                )}
-
-                {/* ORIGINAL REQUEST ALWAYS LAST */}
-
-                {selected.description && (
-                  <article className="timeline-item original-message">
-
-                    <div className="timeline-rail-node original-node">
-                      ★
-                    </div>
-
-                    <div className="original-request-label">
-                      Original request
-                    </div>
-
-                    <div className="message-header">
-
-                      <div className="message-author-area">
-
-                        <div className="message-avatar customer-avatar">
-                          {(
-                            selected.contact_name ||
-                            selected.contact_email ||
-                            "?"
-                          )
-                            .charAt(
-                              0
-                            )
-                            .toUpperCase()}
-                        </div>
-
-                        <div>
-                          <div className="message-author">
-                            {selected.contact_name ||
-                              selected.contact_email ||
-                              "Requester"}
-                          </div>
-
-                          <div className="message-direction">
-                            Ticket created
-                          </div>
-                        </div>
-                      </div>
-
-                      <span className="message-time">
-                        {formatDateTime(
-                          selected.created_at_zoho
-                        )}
-                      </span>
-                    </div>
-
-                    {selected.contact_email && (
-                      <div className="message-recipient-box">
-
-                        <RecipientLine
-                          label="From"
-                          value={
-                            selected.contact_email
-                          }
-                        />
-                      </div>
-                    )}
-
-                    <TicketEmailBody html={selected.description} />
-                  </article>
-                )}
-
-                <div className="conversation-end">
-                  Start of ticket
-                </div>
-              </div>
-            </section>
-
           </>
         )}
       </main>
 
       {/* DETAILS */}
 
-      {ticketDetailsOpen && selected && !showDashboard && !opsPage && <button className="hub-details-overlay" aria-label="Close ticket details" onClick={()=>setTicketDetailsOpen(false)} />}
       <aside className="details-column">
-        {selected && !showDashboard && !opsPage && <button type="button" className="hub-close-details" onClick={()=>setTicketDetailsOpen(false)}>Close details ✕</button>}
 
         {!selected ? (
           <div className="details-empty">
