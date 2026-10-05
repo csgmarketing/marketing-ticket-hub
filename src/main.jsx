@@ -967,6 +967,18 @@ function App() {
     useState([]);
 
   const [
+    statusEditKey,
+    setStatusEditKey,
+  ] =
+    useState(null);
+
+  const [
+    statusEditBusy,
+    setStatusEditBusy,
+  ] =
+    useState(false);
+
+  const [
     notificationFilter,
     setNotificationFilter,
   ] =
@@ -4498,35 +4510,30 @@ function App() {
   ]);
 
   // ====================================================
+  // The Team Member filter is intentionally limited to the CSG marketing
+  // team. Do not populate it from every Zoho agent, because that would expose
+  // support, operations, sales, and other non-marketing users in the Hub.
   const teamMemberOptions = useMemo(() => {
-    const byEmail = new Map();
     const currentUserEmail = String(session?.user?.email || "").trim().toLowerCase();
 
-    classicAgentOptions.forEach((agent) => {
-      const email = String(agent.email || "").trim().toLowerCase();
-      const name = String(agent.name || agent.email || "").trim();
-      if (email && name && email !== currentUserEmail) {
-        byEmail.set(email, { email, name });
-      }
-    });
+    return CODEWIZ_TICKET_OWNERS
+      .map((person) => ({
+        email: String(person.email || "").trim().toLowerCase(),
+        name: String(person.name || person.email || "").trim(),
+      }))
+      .filter((person) => person.email && person.name && person.email !== currentUserEmail)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [session?.user?.email]);
 
-    tickets.filter(isVisibleMarketingTicket).forEach((ticket) => {
-      const email = String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase();
-      const name = getTicketOwnerName(ticket);
-      if (email && name && email !== currentUserEmail) {
-        byEmail.set(email, { email, name });
-      }
-    });
-
-    CODEWIZ_TICKET_OWNERS.forEach((person) => {
-      const email = String(person.email || "").trim().toLowerCase();
-      if (email && email !== currentUserEmail) {
-        byEmail.set(email, { email, name: person.name });
-      }
-    });
-
-    return Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [tickets, classicAgentOptions, session?.user?.email]);
+  useEffect(() => {
+    if (
+      assigneeFilter !== "all" &&
+      assigneeFilter !== "mine" &&
+      !teamMemberOptions.some((member) => member.email === assigneeFilter)
+    ) {
+      setAssigneeFilter("all");
+    }
+  }, [assigneeFilter, teamMemberOptions]);
 
   // Classic view assignment options are loaded once so the owner avatar can
   // act as a quick assignment control without opening the ticket.
@@ -4560,6 +4567,47 @@ function App() {
       cancelled = true;
     };
   }, [session]);
+
+  async function updateListTicketStatus(ticket, status) {
+    if (!ticket || statusEditBusy || !status || status === ticket.status) {
+      setStatusEditKey(null);
+      return;
+    }
+
+    setStatusEditBusy(true);
+
+    try {
+      const { data, error } = await supabase
+        .functions
+        .invoke("update-zoho-ticket", {
+          body: {
+            ticket_key: ticket.ticket_key,
+            changes: {
+              status,
+            },
+          },
+        });
+
+      if (error || !data?.success) {
+        throw new Error(
+          data?.error || error?.message || "Could not update the ticket status."
+        );
+      }
+
+      await loadTickets(ticket.ticket_key);
+      setStatusEditKey(null);
+
+      // Classic and Board are list-first views. Do not leave a hidden
+      // ticket selected after changing its status from either view.
+      if (ticketViewMode === "classic" || ticketViewMode === "board") {
+        setSelectedKey(null);
+      }
+    } catch (error) {
+      console.error("Ticket status update error:", error);
+    } finally {
+      setStatusEditBusy(false);
+    }
+  }
 
   async function assignClassicTicket(ticket, owner) {
     if (!ticket || classicAssignmentBusy) return;
@@ -6154,7 +6202,11 @@ function App() {
                           <article
                             key={ticket.ticket_key}
                             className={`ticket-board-card ${brandClass(ticket.source)}`}
-                            onClick={() => setSelectedKey(ticket.ticket_key)}
+                            onClick={() => {
+                              // Board is full-width until a ticket is intentionally opened.
+                              setTicketViewMode("compact");
+                              setSelectedKey(ticket.ticket_key);
+                            }}
                           >
                             <div className="ticket-board-card-top">
                               <div className="ticket-board-card-subject">{ticket.subject || "Untitled ticket"}</div>
@@ -6165,6 +6217,7 @@ function App() {
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   setClassicAssignmentKey((current) => current === ticket.ticket_key ? null : ticket.ticket_key);
+                                  setStatusEditKey(null);
                                 }}
                               >
                                 {initials}
@@ -6177,7 +6230,38 @@ function App() {
                             </div>
                             <div className="ticket-board-card-date">{formatDateTime(ticket.updated_at || ticket.created_at)}</div>
                             <div className="ticket-board-card-footer">
-                              <StatusBadge status={ticket.status} />
+                              <div className="list-status-control">
+                                <button
+                                  type="button"
+                                  className={`list-status-trigger ${statusEditKey === ticket.ticket_key ? "active" : ""}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setStatusEditKey((current) => current === ticket.ticket_key ? null : ticket.ticket_key);
+                                    setClassicAssignmentKey(null);
+                                  }}
+                                  title="Change ticket status"
+                                >
+                                  <StatusBadge status={ticket.status} />
+                                  <span className="list-status-chevron">⌄</span>
+                                </button>
+                                {statusEditKey === ticket.ticket_key && (
+                                  <div className="list-status-menu" onClick={(event) => event.stopPropagation()}>
+                                    <div className="list-status-menu-title">Change status</div>
+                                    {(BRAND_STATUSES[ticket.source] || ["Open", "On Hold", "Closed"]).map((status) => (
+                                      <button
+                                        key={status}
+                                        type="button"
+                                        className={`list-status-option ${ticket.status === status ? "selected" : ""}`}
+                                        disabled={statusEditBusy}
+                                        onClick={() => updateListTicketStatus(ticket, status)}
+                                      >
+                                        <StatusBadge status={status} />
+                                        {ticket.status === status && <span>✓</span>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <span className="ticket-board-activity">☰ {ticket.comment_count || ticket.thread_count || 0}</span>
                               <button type="button" className={`ticket-board-star ${isFavorite ? "active" : ""}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(ticket.ticket_key); }}>{isFavorite ? "★" : "☆"}</button>
                             </div>
@@ -6244,6 +6328,21 @@ function App() {
                 <div
                   key={ticket.ticket_key}
                   className={`ticket-row-classic ${brandClass(ticket.source)}`}
+                  onClick={() => {
+                    // Classic is list-first, but clicking a ticket should still
+                    // open the normal ticket workspace.
+                    setTicketViewMode("compact");
+                    setSelectedKey(ticket.ticket_key);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setTicketViewMode("compact");
+                      setSelectedKey(ticket.ticket_key);
+                    }
+                  }}
                 >
                   <div className="classic-ticket-check">
                     <input type="checkbox" onClick={(event) => event.stopPropagation()} aria-label={`Select ticket ${ticket.ticket_number || ""}`} />
@@ -6262,7 +6361,38 @@ function App() {
                     </div>
                   </div>
                   <div className="classic-ticket-status">
-                    <StatusBadge status={ticket.status} />
+                    <div className="list-status-control">
+                      <button
+                        type="button"
+                        className={`list-status-trigger ${statusEditKey === ticket.ticket_key ? "active" : ""}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setStatusEditKey((current) => current === ticket.ticket_key ? null : ticket.ticket_key);
+                          setClassicAssignmentKey(null);
+                        }}
+                        title="Change ticket status"
+                      >
+                        <StatusBadge status={ticket.status} />
+                        <span className="list-status-chevron">⌄</span>
+                      </button>
+                      {statusEditKey === ticket.ticket_key && (
+                        <div className="list-status-menu" onClick={(event) => event.stopPropagation()}>
+                          <div className="list-status-menu-title">Change status</div>
+                          {(BRAND_STATUSES[ticket.source] || ["Open", "On Hold", "Closed"]).map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              className={`list-status-option ${ticket.status === status ? "selected" : ""}`}
+                              disabled={statusEditBusy}
+                              onClick={() => updateListTicketStatus(ticket, status)}
+                            >
+                              <StatusBadge status={status} />
+                              {ticket.status === status && <span>✓</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="classic-ticket-activity">
                     <span title="Comments">☰</span>
@@ -6289,6 +6419,7 @@ function App() {
                         setClassicAssignmentKey((current) =>
                           current === ticket.ticket_key ? null : ticket.ticket_key
                         );
+                        setStatusEditKey(null);
                       }}
                     >
                       <span className="classic-ticket-owner-avatar">{initials}</span>
