@@ -3327,26 +3327,129 @@ button:hover {
 .ticket-view-switcher button:hover{color:#0f172a;background:#f8fafc}
 .ticket-view-switcher button.active{background:#eef4ff;color:#1d4ed8;box-shadow:0 1px 2px rgba(15,23,42,.06)}
 
-/* Brand labels are intentionally not pills: each has its own visual signature. */
-.brand-badge{display:inline-flex;align-items:center;gap:6px;vertical-align:middle;white-space:nowrap;background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;font-weight:700;letter-spacing:-.01em}
-.brand-mark{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;font-size:9px;line-height:1;font-weight:800;letter-spacing:-.04em}
-.brand-name{font-size:11px;line-height:1}
-.brand-qualicare .brand-mark{background:#eef8f3;color:#16805a;border:1px solid #ccebdd}
-.brand-qualicare .brand-name{color:#16805a}
-.brand-tutordoctor .brand-mark{background:#eef4ff;color:#2857b9;border:1px solid #cddcff}
-.brand-tutordoctor .brand-name{color:#2857b9}
-.brand-codewiz .brand-mark{background:#fff3e8;color:#b85d16;border:1px solid #f5d5b6}
-.brand-codewiz .brand-name{color:#b85d16}
-.brand-unknown .brand-mark{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
-.brand-unknown .brand-name{color:#64748b}
-.brand-badge-compact{gap:4px}
-.brand-badge-compact .brand-mark{width:16px;height:16px;border-radius:5px;font-size:8px}
-.brand-badge-compact .brand-name{font-size:10px}
+/* ======================================================
+   V7 — BRAND LABELS
+   Uses the existing CSG brand colors from :root.
+   ====================================================== */
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  border-radius: 6px;
+
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.brand-name {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Qualicare — existing CSG blue */
+.brand-qualicare .brand-mark {
+  background: var(--qualicare-soft);
+  color: var(--qualicare);
+  border: 1px solid var(--qualicare-border);
+}
+
+.brand-qualicare .brand-name {
+  color: var(--qualicare);
+}
+
+/* Tutor Doctor — existing CSG red */
+.brand-tutordoctor .brand-mark {
+  background: var(--tutordoctor-soft);
+  color: var(--tutordoctor);
+  border: 1px solid var(--tutordoctor-border);
+}
+
+.brand-tutordoctor .brand-name {
+  color: var(--tutordoctor);
+}
+
+/* Code Wiz — existing CSG orange */
+.brand-codewiz .brand-mark {
+  background: var(--codewiz-soft);
+  color: var(--codewiz);
+  border: 1px solid var(--codewiz-border);
+}
+
+.brand-codewiz .brand-name {
+  color: var(--codewiz);
+}
+
+/* Unknown */
+.brand-unknown .brand-mark {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.brand-unknown .brand-name {
+  color: #64748b;
+}
+
+.brand-badge-compact {
+  gap: 4px;
+}
+
+.brand-badge-compact .brand-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  font-size: 8px;
+}
+
+.brand-badge-compact .brand-name {
+  font-size: 10px;
+}
 
 .ticket-list-compact{border-top:1px solid #edf2f7}
 .ticket-row-compact{display:grid!important;grid-template-columns:34px minmax(280px,1.4fr) minmax(190px,.9fr) auto minmax(110px,.35fr);align-items:center;gap:13px;width:100%;min-height:66px;padding:9px 14px!important;border:0!important;border-bottom:1px solid #edf2f7!important;border-radius:0!important;background:#fff!important;text-align:left!important;box-shadow:none!important;cursor:pointer}
 .ticket-row-compact:hover{background:#f8fbff!important}
-.ticket-row-compact.selected{background:#f3f7ff!important;box-shadow:inset 3px 0 0 #3b82f6!important}
+.ticket-row-compact.selected {
+  background: #f3f7ff !important;
+  box-shadow: inset 3px 0 0 var(--csg-blue) !important;
+}
+
+.ticket-row-compact.brand-qualicare.selected {
+  background: var(--qualicare-soft) !important;
+  box-shadow: inset 3px 0 0 var(--qualicare) !important;
+}
+
+.ticket-row-compact.brand-tutordoctor.selected {
+  background: var(--tutordoctor-soft) !important;
+  box-shadow: inset 3px 0 0 var(--tutordoctor) !important;
+}
+
+.ticket-row-compact.brand-codewiz.selected {
+  background: var(--codewiz-soft) !important;
+  box-shadow: inset 3px 0 0 var(--codewiz) !important;
+}
 .compact-ticket-icon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #d9e1eb;border-radius:50%;font-size:14px;color:#64748b;background:#fff}
 .compact-ticket-main{min-width:0;display:flex;flex-direction:column;gap:5px}
 .compact-ticket-subject{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650;line-height:1.25;color:#172033}
