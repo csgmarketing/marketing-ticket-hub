@@ -3797,3 +3797,160 @@ button:hover {
   .classic-ticket-owner{width:30px;height:30px}
   .classic-ticket-meta{max-width:100%}
 }
+
+
+/* ======================================================
+   CLASSIC + DASHBOARD FULL-WIDTH MODES
+   ====================================================== */
+
+/* Classic is a list-first view: keep the ticket rows open and
+   give the list the full workspace width instead of opening a ticket. */
+.app-shell.classic-mode{
+  grid-template-columns:200px minmax(0,1fr);
+}
+.app-shell.classic-mode .ticket-column{
+  border-right:0;
+  min-width:0;
+}
+.app-shell.classic-mode .conversation-column,
+.app-shell.classic-mode .details-column{
+  display:none;
+}
+.app-shell.classic-mode .ticket-list{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+
+/* Dashboard is a true full-page workspace, not a panel squeezed
+   between the ticket list and ticket details. */
+.app-shell.dashboard-mode{
+  grid-template-columns:200px minmax(0,1fr);
+}
+.app-shell.dashboard-mode .ticket-column,
+.app-shell.dashboard-mode .details-column{
+  display:none;
+}
+.app-shell.dashboard-mode .conversation-column{
+  width:100%;
+  min-width:0;
+}
+
+/* Make the Classic rows read like a full-width ticket table. */
+.app-shell.classic-mode .ticket-column-header{
+  padding-left:22px;
+  padding-right:22px;
+}
+.app-shell.classic-mode .ticket-list-toolbar{
+  padding:0 22px 12px;
+}
+.app-shell.classic-mode .classic-ticket-header{
+  display:grid;
+  grid-template-columns:34px 42px minmax(320px,1fr) 120px 70px 42px 42px minmax(180px,240px);
+  align-items:center;
+  gap:10px;
+  min-height:34px;
+  padding:0 22px;
+  border-bottom:1px solid #e5eaf0;
+  background:#f8fafc;
+  color:#94a3b8;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.05em;
+} 
+.app-shell.classic-mode .ticket-row-classic{
+  grid-template-columns:34px 42px minmax(320px,1fr) 120px 70px 42px 42px minmax(180px,240px);
+  min-height:70px;
+  padding:10px 22px;
+}
+.app-shell.classic-mode .classic-ticket-owner{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:9px;
+  min-width:0;
+}
+.app-shell.classic-mode .classic-ticket-owner-avatar{
+  width:32px;
+  height:32px;
+  flex:0 0 32px;
+  border:1px solid #d6dee8;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#fff;
+  color:#334155;
+  font-size:10px;
+  font-weight:800;
+}
+.app-shell.classic-mode .classic-ticket-owner-name{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#334155;
+  font-size:11px;
+  font-weight:700;
+}
+.app-shell.classic-mode .ticket-row-classic:hover{
+  background:#f8fafc;
+}
+
+/* Keep brand marks prominent in the restored dashboard tiles. */
+.dashboard-brand-card{
+  grid-template-columns:56px 1fr;
+  min-height:104px;
+}
+.dashboard-brand-card .brand-badge{
+  width:56px;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+}
+.dashboard-brand-card .brand-mark{
+  width:48px;
+  height:48px;
+  border-radius:10px;
+  font-size:16px;
+}
+.dashboard-brand-card .brand-name{
+  font-size:9px;
+  line-height:1;
+  font-weight:800;
+  text-align:center;
+  color:#64748b !important;
+}
+.dashboard-brand-card strong{
+  font-size:26px;
+}
+
+/* The dashboard should use all available vertical space. */
+.app-shell.dashboard-mode .dashboard-view{
+  min-height:100%;
+  box-sizing:border-box;
+}
+
+@media (max-width:1100px){
+  .app-shell.classic-mode .ticket-row-classic{
+    grid-template-columns:30px 38px minmax(240px,1fr) 105px 60px 38px 38px minmax(145px,190px);
+  }
+}
+@media (max-width:760px){
+  .app-shell.classic-mode{
+    grid-template-columns:180px minmax(0,1fr);
+  }
+  .app-shell.classic-mode .ticket-row-classic{
+    grid-template-columns:28px 34px minmax(0,1fr) 38px 38px 38px;
+    padding-left:10px;
+    padding-right:10px;
+  }
+  .app-shell.classic-mode .classic-ticket-status,
+  .app-shell.classic-mode .classic-ticket-activity{
+    display:none;
+  }
+  .app-shell.classic-mode .classic-ticket-owner-name{
+    display:none;
+  }
+}
