@@ -583,6 +583,12 @@ function Login({
     useState("");
 
   const [
+    password,
+    setPassword,
+  ] =
+    useState("");
+
+  const [
     busy,
     setBusy,
   ] =
@@ -594,47 +600,29 @@ function Login({
   ] =
     useState("");
 
-  async function signIn(
-    event
-  ) {
-    event.preventDefault();
+  const [
+    mode,
+    setMode,
+  ] =
+    useState("signin");
 
-    if (
-      !email.trim()
-    ) {
-      return;
-    }
+  const [
+    recoveryMode,
+    setRecoveryMode,
+  ] =
+    useState(false);
 
-    setBusy(true);
-    setMessage("");
+  const [
+    newPassword,
+    setNewPassword,
+  ] =
+    useState("");
 
-    const {
-      error,
-    } =
-      await supabase.auth.signInWithOtp(
-        {
-          email:
-            email.trim(),
-
-          options: {
-            emailRedirectTo:
-              window.location.origin,
-          },
-        }
-      );
-
-    if (error) {
-      setMessage(
-        error.message
-      );
-    } else {
-      setMessage(
-        "Check your email for the sign-in link."
-      );
-    }
-
-    setBusy(false);
-  }
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] =
+    useState("");
 
   useEffect(() => {
     const {
@@ -647,13 +635,26 @@ function Login({
           nextSession
         ) => {
           if (
+            event ===
+            "PASSWORD_RECOVERY"
+          ) {
+            setRecoveryMode(true);
+            setMode("signin");
+            setMessage(
+              "Create a new password for your account."
+            );
+            return;
+          }
+
+          if (
             nextSession &&
             (
               event ===
                 "SIGNED_IN" ||
               event ===
                 "INITIAL_SESSION"
-            )
+            ) &&
+            !recoveryMode
           ) {
             onSignedIn(
               nextSession
@@ -669,21 +670,270 @@ function Login({
     };
   }, [
     onSignedIn,
+    recoveryMode,
   ]);
+
+  async function signIn(
+    event
+  ) {
+    event.preventDefault();
+
+    const cleanEmail =
+      email.trim();
+
+    if (
+      !cleanEmail ||
+      !password
+    ) {
+      setMessage(
+        "Enter your work email and password."
+      );
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.auth.signInWithPassword(
+        {
+          email:
+            cleanEmail,
+          password,
+        }
+      );
+
+    if (error) {
+      setMessage(
+        error.message
+      );
+    } else if (data?.session) {
+      onSignedIn(
+        data.session
+      );
+    }
+
+    setBusy(false);
+  }
+
+  async function sendPasswordSetupEmail(
+    event
+  ) {
+    event.preventDefault();
+
+    const cleanEmail =
+      email.trim();
+
+    if (!cleanEmail) {
+      setMessage(
+        "Enter your work email first."
+      );
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    const {
+      error,
+    } =
+      await supabase.auth.resetPasswordForEmail(
+        cleanEmail,
+        {
+          redirectTo:
+            window.location.origin,
+        }
+      );
+
+    if (error) {
+      setMessage(
+        error.message
+      );
+    } else {
+      setMessage(
+        mode === "first"
+          ? "Check your email for a link to create your password."
+          : "Check your email for a link to reset your password."
+      );
+    }
+
+    setBusy(false);
+  }
+
+  async function updatePassword(
+    event
+  ) {
+    event.preventDefault();
+
+    if (
+      newPassword.length <
+      8
+    ) {
+      setMessage(
+        "Your password must be at least 8 characters."
+      );
+      return;
+    }
+
+    if (
+      newPassword !==
+      confirmPassword
+    ) {
+      setMessage(
+        "The passwords do not match."
+      );
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.auth.updateUser(
+        {
+          password:
+            newPassword,
+        }
+      );
+
+    if (error) {
+      setMessage(
+        error.message
+      );
+    } else {
+      setRecoveryMode(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      setPassword("");
+      setMessage(
+        "Password created successfully. Signing you in…"
+      );
+
+      if (data?.user) {
+        const {
+          data:
+            sessionData,
+        } =
+          await supabase.auth.getSession();
+
+        if (
+          sessionData?.session
+        ) {
+          onSignedIn(
+            sessionData.session
+          );
+        }
+      }
+    }
+
+    setBusy(false);
+  }
+
+  if (recoveryMode) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <div className="login-logo">
+            <span className="login-logo-mountain">
+              ▲
+            </span>
+            <span>CSG</span>
+          </div>
+
+          <h1>
+            Create your password
+          </h1>
+
+          <p>
+            Set a password for your Marketing Ticket Hub account.
+          </p>
+
+          <form
+            onSubmit={
+              updatePassword
+            }
+          >
+            <label>
+              New password
+            </label>
+
+            <input
+              type="password"
+              placeholder="At least 8 characters"
+              value={
+                newPassword
+              }
+              onChange={(
+                event
+              ) =>
+                setNewPassword(
+                  event.target.value
+                )
+              }
+              autoComplete="new-password"
+            />
+
+            <label>
+              Confirm password
+            </label>
+
+            <input
+              type="password"
+              placeholder="Re-enter your password"
+              value={
+                confirmPassword
+              }
+              onChange={(
+                event
+              ) =>
+                setConfirmPassword(
+                  event.target.value
+                )
+              }
+              autoComplete="new-password"
+            />
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={
+                busy
+              }
+            >
+              {busy
+                ? "Saving…"
+                : "Create password"}
+            </button>
+
+            {message && (
+              <div className="login-message">
+                {message}
+              </div>
+            )}
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const passwordHelpMode =
+    mode === "first" ||
+    mode === "forgot";
 
   return (
     <div className="login-page">
-
       <div className="login-card">
-
         <div className="login-logo">
           <span className="login-logo-mountain">
             ▲
           </span>
-
-          <span>
-            CSG
-          </span>
+          <span>CSG</span>
         </div>
 
         <h1>
@@ -695,48 +945,145 @@ function Login({
           Tutor Doctor and Code Wiz.
         </p>
 
-        <form
-          onSubmit={
-            signIn
-          }
-        >
-          <label>
-            Work email
-          </label>
-
-          <input
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(
-              event
-            ) =>
-              setEmail(
-                event
-                  .target
-                  .value
-              )
-            }
-          />
-
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={
-              busy
+        {passwordHelpMode ? (
+          <form
+            onSubmit={
+              sendPasswordSetupEmail
             }
           >
-            {busy
-              ? "Sending…"
-              : "Sign in with email"}
-          </button>
+            <label>
+              Work email
+            </label>
 
-          {message && (
-            <div className="login-message">
-              {message}
+            <input
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(
+                event
+              ) =>
+                setEmail(
+                  event.target.value
+                )
+              }
+              autoComplete="email"
+              autoFocus
+            />
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={
+                busy
+              }
+            >
+              {busy
+                ? "Sending…"
+                : mode === "first"
+                  ? "Send password setup link"
+                  : "Send reset link"}
+            </button>
+
+            <button
+              type="button"
+              className="login-secondary-button"
+              onClick={() => {
+                setMode("signin");
+                setMessage("");
+              }}
+            >
+              Back to sign in
+            </button>
+
+            {message && (
+              <div className="login-message">
+                {message}
+              </div>
+            )}
+          </form>
+        ) : (
+          <form
+            onSubmit={
+              signIn
+            }
+          >
+            <label>
+              Work email
+            </label>
+
+            <input
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(
+                event
+              ) =>
+                setEmail(
+                  event.target.value
+                )
+              }
+              autoComplete="email"
+            />
+
+            <label>
+              Password
+            </label>
+
+            <input
+              type="password"
+              placeholder="Your password"
+              value={password}
+              onChange={(
+                event
+              ) =>
+                setPassword(
+                  event.target.value
+                )
+              }
+              autoComplete="current-password"
+            />
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={
+                busy
+              }
+            >
+              {busy
+                ? "Signing in…"
+                : "Sign in"}
+            </button>
+
+            <div className="login-links">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("first");
+                  setMessage("");
+                }}
+              >
+                First time? Create your password
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("forgot");
+                  setMessage("");
+                }}
+              >
+                Forgot password?
+              </button>
             </div>
-          )}
-        </form>
+
+            {message && (
+              <div className="login-message">
+                {message}
+              </div>
+            )}
+          </form>
+        )}
       </div>
     </div>
   );
