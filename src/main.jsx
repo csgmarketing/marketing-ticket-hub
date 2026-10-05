@@ -16,6 +16,29 @@ const SUPABASE_URL =
 const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Capture email-link intent before Supabase consumes and clears the URL hash.
+const PASSWORD_SETUP_STORAGE_KEY = "csg-hub-password-setup";
+function passwordSetupRequested(url) {
+  const parsed = new URL(url);
+  const hash = new URLSearchParams(parsed.hash.slice(1));
+  const type = hash.get("type") || parsed.searchParams.get("type");
+  return type === "recovery" || type === "invite" || parsed.searchParams.get("hub_auth") === "password-setup";
+}
+function rememberPasswordSetup(required) {
+  try {
+    if (required) sessionStorage.setItem(PASSWORD_SETUP_STORAGE_KEY, "1");
+    else sessionStorage.removeItem(PASSWORD_SETUP_STORAGE_KEY);
+  } catch {}
+}
+const INITIAL_PASSWORD_SETUP = (() => {
+  if (passwordSetupRequested(window.location.href)) {
+    rememberPasswordSetup(true);
+    return true;
+  }
+  try { return sessionStorage.getItem(PASSWORD_SETUP_STORAGE_KEY) === "1"; }
+  catch { return false; }
+})();
+
 const supabase =
   createClient(
     SUPABASE_URL,
@@ -633,36 +656,16 @@ function RecipientLine({
 
 function Login({
   onSignedIn,
+  passwordSetupRequired = false,
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState("signin");
-  const [recoveryMode, setRecoveryMode] = useState(false);
+  const recoveryMode = passwordSetupRequired;
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, nextSession) => {
-        if (event === "PASSWORD_RECOVERY") {
-          setRecoveryMode(true);
-          setMode("signin");
-          setMessage("Create a new password for your account.");
-          return;
-        }
-        if (
-          nextSession &&
-          (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
-          !recoveryMode
-        ) {
-          onSignedIn(nextSession);
-        }
-      }
-    );
-    return () => listener.subscription.unsubscribe();
-  }, [onSignedIn, recoveryMode]);
 
   async function signIn(event) {
     event.preventDefault();
@@ -700,7 +703,7 @@ function Login({
     setBusy(true);
     setMessage("");
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/?hub_auth=password-setup`,
     });
     if (error) {
       setMessage(error.message);
@@ -726,21 +729,18 @@ function Login({
     }
     setBusy(true);
     setMessage("");
-    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setRecoveryMode(false);
-      setNewPassword("");
-      setConfirmPassword("");
-      setPassword("");
-      setMessage("Password created successfully. Signing you in…");
-      if (data?.user) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData?.session) onSignedIn(sessionData.session);
-      }
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!data?.session) throw new Error("Your link has expired. Request a new password setup link.");
+      onSignedIn(data.session);
+    } catch (error) {
+      setMessage(error.message || "Unable to save your password. Try again.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   if (recoveryMode) {
@@ -990,6 +990,8 @@ function TicketKudos({ticket,session,people}) {
 }
 
 function App() {
+  const [deleteBusy,setDeleteBusy]=useState(false);
+  const [deleteNotice,setDeleteNotice]=useState("");
   const [opsPage, setOpsPage] = useState(null);
 
   const editorRef =
@@ -1015,6 +1017,8 @@ function App() {
     setSession,
   ] =
     useState(null);
+
+  const [passwordSetupRequired, setPasswordSetupRequired] = useState(INITIAL_PASSWORD_SETUP);
 
   const [
     authLoading,
@@ -1069,6 +1073,8 @@ function App() {
     setLoadingTickets,
   ] =
     useState(false);
+
+  useEffect(() => { setDeleteNotice(""); }, [selectedKey]);
 
   const [
     loadingThreads,
@@ -1567,9 +1573,14 @@ function App() {
             _event,
             nextSession
           ) => {
-            setSession(
-              nextSession
-            );
+            if (_event === "PASSWORD_RECOVERY" || passwordSetupRequested(window.location.href)) {
+              rememberPasswordSetup(true);
+              setPasswordSetupRequired(true);
+            } else if (_event === "SIGNED_OUT") {
+              rememberPasswordSetup(false);
+              setPasswordSetupRequired(false);
+            }
+            setSession(nextSession);
           }
         );
 
@@ -5046,6 +5057,20 @@ function App() {
       : visible;
   }, [tickets, assigneeFilter, session?.user?.email]);
 
+  async function deleteSelectedTicket() {
+    if (!selected || deleteBusy) return;
+    const ticket = selected;
+    if (!window.confirm(`Move ticket #${ticket.ticket_number} to Zoho's Recycle Bin and remove it from the Hub?`)) return;
+    setDeleteBusy(true); setDeleteNotice("");
+    try {
+      const {data,error}=await supabase.functions.invoke("delete-zoho-ticket",{body:{ticket_key:ticket.ticket_key,confirm:true}});
+      if(error || !data?.success) throw new Error(data?.error || error?.message || "Deletion failed. Check the function logs.");
+      setTickets(current=>current.filter(t=>t.ticket_key!==ticket.ticket_key));setSelectedKey(null);
+      await loadTickets();
+    } catch(error) { setDeleteNotice(error.message); }
+    finally { setDeleteBusy(false); }
+  }
+
   async function signOut() {
     await supabase
       .auth
@@ -5062,12 +5087,20 @@ function App() {
     );
   }
 
-  if (!session) {
+  if (!session || passwordSetupRequired) {
     return (
       <Login
-        onSignedIn={
-          setSession
-        }
+        passwordSetupRequired={passwordSetupRequired}
+        onSignedIn={(nextSession) => {
+          rememberPasswordSetup(false);
+          const url = new URL(window.location.href);
+          url.searchParams.delete("hub_auth");
+          if (["recovery", "invite"].includes(url.searchParams.get("type"))) url.searchParams.delete("type");
+          if (new URLSearchParams(url.hash.slice(1)).has("access_token")) url.hash = "";
+          window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+          setPasswordSetupRequired(false);
+          setSession(nextSession);
+        }}
       />
     );
   }
@@ -6753,6 +6786,7 @@ function App() {
               </div>
 
               <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                <button type="button" className="hub-delete-ticket" disabled={deleteBusy} onClick={deleteSelectedTicket}>{deleteBusy?"Deleting…":"Delete ticket"}</button>
                 <button type="button" onClick={() => openReminderForTicket(selected)} style={{border:"1px solid #dbe3ec",background:"#fff",color:"#334155",borderRadius:"7px",padding:"8px 10px",fontSize:"11px",fontWeight:650,cursor:"pointer"}}>⏰ Remind me</button>
                 <button type="button" onClick={() => toggleFavorite(selected.ticket_key)} aria-label={favoriteKeys.includes(selected.ticket_key) ? "Remove from favorites" : "Add to favorites"} title={favoriteKeys.includes(selected.ticket_key) ? "Remove from favorites" : "Add to favorites"} className="favorite-button">{favoriteKeys.includes(selected.ticket_key) ? "★" : "☆"}</button>
                 {selected.ticket_url && (
@@ -6772,6 +6806,8 @@ function App() {
                 )}
               </div>
             </header>
+
+            {deleteNotice && <p className="hub-delete-error" role="alert">{deleteNotice}</p>}
 
             {/* REPLY COMPOSER */}
 
