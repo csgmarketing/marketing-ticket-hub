@@ -926,6 +926,18 @@ function App() {
     useState([]);
 
   const [
+    ticketViewMode,
+    setTicketViewMode,
+  ] =
+    useState("compact");
+
+  const [
+    notificationFilter,
+    setNotificationFilter,
+  ] =
+    useState("all");
+
+  const [
     brandFilter,
     setBrandFilter,
   ] =
@@ -3677,6 +3689,10 @@ function App() {
         false
       );
 
+      // Refresh in-app notifications immediately so a self-mention
+      // (or any teammate mention) appears without a page refresh.
+      await loadNotifications();
+
       window.setTimeout(
         () =>
           setCommentNotice(
@@ -4319,6 +4335,16 @@ function App() {
         rows = rows.filter((ticket) => favoriteKeys.includes(ticket.ticket_key));
       }
 
+      if (filter === "mentions") {
+        const mentionTicketKeys = new Set(
+          notifications
+            .filter((notification) => String(notification.notification_type || "").toLowerCase() === "mention")
+            .map((notification) => notification.ticket_key)
+            .filter(Boolean)
+        );
+        rows = rows.filter((ticket) => mentionTicketKeys.has(ticket.ticket_key));
+      }
+
       if (
         search.trim()
       ) {
@@ -4367,6 +4393,7 @@ function App() {
       departmentFilter,
       assigneeFilter,
       favoriteKeys,
+      notifications,
       search,
       session,
     ]);
@@ -4434,6 +4461,16 @@ function App() {
   }, [tickets]);
 
   const favoriteCount = favoriteKeys.length;
+
+  const mentionNotifications = useMemo(() => {
+    const currentEmail = String(session?.user?.email || "").trim().toLowerCase();
+    return notifications.filter((notification) =>
+      String(notification.notification_type || "").trim().toLowerCase() === "mention" &&
+      (!notification.recipient_email || String(notification.recipient_email).trim().toLowerCase() === currentEmail)
+    );
+  }, [notifications, session?.user?.email]);
+
+  const unreadMentionCount = mentionNotifications.filter((notification) => !notification.is_read).length;
 
   // COUNTS
   // ====================================================
@@ -5069,6 +5106,19 @@ function App() {
           </button>
 
           <button
+            className={`nav-item ${filter === "mentions" && !showDashboard ? "active" : ""}`}
+            onClick={() => {
+              setShowDashboard(false);
+              setShowNotifications(false);
+              setFilter("mentions");
+              setAssigneeFilter("all");
+            }}
+          >
+            <span>Mentions</span>
+            <span className="nav-count">{unreadMentionCount}</span>
+          </button>
+
+          <button
             className={`nav-item ${showReminders ? "active" : ""}`}
             onClick={() => setShowReminders((current) => !current)}
           >
@@ -5560,6 +5610,12 @@ function App() {
             </div>
           </div>
 
+          <div className="notification-filter-tabs">
+            <button type="button" className={notificationFilter === "all" ? "active" : ""} onClick={() => setNotificationFilter("all")}>All</button>
+            <button type="button" className={notificationFilter === "mentions" ? "active" : ""} onClick={() => setNotificationFilter("mentions")}>@ Mentions</button>
+            <button type="button" className={notificationFilter === "unread" ? "active" : ""} onClick={() => setNotificationFilter("unread")}>Unread</button>
+          </div>
+
           {loadingNotifications ? (
             <div
               style={{
@@ -5573,8 +5629,11 @@ function App() {
             >
               Loading notifications…
             </div>
-          ) : notifications.length ===
-            0 ? (
+          ) : notifications.filter((notification) => {
+              if (notificationFilter === "mentions") return String(notification.notification_type || "").toLowerCase() === "mention";
+              if (notificationFilter === "unread") return !notification.is_read;
+              return true;
+            }).length === 0 ? (
             <div
               style={{
                 padding:
@@ -5588,9 +5647,12 @@ function App() {
               No notifications yet.
             </div>
           ) : (
-            notifications.map(
-              (
-                notification
+            notifications.filter((notification) => {
+              if (notificationFilter === "mentions") return String(notification.notification_type || "").toLowerCase() === "mention";
+              if (notificationFilter === "unread") return !notification.is_read;
+              return true;
+            }).map(
+              (notification
               ) => (
                 <button
                   key={
@@ -5795,26 +5857,37 @@ function App() {
           </div>
         </div>
 
-        <div className="search-wrap">
+        <div className="ticket-list-toolbar">
+          <div className="search-wrap">
+            <input
+              className="search-input"
+              type="search"
+              placeholder="Search tickets…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
 
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Search tickets…"
-            value={search}
-            onChange={(
-              event
-            ) =>
-              setSearch(
-                event
-                  .target
-                  .value
-              )
-            }
-          />
+          <div className="ticket-view-switcher" aria-label="Ticket view">
+            <span className="ticket-view-label">View</span>
+            <button
+              type="button"
+              className={ticketViewMode === "compact" ? "active" : ""}
+              onClick={() => setTicketViewMode("compact")}
+            >
+              Compact
+            </button>
+            <button
+              type="button"
+              className={ticketViewMode === "classic" ? "active" : ""}
+              onClick={() => setTicketViewMode("classic")}
+            >
+              Classic
+            </button>
+          </div>
         </div>
 
-        <div className="ticket-list">
+        <div className={`ticket-list ${ticketViewMode === "classic" ? "ticket-list-classic" : ""}`}>
 
           {loadingTickets &&
             tickets.length ===
@@ -5832,80 +5905,80 @@ function App() {
               </div>
             )}
 
-          {filteredTickets.map(
-            (
-              ticket
-            ) => (
+          {filteredTickets.map((ticket) => {
+            const isSelected = selectedKey === ticket.ticket_key;
+            const isFavorite = favoriteKeys.includes(ticket.ticket_key);
+            const ownerName = getTicketOwnerName(ticket) || "Unassigned";
+            const initials = ownerName === "Unassigned" ? "—" : ownerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+            if (ticketViewMode === "classic") {
+              return (
+                <div
+                  key={ticket.ticket_key}
+                  className={`ticket-row-classic ${brandClass(ticket.source)} ${isSelected ? "selected" : ""}`}
+                  onClick={() => setSelectedKey(ticket.ticket_key)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedKey(ticket.ticket_key); }}
+                >
+                  <div className="classic-ticket-check">
+                    <input type="checkbox" onClick={(event) => event.stopPropagation()} aria-label={`Select ticket ${ticket.ticket_number || ""}`} />
+                  </div>
+                  <div className="classic-ticket-icon">✉</div>
+                  <div className="classic-ticket-main">
+                    <div className="classic-ticket-subject">{ticket.subject || "Untitled ticket"}</div>
+                    <div className="classic-ticket-meta">
+                      <span>#{ticket.ticket_number || "—"}</span>
+                      <span>·</span>
+                      <BrandBadge source={ticket.source} />
+                      <span>·</span>
+                      <span>{ticket.contact_name || ticket.contact_email || "Unknown requester"}</span>
+                      <span>·</span>
+                      <span>{formatDateTime(ticket.updated_at || ticket.created_at)}</span>
+                    </div>
+                  </div>
+                  <div className="classic-ticket-status">
+                    <StatusBadge status={ticket.status} />
+                  </div>
+                  <div className="classic-ticket-activity">
+                    <span title="Comments">☰</span>
+                    <span>{ticket.comment_count || ticket.thread_count || ""}</span>
+                  </div>
+                  <div className="classic-ticket-comment">💬</div>
+                  <button
+                    type="button"
+                    className={`classic-ticket-star ${isFavorite ? "active" : ""}`}
+                    onClick={(event) => { event.stopPropagation(); toggleFavorite(ticket.ticket_key); }}
+                    title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                  >
+                    {isFavorite ? "★" : "☆"}
+                  </button>
+                  <div className="classic-ticket-owner" title={ownerName}>{initials}</div>
+                </div>
+              );
+            }
+
+            return (
               <button
-                key={
-                  ticket.ticket_key
-                }
-                className={`ticket-row ${brandClass(
-                  ticket.source
-                )} ${
-                  selectedKey ===
-                  ticket.ticket_key
-                    ? "selected"
-                    : ""
-                }`}
-                onClick={() =>
-                  setSelectedKey(
-                    ticket.ticket_key
-                  )
-                }
+                key={ticket.ticket_key}
+                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""}`}
+                onClick={() => setSelectedKey(ticket.ticket_key)}
               >
                 <div className="ticket-row-top">
-
-                  <BrandBadge
-                    source={
-                      ticket.source
-                    }
-                  />
-
-                  <span className="ticket-number">
-                    #
-                    {
-                      ticket.ticket_number
-                    }
-                  </span>
+                  <BrandBadge source={ticket.source} />
+                  <span className="ticket-number">#{ticket.ticket_number}</span>
                 </div>
-
-                <div className="ticket-subject">
-                  {ticket.subject ||
-                    "Untitled ticket"}
-                </div>
-
-                <div className="ticket-summary">
-                  {getTicketSummary(
-                    ticket
-                  ) ||
-                    "No preview available"}
-                </div>
-
-                <div className="ticket-requester">
-                  {ticket.contact_name ||
-                    ticket.contact_email ||
-                    "Unknown requester"}
-                </div>
-
+                <div className="ticket-subject">{ticket.subject || "Untitled ticket"}</div>
+                <div className="ticket-summary">{getTicketSummary(ticket) || "No preview available"}</div>
+                <div className="ticket-requester">{ticket.contact_name || ticket.contact_email || "Unknown requester"}</div>
                 <div className="ticket-row-bottom">
-
-                  <StatusBadge
-                    status={
-                      ticket.status
-                    }
-                  />
-
-                  <span className="ticket-assignee">
-                    {getTicketOwnerName(
-                      ticket
-                    ) ||
-                      "Unassigned"}
-                  </span>
+                  <StatusBadge status={ticket.status} />
+                  <span className="ticket-assignee">{ownerName}</span>
                 </div>
               </button>
-            )
-          )}
+            );
+          })}
         </div>
       </section>
 
