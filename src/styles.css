@@ -3593,3 +3593,159 @@ button:hover {
 .tag-suggestions-close:hover {
   color: #334155;
 }
+
+/* ======================================================
+   DASHBOARD / TEAM MEMBER / FAVORITES
+   ====================================================== */
+.team-member-select{
+  width:100%;
+  min-height:34px;
+  padding:7px 28px 7px 9px;
+  border:1px solid #dbe3ec;
+  border-radius:8px;
+  background:#fff;
+  color:#334155;
+  font-family:inherit;
+  font-size:11px;
+  font-weight:650;
+  outline:none;
+}
+.team-member-select:focus{
+  border-color:#9bb3c7;
+  box-shadow:0 0 0 3px rgba(63,111,145,.08);
+}
+
+.dashboard-view{
+  height:100%;
+  overflow:auto;
+  padding:28px 32px 36px;
+  background:#f7f9fb;
+}
+.dashboard-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:24px;
+  margin-bottom:24px;
+}
+.dashboard-eyebrow{
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.12em;
+  color:#8794a0;
+  text-transform:uppercase;
+  margin-bottom:7px;
+}
+.dashboard-header h1{
+  margin:0;
+  font-size:25px;
+  line-height:1.15;
+  color:#202a44;
+}
+.dashboard-header p{
+  margin:7px 0 0;
+  color:#64748b;
+  font-size:13px;
+}
+.dashboard-brand-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-bottom:16px;
+}
+.dashboard-brand-card{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  grid-template-rows:auto auto;
+  align-items:center;
+  column-gap:14px;
+  row-gap:5px;
+  min-height:92px;
+  padding:17px 18px;
+  border:1px solid #e1e7ed;
+  border-radius:12px;
+  background:#fff;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 4px 14px rgba(32,42,68,.05);
+}
+.dashboard-brand-card:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(32,42,68,.08)}
+.dashboard-brand-card .brand-badge{grid-row:1 / span 2;align-self:center}
+.dashboard-brand-card strong{font-size:23px;line-height:1;color:#202a44}
+.dashboard-brand-card span:not(.brand-badge){font-size:11px;color:#8794a0;font-weight:600}
+.dashboard-brand-card.brand-qualicare{border-top:3px solid var(--qualicare)}
+.dashboard-brand-card.brand-tutordoctor{border-top:3px solid var(--tutordoctor)}
+.dashboard-brand-card.brand-codewiz{border-top:3px solid var(--codewiz)}
+
+.dashboard-kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:10px;
+  margin-bottom:18px;
+}
+.dashboard-kpi{
+  min-height:76px;
+  padding:13px 14px;
+  border:1px solid #e3e8ed;
+  border-radius:10px;
+  background:#fff;
+}
+.dashboard-kpi span{display:block;font-size:10px;font-weight:700;color:#8794a0;text-transform:uppercase;letter-spacing:.04em}
+.dashboard-kpi strong{display:block;margin-top:8px;font-size:22px;color:#202a44}
+.dashboard-section-card{
+  border:1px solid #e1e7ed;
+  border-radius:12px;
+  background:#fff;
+  overflow:hidden;
+}
+.dashboard-section-title{
+  padding:14px 16px;
+  border-bottom:1px solid #edf2f7;
+  font-size:12px;
+  font-weight:800;
+  color:#334155;
+}
+.dashboard-ticket-row{
+  display:grid;
+  grid-template-columns:130px minmax(0,1fr) 110px 150px;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  padding:12px 16px;
+  border:0;
+  border-bottom:1px solid #f0f3f6;
+  background:#fff;
+  text-align:left;
+  color:#475569;
+  font-family:inherit;
+  font-size:11px;
+  cursor:pointer;
+}
+.dashboard-ticket-row:last-child{border-bottom:0}
+.dashboard-ticket-row:hover{background:#f8fbff}
+.dashboard-ticket-subject{font-weight:650;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dashboard-empty{padding:28px 18px;color:#8794a0;font-size:12px}
+.favorite-button{
+  width:35px;
+  height:35px;
+  border:1px solid #dbe3ec;
+  background:#fff;
+  color:#64748b;
+  border-radius:7px;
+  padding:0;
+  font-size:20px;
+  line-height:1;
+  cursor:pointer;
+}
+.favorite-button:hover{border-color:#f2c66d;color:#f59e0b;background:#fffaf0}
+
+@media (max-width:1100px){
+  .dashboard-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .dashboard-brand-grid{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .dashboard-view{padding:20px}
+  .dashboard-header{flex-direction:column}
+  .dashboard-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard-ticket-row{grid-template-columns:1fr;gap:6px}
+}
