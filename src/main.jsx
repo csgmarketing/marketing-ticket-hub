@@ -949,6 +949,24 @@ function App() {
     useState("compact");
 
   const [
+    classicAssignmentKey,
+    setClassicAssignmentKey,
+  ] =
+    useState(null);
+
+  const [
+    classicAssignmentBusy,
+    setClassicAssignmentBusy,
+  ] =
+    useState(false);
+
+  const [
+    classicAgentOptions,
+    setClassicAgentOptions,
+  ] =
+    useState([]);
+
+  const [
     notificationFilter,
     setNotificationFilter,
   ] =
@@ -4339,13 +4357,30 @@ function App() {
         filter ===
         "mine"
       ) {
-        const userEmail = session?.user?.email?.toLowerCase();
-        rows = rows.filter((ticket) => String(getTicketOwnerEmail(ticket) || "").toLowerCase() === userEmail && ticket.status !== "Closed");
+        const ownerEmail =
+          assigneeFilter === "all"
+            ? currentUserEmail
+            : assigneeFilter === "mine"
+              ? currentUserEmail
+              : String(assigneeFilter).trim().toLowerCase();
+
+        rows = rows.filter(
+          (ticket) =>
+            String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === ownerEmail &&
+            ticket.status !== "Closed"
+        );
       }
 
       if (assigneeFilter !== "all") {
-        const ownerEmail = assigneeFilter === "mine" ? currentUserEmail : String(assigneeFilter).trim().toLowerCase();
-        rows = rows.filter((ticket) => String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === ownerEmail);
+        const ownerEmail =
+          assigneeFilter === "mine"
+            ? currentUserEmail
+            : String(assigneeFilter).trim().toLowerCase();
+
+        rows = rows.filter(
+          (ticket) =>
+            String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === ownerEmail
+        );
       }
 
       if (filter === "favorites") {
@@ -4465,17 +4500,130 @@ function App() {
   // ====================================================
   const teamMemberOptions = useMemo(() => {
     const byEmail = new Map();
+    const currentUserEmail = String(session?.user?.email || "").trim().toLowerCase();
+
+    classicAgentOptions.forEach((agent) => {
+      const email = String(agent.email || "").trim().toLowerCase();
+      const name = String(agent.name || agent.email || "").trim();
+      if (email && name && email !== currentUserEmail) {
+        byEmail.set(email, { email, name });
+      }
+    });
+
     tickets.filter(isVisibleMarketingTicket).forEach((ticket) => {
       const email = String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase();
       const name = getTicketOwnerName(ticket);
-      if (email && name) byEmail.set(email, { email, name });
+      if (email && name && email !== currentUserEmail) {
+        byEmail.set(email, { email, name });
+      }
     });
+
     CODEWIZ_TICKET_OWNERS.forEach((person) => {
       const email = String(person.email || "").trim().toLowerCase();
-      if (email) byEmail.set(email, { email, name: person.name });
+      if (email && email !== currentUserEmail) {
+        byEmail.set(email, { email, name: person.name });
+      }
     });
+
     return Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [tickets]);
+  }, [tickets, classicAgentOptions, session?.user?.email]);
+
+  // Classic view assignment options are loaded once so the owner avatar can
+  // act as a quick assignment control without opening the ticket.
+  useEffect(() => {
+    if (!session) return;
+
+    let cancelled = false;
+
+    async function loadClassicAgents() {
+      const { data, error } = await supabase
+        .from("zoho_agents")
+        .select("zoho_agent_id, zuid, name, email, active, source")
+        .order("name", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Classic agent load error:", error);
+        setClassicAgentOptions([]);
+        return;
+      }
+
+      setClassicAgentOptions(
+        (data || []).filter((agent) => agent.active !== false)
+      );
+    }
+
+    loadClassicAgents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  async function assignClassicTicket(ticket, owner) {
+    if (!ticket || classicAssignmentBusy) return;
+
+    setClassicAssignmentBusy(true);
+
+    try {
+      const changes =
+        ticket.source === "Code Wiz"
+          ? { codewizAgentName: owner?.name || null }
+          : { assigneeId: owner?.zoho_agent_id || null };
+
+      const { data, error } = await supabase
+        .functions
+        .invoke("update-zoho-ticket", {
+          body: {
+            ticket_key: ticket.ticket_key,
+            changes,
+          },
+        });
+
+      if (error || !data?.success) {
+        throw new Error(
+          data?.error || error?.message || "Could not assign the ticket."
+        );
+      }
+
+      // Create an in-app notification and send an email to the new owner.
+      // Notification failures must never undo a successful Zoho assignment.
+      if (owner?.email) {
+        try {
+          await supabase.functions.invoke("notify-ticket-assignment", {
+            body: {
+              ticket_key: ticket.ticket_key,
+              recipient_email: owner.email,
+              recipient_name: owner.name || owner.email,
+              ticket_number: ticket.ticket_number || null,
+              subject: ticket.subject || null,
+              source: ticket.source,
+              actor_email: session?.user?.email || null,
+              actor_name: session?.user?.user_metadata?.full_name || session?.user?.email || "Ticket Hub user",
+              notification_type: "assignment",
+            },
+          });
+        } catch (notificationError) {
+          console.error("Assignment notification error:", notificationError);
+        }
+      }
+
+      await loadTickets(ticket.ticket_key);
+      await loadNotifications();
+      setClassicAssignmentKey(null);
+
+      // Classic view is intentionally list-only; never leave a hidden
+      // selected ticket behind after an assignment.
+      if (ticketViewMode === "classic") {
+        setSelectedKey(null);
+      }
+    } catch (error) {
+      console.error("Classic ticket assignment error:", error);
+    } finally {
+      setClassicAssignmentBusy(false);
+    }
+  }
 
   const favoriteCount = favoriteKeys.length;
 
@@ -4517,6 +4665,23 @@ function App() {
                 brandFilter
             );
 
+      // The Team Member selector scopes every sidebar count, not just the
+      // ticket list. "Mine" means the signed-in user; a named member means
+      // that member. When viewing everyone, counts remain combined.
+      const selectedOwnerEmail =
+        assigneeFilter === "all"
+          ? ""
+          : assigneeFilter === "mine"
+            ? userEmail
+            : String(assigneeFilter).trim().toLowerCase();
+
+      if (selectedOwnerEmail) {
+        countTickets = countTickets.filter(
+          (ticket) =>
+            String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === selectedOwnerEmail
+        );
+      }
+
       if (
         brandFilter ===
           "Tutor Doctor" &&
@@ -4547,20 +4712,13 @@ function App() {
           ).length,
 
         mine:
-          countTickets.filter(
-            (
-              ticket
-            ) =>
-              ticket.status !==
-                "Closed" &&
-              String(
-                getTicketOwnerEmail(
-                  ticket
-                ) ||
-                  ""
-              ).toLowerCase() ===
-                userEmail
-          ).length,
+          (selectedOwnerEmail
+            ? countTickets.filter((ticket) => ticket.status !== "Closed").length
+            : countTickets.filter(
+                (ticket) =>
+                  ticket.status !== "Closed" &&
+                  String(getTicketOwnerEmail(ticket) || "").toLowerCase() === userEmail
+              ).length),
 
         open:
           countTickets.filter(
@@ -4622,23 +4780,38 @@ function App() {
           ).length,
 
         unassigned:
-          countTickets.filter(
-            (
-              ticket
-            ) =>
-              isTicketUnassigned(
-                ticket
-              ) &&
-              ticket.status !==
-                "Closed"
-          ).length,
+          selectedOwnerEmail
+            ? 0
+            : countTickets.filter(
+                (ticket) =>
+                  isTicketUnassigned(ticket) &&
+                  ticket.status !== "Closed"
+              ).length,
       };
     }, [
       tickets,
       session,
       brandFilter,
       departmentFilter,
+      assigneeFilter,
     ]);
+
+  const dashboardScopedTickets = useMemo(() => {
+    const visible = tickets.filter(isVisibleMarketingTicket);
+    const ownerEmail =
+      assigneeFilter === "all"
+        ? ""
+        : assigneeFilter === "mine"
+          ? String(session?.user?.email || "").trim().toLowerCase()
+          : String(assigneeFilter || "").trim().toLowerCase();
+
+    return ownerEmail
+      ? visible.filter(
+          (ticket) =>
+            String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === ownerEmail
+        )
+      : visible;
+  }, [tickets, assigneeFilter, session?.user?.email]);
 
   async function signOut() {
     await supabase
@@ -5045,7 +5218,7 @@ function App() {
   // ====================================================
 
   return (
-    <div className={`app-shell ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""}`}>
+    <div className={`app-shell ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
       {/* SIDEBAR */}
 
@@ -5154,11 +5327,15 @@ function App() {
               "Active Tickets",
               counts.active,
             ],
-            [
-              "unassigned",
-              "Unassigned",
-              counts.unassigned,
-            ],
+            ...(assigneeFilter === "all"
+              ? [
+                  [
+                    "unassigned",
+                    "Unassigned",
+                    counts.unassigned,
+                  ],
+                ]
+              : []),
             [
               "overdue",
               "Overdue",
@@ -5272,7 +5449,18 @@ function App() {
 
         <div className="sidebar-section">
           <div className="sidebar-label">TEAM MEMBER</div>
-          <select className="team-member-select" value={assigneeFilter} onChange={(event) => { setShowDashboard(false); setAssigneeFilter(event.target.value); }}>
+          <select
+            className="team-member-select"
+            value={assigneeFilter}
+            onChange={(event) => {
+              const value = event.target.value;
+              setShowDashboard(false);
+              setAssigneeFilter(value);
+              if (value !== "all" && filter === "unassigned") {
+                setFilter("all");
+              }
+            }}
+          >
             <option value="all">View all combined</option>
             <option value="mine">Mine</option>
             {teamMemberOptions.map((member) => (
@@ -5904,6 +6092,16 @@ function App() {
             >
               Classic
             </button>
+            <button
+              type="button"
+              className={ticketViewMode === "board" ? "active" : ""}
+              onClick={() => {
+                setTicketViewMode("board");
+                setSelectedKey(null);
+              }}
+            >
+              Board
+            </button>
           </div>
         </div>
 
@@ -5925,6 +6123,99 @@ function App() {
               </div>
             )}
 
+          {ticketViewMode === "board" && filteredTickets.length > 0 && (
+            <div className="ticket-board">
+              {[
+                { key: "Open", label: "Open" },
+                { key: "Other Status", label: "Other Status", statuses: ["In Progress", "On Hold"] },
+                { key: "Escalated", label: "Escalated" },
+                { key: "Waiting", label: "Waiting" },
+                ...(filter === "closed" ? [{ key: "Closed", label: "Closed", statuses: ["Closed"] }] : []),
+              ].map((column) => {
+                const columnTickets = filteredTickets.filter((ticket) =>
+                  column.statuses
+                    ? column.statuses.includes(ticket.status)
+                    : ticket.status === column.key
+                );
+                return (
+                  <section key={column.key} className={`ticket-board-column ${statusClass(column.key)}`}>
+                    <header className="ticket-board-column-header">
+                      <strong>{column.label}</strong>
+                      <span>{columnTickets.length}</span>
+                    </header>
+                    <div className="ticket-board-column-body">
+                      {columnTickets.length === 0 ? (
+                        <div className="ticket-board-empty">No tickets in this queue</div>
+                      ) : columnTickets.map((ticket) => {
+                        const ownerName = getTicketOwnerName(ticket) || "Unassigned";
+                        const initials = ownerName === "Unassigned" ? "—" : ownerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+                        const isFavorite = favoriteKeys.includes(ticket.ticket_key);
+                        return (
+                          <article
+                            key={ticket.ticket_key}
+                            className={`ticket-board-card ${brandClass(ticket.source)}`}
+                            onClick={() => setSelectedKey(ticket.ticket_key)}
+                          >
+                            <div className="ticket-board-card-top">
+                              <div className="ticket-board-card-subject">{ticket.subject || "Untitled ticket"}</div>
+                              <button
+                                type="button"
+                                className={`ticket-board-owner ${classicAssignmentKey === ticket.ticket_key ? "active" : ""}`}
+                                title="Change ticket owner"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setClassicAssignmentKey((current) => current === ticket.ticket_key ? null : ticket.ticket_key);
+                                }}
+                              >
+                                {initials}
+                              </button>
+                            </div>
+                            <div className="ticket-board-card-meta">
+                              <span>#{ticket.ticket_number || "—"}</span>
+                              <span>·</span>
+                              <span>{ticket.contact_name || ticket.contact_email || "Unknown requester"}</span>
+                            </div>
+                            <div className="ticket-board-card-date">{formatDateTime(ticket.updated_at || ticket.created_at)}</div>
+                            <div className="ticket-board-card-footer">
+                              <StatusBadge status={ticket.status} />
+                              <span className="ticket-board-activity">☰ {ticket.comment_count || ticket.thread_count || 0}</span>
+                              <button type="button" className={`ticket-board-star ${isFavorite ? "active" : ""}`} onClick={(event) => { event.stopPropagation(); toggleFavorite(ticket.ticket_key); }}>{isFavorite ? "★" : "☆"}</button>
+                            </div>
+                            <div className="ticket-board-assignee">
+                              <span>Assigned</span>
+                              <strong>{ownerName}</strong>
+                            </div>
+                            {classicAssignmentKey === ticket.ticket_key && (
+                              <div className="classic-assignment-menu board-assignment-menu" onClick={(event) => event.stopPropagation()}>
+                                <div className="classic-assignment-title">Assign ticket</div>
+                                <button type="button" className={`classic-assignment-option ${isTicketUnassigned(ticket) ? "selected" : ""}`} disabled={classicAssignmentBusy} onClick={() => assignClassicTicket(ticket, null)}>
+                                  <span className="classic-assignment-avatar">—</span>
+                                  <span><strong>Unassigned</strong><small>Remove current owner</small></span>
+                                </button>
+                                {(ticket.source === "Code Wiz" ? CODEWIZ_TICKET_OWNERS : classicAgentOptions.filter((agent) => agent.source === ticket.source)).map((person) => {
+                                  const personEmail = String(person.email || "").trim().toLowerCase();
+                                  const currentEmail = String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase();
+                                  const currentName = String(getTicketOwnerName(ticket) || "").trim().toLowerCase();
+                                  const selectedOwner = ticket.source === "Code Wiz" ? currentName === String(person.name || "").trim().toLowerCase() : currentEmail === personEmail;
+                                  return (
+                                    <button key={person.zoho_agent_id || person.email} type="button" className={`classic-assignment-option ${selectedOwner ? "selected" : ""}`} disabled={classicAssignmentBusy} onClick={() => assignClassicTicket(ticket, person)}>
+                                      <span className="classic-assignment-avatar">{String(person.name || person.email || "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                                      <span><strong>{person.name || person.email}</strong><small>{person.email || ""}</small></span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+
           {ticketViewMode === "classic" && filteredTickets.length > 0 && (
             <div className="classic-ticket-header" aria-hidden="true">
               <span></span>
@@ -5943,6 +6234,10 @@ function App() {
             const isFavorite = favoriteKeys.includes(ticket.ticket_key);
             const ownerName = getTicketOwnerName(ticket) || "Unassigned";
             const initials = ownerName === "Unassigned" ? "—" : ownerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+            if (ticketViewMode === "board") {
+              return null;
+            }
 
             if (ticketViewMode === "classic") {
               return (
@@ -5983,9 +6278,64 @@ function App() {
                   >
                     {isFavorite ? "★" : "☆"}
                   </button>
-                  <div className="classic-ticket-owner" title={ownerName}>
-                    <span className="classic-ticket-owner-avatar">{initials}</span>
-                    <span className="classic-ticket-owner-name">{ownerName}</span>
+                  <div className="classic-ticket-owner-wrap">
+                    <button
+                      type="button"
+                      className={`classic-ticket-owner ${classicAssignmentKey === ticket.ticket_key ? "active" : ""}`}
+                      title="Change ticket owner"
+                      aria-label={`Change owner for ticket ${ticket.ticket_number || ""}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setClassicAssignmentKey((current) =>
+                          current === ticket.ticket_key ? null : ticket.ticket_key
+                        );
+                      }}
+                    >
+                      <span className="classic-ticket-owner-avatar">{initials}</span>
+                      <span className="classic-ticket-owner-name">{ownerName}</span>
+                    </button>
+
+                    {classicAssignmentKey === ticket.ticket_key && (
+                      <div
+                        className="classic-assignment-menu"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="classic-assignment-title">Assign ticket</div>
+                        <button
+                            type="button"
+                            className={`classic-assignment-option ${isTicketUnassigned(ticket) ? "selected" : ""}`}
+                            disabled={classicAssignmentBusy}
+                            onClick={() => assignClassicTicket(ticket, null)}
+                          >
+                            <span className="classic-assignment-avatar">—</span>
+                            <span><strong>Unassigned</strong><small>Remove current owner</small></span>
+                        </button>
+                        {(ticket.source === "Code Wiz"
+                          ? CODEWIZ_TICKET_OWNERS
+                          : classicAgentOptions.filter((agent) => agent.source === ticket.source))
+                          .map((person) => {
+                            const personEmail = String(person.email || "").trim().toLowerCase();
+                            const currentEmail = String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase();
+                            const currentName = String(getTicketOwnerName(ticket) || "").trim().toLowerCase();
+                            const selectedOwner =
+                              ticket.source === "Code Wiz"
+                                ? currentName === String(person.name || "").trim().toLowerCase()
+                                : currentEmail === personEmail;
+                            return (
+                              <button
+                                key={person.zoho_agent_id || person.email}
+                                type="button"
+                                className={`classic-assignment-option ${selectedOwner ? "selected" : ""}`}
+                                disabled={classicAssignmentBusy}
+                                onClick={() => assignClassicTicket(ticket, person)}
+                              >
+                                <span className="classic-assignment-avatar">{String(person.name || person.email || "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                                <span><strong>{person.name || person.email}</strong><small>{person.email || ""}</small></span>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -6033,7 +6383,7 @@ function App() {
               <button type="button" className="primary-button" onClick={() => setShowDashboard(false)}>Open ticket workspace</button>
             </div>
             <div className="dashboard-brand-grid">
-              {["Qualicare", "Tutor Doctor", "Code Wiz"].map((brand) => { const count = tickets.filter(t => isVisibleMarketingTicket(t) && t.source === brand && t.status !== "Closed").length; return (
+              {["Qualicare", "Tutor Doctor", "Code Wiz"].map((brand) => { const count = dashboardScopedTickets.filter(t => t.source === brand && t.status !== "Closed").length; return (
                 <button key={brand} type="button" className={`dashboard-brand-card ${brandClass(brand)}`} onClick={() => { setBrandFilter(brand); setFilter("all"); setAssigneeFilter("all"); setShowDashboard(false); }}>
                   <BrandBadge source={brand} /><strong>{count}</strong><span>active tickets</span>
                 </button>
@@ -6043,13 +6393,13 @@ function App() {
               <div className="dashboard-kpi"><span>Active</span><strong>{counts.active}</strong></div>
               <div className="dashboard-kpi"><span>Needs attention</span><strong>{counts.overdue + counts.unassigned}</strong></div>
               <div className="dashboard-kpi"><span>Overdue</span><strong>{counts.overdue}</strong></div>
-              <div className="dashboard-kpi"><span>High priority</span><strong>{tickets.filter(t => isVisibleMarketingTicket(t) && t.status !== "Closed" && String(t.priority || "").toLowerCase() === "high").length}</strong></div>
-              <div className="dashboard-kpi"><span>Due today</span><strong>{tickets.filter(t => isVisibleMarketingTicket(t) && t.status !== "Closed" && t.due_date && new Date(t.due_date).toDateString() === new Date().toDateString()).length}</strong></div>
+              <div className="dashboard-kpi"><span>High priority</span><strong>{dashboardScopedTickets.filter(t => t.status !== "Closed" && String(t.priority || "").toLowerCase() === "high").length}</strong></div>
+              <div className="dashboard-kpi"><span>Due today</span><strong>{dashboardScopedTickets.filter(t => t.status !== "Closed" && t.due_date && new Date(t.due_date).toDateString() === new Date().toDateString()).length}</strong></div>
               <div className="dashboard-kpi"><span>Favorites</span><strong>{favoriteCount}</strong></div>
             </div>
             <div className="dashboard-section-card">
-              <div className="dashboard-section-title">Your tickets</div>
-              {tickets.filter(t => isVisibleMarketingTicket(t) && String(getTicketOwnerEmail(t) || "").toLowerCase() === String(session?.user?.email || "").toLowerCase() && t.status !== "Closed").slice(0, 8).map(ticket => (
+              <div className="dashboard-section-title">{assigneeFilter === "all" ? "Your tickets" : assigneeFilter === "mine" ? "Your tickets" : `${teamMemberOptions.find((member) => member.email === assigneeFilter)?.name || "Team member"}’s tickets`}</div>
+              {dashboardScopedTickets.filter(t => t.status !== "Closed").slice(0, 8).map(ticket => (
                 <button key={ticket.ticket_key} type="button" className="dashboard-ticket-row" onClick={() => { setSelectedKey(ticket.ticket_key); setShowDashboard(false); setFilter("all"); }}>
                   <BrandBadge source={ticket.source} /><span className="dashboard-ticket-subject">#{ticket.ticket_number} · {ticket.subject || "Untitled ticket"}</span><StatusBadge status={ticket.status} /><span>{isOverdue(ticket) ? "Overdue" : getTicketOwnerName(ticket) || "Unassigned"}</span>
                 </button>
