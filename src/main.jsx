@@ -1077,6 +1077,7 @@ function App() {
   const [deleteBusy,setDeleteBusy]=useState(false);
   const [deleteNotice,setDeleteNotice]=useState("");
   const [opsPage, setOpsPage] = useState(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [showSignatures, setShowSignatures] = useState(false);
   const [signatures, setSignatures] = useState({});
   const [signatureReady, setSignatureReady] = useState(false);
@@ -2999,11 +3000,12 @@ function App() {
           "";
       }
     }, [
-      selected,
+      selected?.ticket_key, selected?.contact_email,
     ]);
 
   useEffect(() => {
     resetComposer();
+    setComposerOpen(false);
   }, [
     selectedKey,
     resetComposer,
@@ -3054,6 +3056,7 @@ function App() {
     thread =
       latestThread
   ) {
+    setComposerOpen(true);
     setReplyMode(mode);
     setShowReplyModeMenu(
       false
@@ -3536,6 +3539,7 @@ function App() {
         successText
       );
 
+      setComposerOpen(false);
       signatureAttempt.current = null;
       setEditorHtml("");
 
@@ -5605,7 +5609,7 @@ function App() {
   // ====================================================
 
   return (
-    <div className={`app-shell ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
+    <div className={`app-shell ${selected && !showDashboard && !opsPage ? "ticket-reading-mode" : ""} ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
       <CompletionCelebration session={session} />
       {showSignatures && <MySignatures session={session} signatures={signatures} loadError={signatureError} onClose={()=>setShowSignatures(false)}
@@ -6861,6 +6865,10 @@ function App() {
           <>
             {/* HEADER */}
 
+            <div className="hub-ticket-reading-bar">
+              <button type="button" onClick={()=>{setSelectedKey(null);setComposerOpen(false);}}>← Back to tickets</button>
+              <div><button type="button" onClick={()=>configureComposer("reply")}>Reply</button><button type="button" onClick={()=>configureComposer("reply_all")}>Reply All</button><button type="button" onClick={()=>configureComposer("forward")}>Forward</button></div>
+            </div>
             <header className="conversation-header">
 
               <div className="conversation-heading">
@@ -6933,6 +6941,154 @@ function App() {
 
             {deleteNotice && <p className="hub-delete-error" role="alert">{deleteNotice}</p>}
 
+            {/* UNIFIED TIMELINE */}
+
+            <section className="timeline-section">
+
+              <div className="conversation-section-heading">
+
+                <div>
+                  <h3>
+                    Ticket timeline
+                  </h3>
+
+                  <p>
+                    Emails and comments in the exact order they happened
+                  </p>
+                </div>
+
+                <div className="timeline-count-group">
+
+                  <span>
+                    {
+                      threads.length
+                    }{" "}
+                    email
+                    {threads.length ===
+                    1
+                      ? ""
+                      : "s"}
+                  </span>
+
+                  <span>
+                    {
+                      comments.length
+                    }{" "}
+                    comment
+                    {comments.length ===
+                    1
+                      ? ""
+                      : "s"}
+                  </span>
+                </div>
+              </div>
+
+              {(loadingThreads ||
+                loadingComments) && (
+                <div className="loading-threads">
+                  Loading timeline…
+                </div>
+              )}
+
+              <div className="timeline">
+
+                {timelineItems.map(
+                  (
+                    item
+                  ) => (
+                    <React.Fragment
+                      key={
+                        item.key
+                      }
+                    >
+                      {item.type ===
+                      "email"
+                        ? renderEmailItem(
+                            item.data
+                          )
+                        : renderCommentItem(
+                            item.data
+                          )}
+                    </React.Fragment>
+                  )
+                )}
+
+                {/* ORIGINAL REQUEST ALWAYS LAST */}
+
+                {selected.description && (
+                  <article className="timeline-item original-message">
+
+                    <div className="timeline-rail-node original-node">
+                      ★
+                    </div>
+
+                    <div className="original-request-label">
+                      Original request
+                    </div>
+
+                    <div className="message-header">
+
+                      <div className="message-author-area">
+
+                        <div className="message-avatar customer-avatar">
+                          {(
+                            selected.contact_name ||
+                            selected.contact_email ||
+                            "?"
+                          )
+                            .charAt(
+                              0
+                            )
+                            .toUpperCase()}
+                        </div>
+
+                        <div>
+                          <div className="message-author">
+                            {selected.contact_name ||
+                              selected.contact_email ||
+                              "Requester"}
+                          </div>
+
+                          <div className="message-direction">
+                            Ticket created
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className="message-time">
+                        {formatDateTime(
+                          selected.created_at_zoho
+                        )}
+                      </span>
+                    </div>
+
+                    {selected.contact_email && (
+                      <div className="message-recipient-box">
+
+                        <RecipientLine
+                          label="From"
+                          value={
+                            selected.contact_email
+                          }
+                        />
+                      </div>
+                    )}
+
+                    <div
+                      className="message-body"
+                      dangerouslySetInnerHTML={{
+                        __html:
+                          selected.description,
+                      }}
+                    />
+                  </article>
+                )}
+
+                <div className="conversation-end">
+                  Start of ticket
+                </div>
+              </div>
+            </section>
             {/* REPLY COMPOSER */}
 
             <div
@@ -6940,8 +7096,10 @@ function App() {
                 composerRef
               }
               className="composer-area"
+              hidden={!composerOpen}
             >
 
+              <button type="button" className="hub-cancel-reply" disabled={composerBusy} onClick={()=>setComposerOpen(false)}>Cancel · keep draft</button>
               <div className="composer-area-heading">
 
                 <div>
@@ -7683,6 +7841,7 @@ function App() {
               </div>
             </div>
 
+            <details className="hub-internal-notes"><summary>Add an internal note</summary>
             {/* COMMENT COMPOSER */}
 
             <section className="comment-composer-section">
@@ -7976,154 +8135,7 @@ function App() {
               </div>
             </section>
 
-            {/* UNIFIED TIMELINE */}
-
-            <section className="timeline-section">
-
-              <div className="conversation-section-heading">
-
-                <div>
-                  <h3>
-                    Ticket timeline
-                  </h3>
-
-                  <p>
-                    Emails and comments in the exact order they happened
-                  </p>
-                </div>
-
-                <div className="timeline-count-group">
-
-                  <span>
-                    {
-                      threads.length
-                    }{" "}
-                    email
-                    {threads.length ===
-                    1
-                      ? ""
-                      : "s"}
-                  </span>
-
-                  <span>
-                    {
-                      comments.length
-                    }{" "}
-                    comment
-                    {comments.length ===
-                    1
-                      ? ""
-                      : "s"}
-                  </span>
-                </div>
-              </div>
-
-              {(loadingThreads ||
-                loadingComments) && (
-                <div className="loading-threads">
-                  Loading timeline…
-                </div>
-              )}
-
-              <div className="timeline">
-
-                {timelineItems.map(
-                  (
-                    item
-                  ) => (
-                    <React.Fragment
-                      key={
-                        item.key
-                      }
-                    >
-                      {item.type ===
-                      "email"
-                        ? renderEmailItem(
-                            item.data
-                          )
-                        : renderCommentItem(
-                            item.data
-                          )}
-                    </React.Fragment>
-                  )
-                )}
-
-                {/* ORIGINAL REQUEST ALWAYS LAST */}
-
-                {selected.description && (
-                  <article className="timeline-item original-message">
-
-                    <div className="timeline-rail-node original-node">
-                      ★
-                    </div>
-
-                    <div className="original-request-label">
-                      Original request
-                    </div>
-
-                    <div className="message-header">
-
-                      <div className="message-author-area">
-
-                        <div className="message-avatar customer-avatar">
-                          {(
-                            selected.contact_name ||
-                            selected.contact_email ||
-                            "?"
-                          )
-                            .charAt(
-                              0
-                            )
-                            .toUpperCase()}
-                        </div>
-
-                        <div>
-                          <div className="message-author">
-                            {selected.contact_name ||
-                              selected.contact_email ||
-                              "Requester"}
-                          </div>
-
-                          <div className="message-direction">
-                            Ticket created
-                          </div>
-                        </div>
-                      </div>
-
-                      <span className="message-time">
-                        {formatDateTime(
-                          selected.created_at_zoho
-                        )}
-                      </span>
-                    </div>
-
-                    {selected.contact_email && (
-                      <div className="message-recipient-box">
-
-                        <RecipientLine
-                          label="From"
-                          value={
-                            selected.contact_email
-                          }
-                        />
-                      </div>
-                    )}
-
-                    <div
-                      className="message-body"
-                      dangerouslySetInnerHTML={{
-                        __html:
-                          selected.description,
-                      }}
-                    />
-                  </article>
-                )}
-
-                <div className="conversation-end">
-                  Start of ticket
-                </div>
-              </div>
-            </section>
+            </details>
           </>
         )}
       </main>
