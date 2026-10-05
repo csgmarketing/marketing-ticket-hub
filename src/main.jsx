@@ -6983,7 +6983,6 @@ function App() {
               hidden={!composerOpen}
             >
 
-              <button type="button" className="hub-cancel-reply" disabled={composerBusy} onClick={()=>setComposerOpen(false)}>Cancel · keep draft</button>
               <div className="composer-area-heading">
 
                 <div>
@@ -6995,6 +6994,7 @@ function App() {
                     Reply by email, reply to everyone or forward.
                   </div>
                 </div>
+                <button type="button" className="hub-cancel-reply" disabled={composerBusy} onClick={()=>setComposerOpen(false)}>Cancel · keep draft</button>
               </div>
 
               <div className="rich-composer">
