@@ -6486,7 +6486,38 @@ function App() {
                 <div className="ticket-summary">{getTicketSummary(ticket) || "No preview available"}</div>
                 <div className="ticket-requester">{ticket.contact_name || ticket.contact_email || "Unknown requester"}</div>
                 <div className="ticket-row-bottom">
-                  <StatusBadge status={ticket.status} />
+                  <div className="list-status-control compact-status-control">
+                    <button
+                      type="button"
+                      className={`list-status-trigger ${statusEditKey === ticket.ticket_key ? "active" : ""}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setStatusEditKey((current) => current === ticket.ticket_key ? null : ticket.ticket_key);
+                        setClassicAssignmentKey(null);
+                      }}
+                      title="Change ticket status"
+                    >
+                      <StatusBadge status={ticket.status} />
+                      <span className="list-status-chevron">⌄</span>
+                    </button>
+                    {statusEditKey === ticket.ticket_key && (
+                      <div className="list-status-menu compact-status-menu" onClick={(event) => event.stopPropagation()}>
+                        <div className="list-status-menu-title">Change status</div>
+                        {(BRAND_STATUSES[ticket.source] || ["Open", "On Hold", "Closed"]).map((status) => (
+                          <button
+                            key={status}
+                            type="button"
+                            className={`list-status-option ${ticket.status === status ? "selected" : ""}`}
+                            disabled={statusEditBusy}
+                            onClick={() => updateListTicketStatus(ticket, status)}
+                          >
+                            <StatusBadge status={status} />
+                            {ticket.status === status && <span>✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <span className="ticket-assignee">{ownerName}</span>
                 </div>
               </button>
