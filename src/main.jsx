@@ -519,6 +519,7 @@ function BrandBadge({
   return (
     <span
       className={`brand-badge ${brandClass(source)}`}
+      title={config.name}
     >
       <span className="brand-mark">
         {config.mark}
@@ -893,6 +894,8 @@ function App() {
     setBrandFilter,
   ] =
     useState("all");
+
+  const [dashboardView, setDashboardView] = useState(false);
 
   const [
     search,
@@ -3633,6 +3636,31 @@ function App() {
           );
       }
 
+      if (filter === "needs") {
+        rows = rows.filter((ticket) => ticket.status !== "Closed" && (isOverdue(ticket) || isTicketUnassigned(ticket) || String(ticket.priority || "").toLowerCase() === "high" || ticket.status === "Escalated"));
+      }
+
+      if (filter === "high") {
+        rows = rows.filter((ticket) => ticket.status !== "Closed" && String(ticket.priority || "").toLowerCase() === "high");
+      }
+
+      if (filter === "due") {
+        const now = new Date();
+        rows = rows.filter((ticket) => {
+          if (ticket.status === "Closed" || !ticket.due_date) return false;
+          const d = new Date(ticket.due_date);
+          return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+        });
+      }
+
+      if (filter === "aging") {
+        rows = rows.filter((ticket) => {
+          if (ticket.status === "Closed") return false;
+          const value = ticket.created_at_zoho || ticket.created_at;
+          return value && Date.now() - new Date(value).getTime() >= 3 * 86400000;
+        });
+      }
+
       if (
         search.trim()
       ) {
@@ -3854,6 +3882,44 @@ function App() {
       session,
       brandFilter,
     ]);
+
+  const dashboardMetrics = useMemo(() => {
+    const active = tickets.filter((t) => t.status !== "Closed");
+    const high = active.filter((t) => String(t.priority || "").toLowerCase() === "high");
+    const dueToday = active.filter((t) => {
+      if (!t.due_date) return false;
+      const d = new Date(t.due_date), now = new Date();
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    });
+    const aging = active.filter((t) => {
+      const value = t.created_at_zoho || t.created_at;
+      return value && Date.now() - new Date(value).getTime() >= 3 * 86400000;
+    });
+    const needs = active.filter((t) => isOverdue(t) || isTicketUnassigned(t) || String(t.priority || "").toLowerCase() === "high" || t.status === "Escalated");
+    const brandRows = ["Qualicare", "Tutor Doctor", "Code Wiz"].map((source) => {
+      const rows = active.filter((t) => t.source === source);
+      return { source, active: rows.length, overdue: rows.filter(isOverdue).length, high: rows.filter((t) => String(t.priority || "").toLowerCase() === "high").length, unassigned: rows.filter(isTicketUnassigned).length };
+    });
+    const currentEmail = String(session?.user?.email || "").trim().toLowerCase();
+    const yourTickets = active.filter((t) => {
+      const ownerEmail = String(t.assignee_email || "").trim().toLowerCase();
+      return currentEmail && ownerEmail === currentEmail;
+    });
+    const score = (t) => (isOverdue(t) ? 4 : 0) + (String(t.priority || "").toLowerCase() === "high" ? 3 : 0) + (t.status === "Escalated" ? 2 : 0) + (isTicketUnassigned(t) ? 1 : 0);
+    const yourTicketRows = [...yourTickets].sort((a,b) => {
+      const aRisk = (isOverdue(a) ? 3 : 0) + (String(a.priority || "").toLowerCase() === "high" ? 2 : 0);
+      const bRisk = (isOverdue(b) ? 3 : 0) + (String(b.priority || "").toLowerCase() === "high" ? 2 : 0);
+      return bRisk - aRisk || new Date(b.updated_at_zoho || b.created_at_zoho || 0) - new Date(a.updated_at_zoho || a.created_at_zoho || 0);
+    });
+    return { active: active.length, needs: needs.length, overdue: active.filter(isOverdue).length, high: high.length, dueToday: dueToday.length, unassigned: active.filter(isTicketUnassigned).length, aging: aging.length, waiting: active.filter((t) => t.status === "Waiting").length, closed: tickets.filter((t) => t.status === "Closed").length, yourTickets: yourTickets.length, yourTicketRows, brandRows, needsRows: [...needs].sort((a,b) => score(b)-score(a)).slice(0,7) };
+  }, [tickets]);
+
+  function openDashboardQueue(nextFilter, nextBrand = "all") {
+    setDashboardView(false);
+    setBrandFilter(nextBrand);
+    setSearch("");
+    setFilter(nextFilter);
+  }
 
   async function signOut() {
     await supabase
@@ -4292,6 +4358,11 @@ function App() {
 
         <div className="sidebar-section">
 
+          <button className={`nav-item ${dashboardView ? "active" : ""}`} onClick={() => setDashboardView(true)}>
+            <span>Dashboard</span>
+            <span className="nav-count">⌂</span>
+          </button>
+
           <div className="sidebar-label">
             MY WORK
           </div>
@@ -4332,9 +4403,10 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  setFilter(id)
-                }
+                onClick={() => {
+                  setDashboardView(false);
+                  setFilter(id);
+                }}
               >
                 <span>
                   {label}
@@ -4405,9 +4477,10 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() =>
-                  setFilter(id)
-                }
+                onClick={() => {
+                  setDashboardView(false);
+                  setFilter(id);
+                }}
               >
                 <span>
                   {label}
@@ -4462,6 +4535,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
+                  setDashboardView(false);
                   setBrandFilter(
                     value
                   );
@@ -4516,9 +4590,29 @@ function App() {
         </div>
       </aside>
 
+      {dashboardView && (
+        <main style={{ gridColumn: "2 / -1", overflow: "auto", background: "#f7f8fa", padding: "30px 34px 44px" }}>
+          <div style={{ maxWidth: 1480, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 26 }}>
+              <div><div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "#7a8290" }}>Marketing Operations</div><h1 style={{ margin: "7px 0 0", fontSize: 30 }}>Command Center</h1><p style={{ margin: "7px 0 0", color: "#737b88" }}>A live overview of the queues that need attention across all three brands.</p></div>
+              <button onClick={() => setDashboardView(false)} style={{ background: "#fff", border: "1px solid #dfe3e8", borderRadius: 10, padding: "10px 15px", fontWeight: 700, cursor: "pointer" }}>Open ticket workspace →</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 18 }}>
+              {[['Active',dashboardMetrics.active,'all','#17191d'],['Needs attention',dashboardMetrics.needs,'needs','#b42318'],['Overdue',dashboardMetrics.overdue,'overdue','#b42318'],['High priority',dashboardMetrics.high,'high','#9a6700'],['Due today',dashboardMetrics.dueToday,'due','#175cd3'],['Unassigned',dashboardMetrics.unassigned,'unassigned','#6941c6']].map(([label,value,action,accent]) => <button key={label} onClick={() => openDashboardQueue(action)} style={{ textAlign:'left', background:'#fff', border:'1px solid #e4e7ec', borderRadius:14, padding:'15px 16px', cursor:'pointer' }}><div style={{fontSize:12,color:'#737b88',fontWeight:700}}>{label}</div><div style={{fontSize:28,fontWeight:800,color:accent,marginTop:7}}>{value}</div></button>)}
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1.2fr .8fr', gap:18 }}>
+              <section style={{background:'#fff',border:'1px solid #e4e7ec',borderRadius:16,overflow:'hidden'}}><div style={{padding:'18px 20px',borderBottom:'1px solid #eef0f3'}}><h2 style={{margin:0,fontSize:16}}>Needs attention</h2><p style={{margin:'5px 0 0',fontSize:12,color:'#89919d'}}>The highest-value work first.</p></div>{dashboardMetrics.needsRows.length ? dashboardMetrics.needsRows.map(t => <button key={t.ticket_key} onClick={() => {setDashboardView(false);setBrandFilter('all');setFilter('all');setSearch(String(t.ticket_number || t.subject || ''));}} style={{width:'100%',textAlign:'left',border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'14px 20px',cursor:'pointer',display:'grid',gridTemplateColumns:'42px 1fr auto',gap:12,alignItems:'center'}}><BrandBadge source={t.source}/><div><div style={{fontWeight:750,fontSize:13}}>#{t.ticket_number} · {t.subject || 'Untitled ticket'}</div><div style={{marginTop:4,color:'#7a8290',fontSize:12}}>{t.contact_name || t.contact_email || 'Unknown requester'} · {getTicketOwnerName(t) || 'Unassigned'}</div></div><div style={{fontSize:11,fontWeight:800,color:isOverdue(t)?'#b42318':'#7a8290'}}>{isOverdue(t)?'OVERDUE':t.status}</div></button>) : <div style={{padding:28,color:'#7a8290'}}>Nothing urgent right now.</div>}</section>
+              <section style={{background:'#fff',border:'1px solid #e4e7ec',borderRadius:16,overflow:'hidden'}}><div style={{padding:'18px 20px',borderBottom:'1px solid #eef0f3'}}><h2 style={{margin:0,fontSize:16}}>Workload by brand</h2><p style={{margin:'5px 0 0',fontSize:12,color:'#89919d'}}>Active tickets and risk indicators.</p></div>{dashboardMetrics.brandRows.map(r => { const meta={Qualicare:['#198754','Q'],'Tutor Doctor':['#2563eb','TD'],'Code Wiz':['#f97316','CW']}[r.source]; return <button key={r.source} onClick={() => openDashboardQueue('all',r.source)} style={{width:'100%',textAlign:'left',border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'17px 20px',cursor:'pointer'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{display:'flex',alignItems:'center',gap:10,fontWeight:750}}><span style={{width:31,height:31,borderRadius:9,display:'inline-flex',alignItems:'center',justifyContent:'center',background:meta[0],color:'#fff',fontSize:11,fontWeight:900}}>{meta[1]}</span>{r.source}</span><strong>{r.active}</strong></div><div style={{display:'flex',gap:15,marginTop:9,fontSize:11,color:'#7a8290'}}><span>{r.overdue} overdue</span><span>{r.high} high</span><span>{r.unassigned} unassigned</span></div></button>})}</section>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18,marginTop:18}}>{[['Aging 3+ days',dashboardMetrics.aging,'aging','Older active tickets'],['Waiting',dashboardMetrics.waiting,'waiting','Tickets waiting for the next step'],['Closed',dashboardMetrics.closed,'closed','Kept out of all operational queues']].map(([label,value,action,desc]) => <button key={label} onClick={() => openDashboardQueue(action)} style={{textAlign:'left',background:'#fff',border:'1px solid #e4e7ec',borderRadius:14,padding:18,cursor:'pointer'}}><div style={{fontSize:12,fontWeight:700,color:'#737b88'}}>{label}</div><div style={{fontSize:27,fontWeight:800,marginTop:7}}>{value}</div><div style={{fontSize:12,color:'#89919d',marginTop:5}}>{desc}</div></button>)}</div>
+            <section style={{marginTop:18,background:'#fff',border:'1px solid #e4e7ec',borderRadius:16,overflow:'hidden'}}><div style={{padding:'18px 20px',borderBottom:'1px solid #eef0f3',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><h2 style={{margin:0,fontSize:16}}>Your tickets</h2><p style={{margin:'5px 0 0',fontSize:12,color:'#89919d'}}>Active tickets currently assigned to you.</p></div><button onClick={() => openDashboardQueue('mine')} style={{border:'1px solid #dfe3e8',background:'#fff',borderRadius:9,padding:'7px 11px',fontSize:12,fontWeight:750,cursor:'pointer'}}>View all · {dashboardMetrics.yourTickets}</button></div>{dashboardMetrics.yourTicketRows.length ? dashboardMetrics.yourTicketRows.slice(0,8).map(t => <button key={t.ticket_key} onClick={() => {setDashboardView(false);setBrandFilter('all');setFilter('mine');setSearch(String(t.ticket_number || t.subject || ''));}} style={{width:'100%',textAlign:'left',border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'13px 20px',cursor:'pointer',display:'grid',gridTemplateColumns:'42px 1fr auto',gap:12,alignItems:'center'}}><BrandBadge source={t.source}/><div><div style={{fontWeight:750,fontSize:13}}>#{t.ticket_number} · {t.subject || 'Untitled ticket'}</div><div style={{marginTop:4,color:'#7a8290',fontSize:12}}>{t.contact_name || t.contact_email || 'Unknown requester'} · {t.status || 'Open'}</div></div><div style={{fontSize:11,fontWeight:800,color:isOverdue(t)?'#b42318':String(t.priority || '').toLowerCase()==='high'?'#9a6700':'#7a8290'}}>{isOverdue(t)?'OVERDUE':String(t.priority || '').toLowerCase()==='high'?'HIGH':t.status}</div></button>) : <div style={{padding:28,color:'#7a8290'}}>You have no active tickets assigned to you.</div>}</section>
+          </div>
+        </main>
+      )}
+
       {/* TICKETS */}
 
-      <section className="ticket-column">
+      <section className="ticket-column" style={{ display: dashboardView ? "none" : undefined }}>
 
         <div className="ticket-column-header">
 
@@ -4597,6 +4691,17 @@ function App() {
                     ? "selected"
                     : ""
                 }`}
+                style={{
+                  borderLeft: `3px solid ${
+                    ticket.source === "Qualicare"
+                      ? "#16835b"
+                      : ticket.source === "Tutor Doctor"
+                        ? "#2563eb"
+                        : ticket.source === "Code Wiz"
+                          ? "#ea6a16"
+                          : "#98a2b3"
+                  }`,
+                }}
                 onClick={() =>
                   setSelectedKey(
                     ticket.ticket_key
@@ -4661,6 +4766,7 @@ function App() {
       {/* WORKSPACE */}
 
       <main
+        style={{ display: dashboardView ? "none" : undefined }}
         className={`conversation-column ${
           selected
             ? brandClass(
@@ -5941,7 +6047,7 @@ function App() {
 
       {/* DETAILS */}
 
-      <aside className="details-column">
+      <aside className="details-column" style={{ display: dashboardView ? "none" : undefined }}>
 
         {!selected ? (
           <div className="details-empty">
