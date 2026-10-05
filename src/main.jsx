@@ -81,6 +81,57 @@ const CODEWIZ_DEFAULT_DEPARTMENT = {
   email: "marketing@thecodewiz.com",
 };
 
+
+const ALLOWED_LOGIN_DOMAINS = [
+  "clearsummitgroup.com",
+  "tutordoctor.org",
+  "qualicare.com",
+  "thecodewiz.com",
+];
+
+function isApprovedCompanyEmail(value) {
+  const normalized =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  const atIndex =
+    normalized.lastIndexOf("@");
+
+  if (
+    atIndex <= 0 ||
+    atIndex ===
+      normalized.length - 1
+  ) {
+    return false;
+  }
+
+  const domain =
+    normalized.slice(
+      atIndex + 1
+    );
+
+  return ALLOWED_LOGIN_DOMAINS.includes(
+    domain
+  );
+}
+
+
+const TUTOR_DOCTOR_DEPARTMENTS = [
+  {
+    value: "Marketing",
+    label: "Marketing",
+  },
+  {
+    value: "Client_Tutor Newsletter",
+    label: "Client/Tutor Newsletter",
+  },
+  {
+    value: "Marketing Tech",
+    label: "Marketing Tech",
+  },
+];
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -493,24 +544,14 @@ function normalizeMentionList(value) {
 function BrandBadge({
   source,
 }) {
-  const slug = brandSlug(source);
-
-  const brandConfig = {
-    qualicare: { mark: "Q", name: "Qualicare" },
-    tutordoctor: { mark: "TD", name: "Tutor Doctor" },
-    codewiz: { mark: "CW", name: "Code Wiz" },
-    unknown: { mark: "?", name: source || "Unknown" },
-  };
-
-  const config = brandConfig[slug] || brandConfig.unknown;
-
   return (
     <span
-      className={`brand-badge ${brandClass(source)}`}
-      title={config.name}
+      className={`brand-badge ${brandClass(
+        source
+      )}`}
     >
-      <span className="brand-mark">{config.mark}</span>
-      <span className="brand-name">{config.name}</span>
+      {source ||
+        "Unknown"}
     </span>
   );
 }
@@ -576,182 +617,76 @@ function RecipientLine({
 function Login({
   onSignedIn,
 }) {
-  const [
-    email,
-    setEmail,
-  ] =
-    useState("");
-
-  const [
-    password,
-    setPassword,
-  ] =
-    useState("");
-
-  const [
-    busy,
-    setBusy,
-  ] =
-    useState(false);
-
-  const [
-    message,
-    setMessage,
-  ] =
-    useState("");
-
-  const [
-    mode,
-    setMode,
-  ] =
-    useState("signin");
-
-  const [
-    recoveryMode,
-    setRecoveryMode,
-  ] =
-    useState(false);
-
-  const [
-    newPassword,
-    setNewPassword,
-  ] =
-    useState("");
-
-  const [
-    confirmPassword,
-    setConfirmPassword,
-  ] =
-    useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [mode, setMode] = useState("signin");
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
-    const {
-      data:
-        listener,
-    } =
-      supabase.auth.onAuthStateChange(
-        (
-          event,
-          nextSession
-        ) => {
-          if (
-            event ===
-            "PASSWORD_RECOVERY"
-          ) {
-            setRecoveryMode(true);
-            setMode("signin");
-            setMessage(
-              "Create a new password for your account."
-            );
-            return;
-          }
-
-          if (
-            nextSession &&
-            (
-              event ===
-                "SIGNED_IN" ||
-              event ===
-                "INITIAL_SESSION"
-            ) &&
-            !recoveryMode
-          ) {
-            onSignedIn(
-              nextSession
-            );
-          }
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, nextSession) => {
+        if (event === "PASSWORD_RECOVERY") {
+          setRecoveryMode(true);
+          setMode("signin");
+          setMessage("Create a new password for your account.");
+          return;
         }
-      );
+        if (
+          nextSession &&
+          (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
+          !recoveryMode
+        ) {
+          onSignedIn(nextSession);
+        }
+      }
+    );
+    return () => listener.subscription.unsubscribe();
+  }, [onSignedIn, recoveryMode]);
 
-    return () => {
-      listener
-        .subscription
-        .unsubscribe();
-    };
-  }, [
-    onSignedIn,
-    recoveryMode,
-  ]);
-
-  async function signIn(
-    event
-  ) {
+  async function signIn(event) {
     event.preventDefault();
-
-    const cleanEmail =
-      email.trim();
-
-    if (
-      !cleanEmail ||
-      !password
-    ) {
-      setMessage(
-        "Enter your work email and password."
-      );
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      setMessage("Enter your work email and password.");
       return;
     }
-
+    if (!isApprovedCompanyEmail(cleanEmail)) {
+      setMessage("Please use an approved company email address.");
+      return;
+    }
     setBusy(true);
     setMessage("");
-
-    const {
-      data,
-      error,
-    } =
-      await supabase.auth.signInWithPassword(
-        {
-          email:
-            cleanEmail,
-          password,
-        }
-      );
-
-    if (error) {
-      setMessage(
-        error.message
-      );
-    } else if (data?.session) {
-      onSignedIn(
-        data.session
-      );
-    }
-
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
+    if (error) setMessage(error.message);
+    else if (data?.session) onSignedIn(data.session);
     setBusy(false);
   }
 
-  async function sendPasswordSetupEmail(
-    event
-  ) {
+  async function sendPasswordSetupEmail(event) {
     event.preventDefault();
-
-    const cleanEmail =
-      email.trim();
-
+    const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
-      setMessage(
-        "Enter your work email first."
-      );
+      setMessage("Enter your work email first.");
       return;
     }
-
+    if (!isApprovedCompanyEmail(cleanEmail)) {
+      setMessage("Please use an approved company email address.");
+      return;
+    }
     setBusy(true);
     setMessage("");
-
-    const {
-      error,
-    } =
-      await supabase.auth.resetPasswordForEmail(
-        cleanEmail,
-        {
-          redirectTo:
-            window.location.origin,
-        }
-      );
-
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: window.location.origin,
+    });
     if (error) {
-      setMessage(
-        error.message
-      );
+      setMessage(error.message);
     } else {
       setMessage(
         mode === "first"
@@ -759,79 +694,35 @@ function Login({
           : "Check your email for a link to reset your password."
       );
     }
-
     setBusy(false);
   }
 
-  async function updatePassword(
-    event
-  ) {
+  async function updatePassword(event) {
     event.preventDefault();
-
-    if (
-      newPassword.length <
-      8
-    ) {
-      setMessage(
-        "Your password must be at least 8 characters."
-      );
+    if (newPassword.length < 8) {
+      setMessage("Your password must be at least 8 characters.");
       return;
     }
-
-    if (
-      newPassword !==
-      confirmPassword
-    ) {
-      setMessage(
-        "The passwords do not match."
-      );
+    if (newPassword !== confirmPassword) {
+      setMessage("The passwords do not match.");
       return;
     }
-
     setBusy(true);
     setMessage("");
-
-    const {
-      data,
-      error,
-    } =
-      await supabase.auth.updateUser(
-        {
-          password:
-            newPassword,
-        }
-      );
-
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
-      setMessage(
-        error.message
-      );
+      setMessage(error.message);
     } else {
       setRecoveryMode(false);
       setNewPassword("");
       setConfirmPassword("");
       setPassword("");
-      setMessage(
-        "Password created successfully. Signing you in…"
-      );
-
+      setMessage("Password created successfully. Signing you in…");
       if (data?.user) {
-        const {
-          data:
-            sessionData,
-        } =
-          await supabase.auth.getSession();
-
-        if (
-          sessionData?.session
-        ) {
-          onSignedIn(
-            sessionData.session
-          );
-        }
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session) onSignedIn(sessionData.session);
       }
     }
-
     setBusy(false);
   }
 
@@ -839,259 +730,55 @@ function Login({
     return (
       <div className="login-page">
         <div className="login-card">
-          <div className="login-logo">
-            <span className="login-logo-mountain">
-              ▲
-            </span>
-            <span>CSG</span>
-          </div>
-
-          <h1>
-            Create your password
-          </h1>
-
-          <p>
-            Set a password for your Marketing Ticket Hub account.
-          </p>
-
-          <form
-            onSubmit={
-              updatePassword
-            }
-          >
-            <label>
-              New password
-            </label>
-
-            <input
-              type="password"
-              placeholder="At least 8 characters"
-              value={
-                newPassword
-              }
-              onChange={(
-                event
-              ) =>
-                setNewPassword(
-                  event.target.value
-                )
-              }
-              autoComplete="new-password"
-            />
-
-            <label>
-              Confirm password
-            </label>
-
-            <input
-              type="password"
-              placeholder="Re-enter your password"
-              value={
-                confirmPassword
-              }
-              onChange={(
-                event
-              ) =>
-                setConfirmPassword(
-                  event.target.value
-                )
-              }
-              autoComplete="new-password"
-            />
-
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={
-                busy
-              }
-            >
-              {busy
-                ? "Saving…"
-                : "Create password"}
-            </button>
-
-            {message && (
-              <div className="login-message">
-                {message}
-              </div>
-            )}
+          <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+          <h1>Create your password</h1>
+          <p>Set a password for your Marketing Ticket Hub account.</p>
+          <form onSubmit={updatePassword}>
+            <label>New password</label>
+            <input type="password" placeholder="At least 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+            <label>Confirm password</label>
+            <input type="password" placeholder="Re-enter your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving…" : "Create password"}</button>
+            {message && <div className="login-message">{message}</div>}
           </form>
         </div>
       </div>
     );
   }
 
-  const passwordHelpMode =
-    mode === "first" ||
-    mode === "forgot";
-
+  const passwordHelpMode = mode === "first" || mode === "forgot";
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo">
-          <span className="login-logo-mountain">
-            ▲
-          </span>
-          <span>CSG</span>
-        </div>
-
-        <h1>
-          Marketing Ticket Hub
-        </h1>
-
-        <p>
-          One workspace for Qualicare,
-          Tutor Doctor and Code Wiz.
-        </p>
-
+        <div className="login-logo"><span className="login-logo-mountain">▲</span><span>CSG</span></div>
+        <h1>Marketing Ticket Hub</h1>
+        <p>One workspace for Qualicare, Tutor Doctor and Code Wiz.</p>
         {passwordHelpMode ? (
-          <form
-            onSubmit={
-              sendPasswordSetupEmail
-            }
-          >
-            <label>
-              Work email
-            </label>
-
-            <input
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(
-                event
-              ) =>
-                setEmail(
-                  event.target.value
-                )
-              }
-              autoComplete="email"
-              autoFocus
-            />
-
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={
-                busy
-              }
-            >
-              {busy
-                ? "Sending…"
-                : mode === "first"
-                  ? "Send password setup link"
-                  : "Send reset link"}
-            </button>
-
-            <button
-              type="button"
-              className="login-secondary-button"
-              onClick={() => {
-                setMode("signin");
-                setMessage("");
-              }}
-            >
-              Back to sign in
-            </button>
-
-            {message && (
-              <div className="login-message">
-                {message}
-              </div>
-            )}
+          <form onSubmit={sendPasswordSetupEmail}>
+            <label>Work email</label>
+            <input type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoFocus />
+            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Sending…" : mode === "first" ? "Send password setup link" : "Send reset link"}</button>
+            <button type="button" className="login-secondary-button" onClick={() => { setMode("signin"); setMessage(""); }}>Back to sign in</button>
+            {message && <div className="login-message">{message}</div>}
           </form>
         ) : (
-          <form
-            onSubmit={
-              signIn
-            }
-          >
-            <label>
-              Work email
-            </label>
-
-            <input
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(
-                event
-              ) =>
-                setEmail(
-                  event.target.value
-                )
-              }
-              autoComplete="email"
-            />
-
-            <label>
-              Password
-            </label>
-
-            <input
-              type="password"
-              placeholder="Your password"
-              value={password}
-              onChange={(
-                event
-              ) =>
-                setPassword(
-                  event.target.value
-                )
-              }
-              autoComplete="current-password"
-            />
-
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={
-                busy
-              }
-            >
-              {busy
-                ? "Signing in…"
-                : "Sign in"}
-            </button>
-
+          <form onSubmit={signIn}>
+            <label>Work email</label>
+            <input type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <label>Password</label>
+            <input type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
             <div className="login-links">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("first");
-                  setMessage("");
-                }}
-              >
-                First time? Create your password
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("forgot");
-                  setMessage("");
-                }}
-              >
-                Forgot password?
-              </button>
+              <button type="button" onClick={() => { setMode("first"); setMessage(""); }}>First time? Create your password</button>
+              <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }}>Forgot password?</button>
             </div>
-
-            {message && (
-              <div className="login-message">
-                {message}
-              </div>
-            )}
+            {message && <div className="login-message">{message}</div>}
           </form>
         )}
       </div>
     </div>
   );
 }
-
-// ======================================================
-// APP
-// ======================================================
 
 function App() {
   const editorRef =
@@ -1226,7 +913,11 @@ function App() {
   ] =
     useState("all");
 
-  const [dashboardView, setDashboardView] = useState(false);
+  const [
+    departmentFilter,
+    setDepartmentFilter,
+  ] =
+    useState("all");
 
   const [
     search,
@@ -1483,6 +1174,68 @@ function App() {
     useState("");
 
   // ====================================================
+  // NOTIFICATIONS
+  // ====================================================
+
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState([]);
+
+  const [
+    showNotifications,
+    setShowNotifications,
+  ] =
+    useState(false);
+
+  const [
+    loadingNotifications,
+    setLoadingNotifications,
+  ] =
+    useState(false);
+
+  // ====================================================
+  // REMINDERS
+  // ====================================================
+
+  const [
+    reminders,
+    setReminders,
+  ] =
+    useState([]);
+
+  const [
+    showReminders,
+    setShowReminders,
+  ] =
+    useState(false);
+
+  const [
+    reminderDate,
+    setReminderDate,
+  ] =
+    useState("");
+
+  const [
+    reminderNote,
+    setReminderNote,
+  ] =
+    useState("");
+
+  const [
+    reminderBusy,
+    setReminderBusy,
+  ] =
+    useState(false);
+
+  const [
+    reminderNotice,
+    setReminderNotice,
+  ] =
+    useState("");
+
+  // ====================================================
   // AUTH
   // ====================================================
 
@@ -1529,6 +1282,336 @@ function App() {
         .unsubscribe();
     };
   }, []);
+
+  // ====================================================
+  // NOTIFICATIONS
+  // ====================================================
+
+  const loadNotifications =
+    useCallback(
+      async () => {
+        if (!session) {
+          setNotifications([]);
+          return;
+        }
+
+        setLoadingNotifications(
+          true
+        );
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              "ticket_notifications"
+            )
+            .select("*")
+            .order(
+              "created_at",
+              {
+                ascending:
+                  false,
+              }
+            )
+            .limit(50);
+
+        if (error) {
+          console.error(
+            "Notification load error:",
+            error
+          );
+          setNotifications([]);
+        } else {
+          setNotifications(
+            data || []
+          );
+        }
+
+        setLoadingNotifications(
+          false
+        );
+      },
+      [
+        session,
+      ]
+    );
+
+  useEffect(() => {
+    if (session) {
+      loadNotifications();
+    } else {
+      setNotifications([]);
+    }
+  }, [
+    session,
+    loadNotifications,
+  ]);
+
+  const unreadNotificationCount =
+    useMemo(
+      () =>
+        notifications.filter(
+          (
+            notification
+          ) =>
+            !notification.is_read
+        ).length,
+      [
+        notifications,
+      ]
+    );
+
+  async function openNotification(
+    notification
+  ) {
+    if (!notification) {
+      return;
+    }
+
+    if (
+      !notification.is_read
+    ) {
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            "ticket_notifications"
+          )
+          .update({
+            is_read:
+              true,
+
+            read_at:
+              new Date()
+                .toISOString(),
+          })
+          .eq(
+            "id",
+            notification.id
+          );
+
+      if (!error) {
+        setNotifications(
+          (
+            current
+          ) =>
+            current.map(
+              (
+                item
+              ) =>
+                item.id ===
+                notification.id
+                  ? {
+                      ...item,
+                      is_read:
+                        true,
+                      read_at:
+                        new Date()
+                          .toISOString(),
+                    }
+                  : item
+            )
+        );
+      }
+    }
+
+    setFilter(
+      "all"
+    );
+
+    setBrandFilter(
+      notification.source ||
+      "all"
+    );
+
+    setDepartmentFilter(
+      "all"
+    );
+
+    setSearch(
+      ""
+    );
+
+    setSelectedKey(
+      notification.ticket_key
+    );
+
+    setShowNotifications(
+      false
+    );
+  }
+
+  async function markAllNotificationsRead() {
+    const unreadIds =
+      notifications
+        .filter(
+          (
+            notification
+          ) =>
+            !notification.is_read
+        )
+        .map(
+          (
+            notification
+          ) =>
+            notification.id
+        );
+
+    if (
+      unreadIds.length ===
+      0
+    ) {
+      return;
+    }
+
+    const now =
+      new Date()
+        .toISOString();
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          "ticket_notifications"
+        )
+        .update({
+          is_read:
+            true,
+
+          read_at:
+            now,
+        })
+        .in(
+          "id",
+          unreadIds
+        );
+
+    if (!error) {
+      setNotifications(
+        (
+          current
+        ) =>
+          current.map(
+            (
+              item
+            ) => ({
+              ...item,
+              is_read:
+                true,
+              read_at:
+                item.read_at ||
+                now,
+            })
+          )
+      );
+    }
+  }
+
+  // ====================================================
+  // REMINDERS
+  // ====================================================
+
+  const loadReminders =
+    useCallback(
+      async () => {
+        if (!session?.user?.email) {
+          setReminders([]);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("ticket_reminders")
+          .select("*")
+          .eq("user_email", session.user.email.toLowerCase())
+          .is("completed_at", null)
+          .order("reminder_at", { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error("Reminder load error:", error);
+          setReminders([]);
+        } else {
+          setReminders(data || []);
+        }
+      },
+      [session]
+    );
+
+  useEffect(() => {
+    if (session) loadReminders();
+    else setReminders([]);
+  }, [session, loadReminders]);
+
+  async function createReminder() {
+    if (!selected || !session?.user?.email) return;
+    if (!reminderDate) {
+      setReminderNotice("Choose a date and time for the reminder.");
+      return;
+    }
+
+    setReminderBusy(true);
+    setReminderNotice("");
+
+    const reminderAt = new Date(reminderDate).toISOString();
+    const { error } = await supabase
+      .from("ticket_reminders")
+      .insert({
+        user_email: session.user.email.toLowerCase(),
+        ticket_key: selected.ticket_key,
+        source: selected.source,
+        ticket_number: selected.ticket_number,
+        subject: selected.subject,
+        reminder_at: reminderAt,
+        note: reminderNote.trim() || null,
+      });
+
+    if (error) {
+      console.error("Reminder create error:", error);
+      setReminderNotice(error.message);
+    } else {
+      setReminderNotice("Reminder saved.");
+      setReminderDate("");
+      setReminderNote("");
+      await loadReminders();
+    }
+
+    setReminderBusy(false);
+  }
+
+  async function completeReminder(reminder) {
+    if (!reminder?.id) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("ticket_reminders")
+      .update({ completed_at: now })
+      .eq("id", reminder.id)
+      .eq("user_email", session.user.email.toLowerCase());
+
+    if (!error) {
+      setReminders((current) => current.filter((item) => item.id !== reminder.id));
+    }
+  }
+
+  function openReminderForTicket(ticket = selected) {
+    if (!ticket) return;
+    setSelectedKey(ticket.ticket_key);
+    setShowReminders(true);
+    setReminderNotice("");
+    setReminderNote("");
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    tomorrow.setHours(9, 0, 0, 0);
+    const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000);
+    setReminderDate(local.toISOString().slice(0, 16));
+  }
+
+  const activeReminderCount = useMemo(
+    () => reminders.length,
+    [reminders]
+  );
 
   // ====================================================
   // TICKETS
@@ -1891,10 +1974,6 @@ function App() {
               "source",
               source
             )
-            .eq(
-              "active",
-              true
-            )
             .order(
               "name",
               {
@@ -1912,7 +1991,10 @@ function App() {
           setAgents([]);
         } else {
           setAgents(
-            data || []
+            (data || []).filter(
+              (agent) =>
+                agent.active !== false
+            )
           );
         }
 
@@ -2184,6 +2266,18 @@ function App() {
             event: "*",
             schema: "public",
             table:
+              "ticket_notifications",
+          },
+          () => {
+            loadNotifications();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
               "ticket_tags",
           },
           (
@@ -2220,6 +2314,7 @@ function App() {
     loadThreads,
     loadComments,
     loadTags,
+    loadNotifications,
   ]);
 
   // ====================================================
@@ -3067,22 +3162,152 @@ function App() {
           .trim()
           .toLowerCase();
 
-      return agents
+      const zohoAgentOptions =
+        agents
+          .filter(
+            (
+              agent
+            ) =>
+              agent.zuid
+          )
+          .map(
+            (
+              agent
+            ) => ({
+              ...agent,
+
+              mention_type:
+                "zoho_agent",
+
+              mention_key:
+                `zoho:${agent.zoho_agent_id}`,
+            })
+          );
+
+      /*
+        Qualicare's active Zoho agents currently come back without ZUIDs.
+        They therefore cannot create native Zoho @mentions, but we still
+        expose them in the Ticket Hub mention picker and handle them as
+        Ticket Hub mentions.
+      */
+      const qualicareHubOptions =
+        selected?.source ===
+        "Qualicare"
+          ? agents
+              .filter(
+                (
+                  agent
+                ) =>
+                  !agent.zuid &&
+                  agent.active !==
+                    false &&
+                  String(
+                    agent.email ||
+                      ""
+                  ).trim()
+              )
+              .map(
+                (
+                  agent
+                ) => ({
+                  ...agent,
+
+                  mention_type:
+                    "ticket_hub_user",
+
+                  mention_key:
+                    `ticket-hub:${String(
+                      agent.email ||
+                        ""
+                    )
+                      .trim()
+                      .toLowerCase()}`,
+                })
+              )
+          : [];
+
+      const codeWizTeamOptions =
+        selected?.source ===
+        "Code Wiz"
+          ? CODEWIZ_TICKET_OWNERS.map(
+              (
+                person
+              ) => ({
+                ...person,
+
+                zoho_agent_id:
+                  null,
+
+                zuid:
+                  null,
+
+                mention_type:
+                  "ticket_hub_user",
+
+                mention_key:
+                  `ticket-hub:${person.email.toLowerCase()}`,
+              })
+            )
+          : [];
+
+      const zohoEmails =
+        new Set(
+          zohoAgentOptions
+            .map(
+              (
+                agent
+              ) =>
+                String(
+                  agent.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+            )
+            .filter(Boolean)
+        );
+
+      const combined =
+        [
+          ...codeWizTeamOptions.filter(
+            (
+              person
+            ) =>
+              !zohoEmails.has(
+                String(
+                  person.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+              )
+          ),
+          ...qualicareHubOptions.filter(
+            (
+              person
+            ) =>
+              !zohoEmails.has(
+                String(
+                  person.email ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+              )
+          ),
+          ...zohoAgentOptions,
+        ];
+
+      return combined
         .filter(
           (
-            agent
-          ) =>
-            agent.zuid
-        )
-        .filter(
-          (
-            agent
+            person
           ) => {
             if (!needle) {
               return true;
             }
 
-            return `${agent.name || ""} ${agent.email || ""}`
+            return `${person.name || ""} ${person.email || ""}`
               .toLowerCase()
               .includes(
                 needle
@@ -3091,11 +3316,12 @@ function App() {
         )
         .slice(
           0,
-          8
+          12
         );
     }, [
       agents,
       mentionQuery,
+      selected?.source,
       showMentionSuggestions,
     ]);
 
@@ -3127,6 +3353,24 @@ function App() {
     }
   }
 
+  function mentionIdentity(
+    mention
+  ) {
+    return (
+      mention?.mention_key ||
+      (
+        mention?.zoho_agent_id
+          ? `zoho:${mention.zoho_agent_id}`
+          : `ticket-hub:${String(
+              mention?.email ||
+                ""
+            )
+              .trim()
+              .toLowerCase()}`
+      )
+    );
+  }
+
   function selectMention(
     agent
   ) {
@@ -3145,7 +3389,7 @@ function App() {
     const display =
       agent.name ||
       agent.email ||
-      "Agent";
+      "Teammate";
 
     const before =
       commentText.slice(
@@ -3161,13 +3405,20 @@ function App() {
       (
         current
       ) => {
+        const identity =
+          mentionIdentity(
+            agent
+          );
+
         if (
           current.some(
             (
               item
             ) =>
-              item.zoho_agent_id ===
-              agent.zoho_agent_id
+              mentionIdentity(
+                item
+              ) ===
+              identity
           )
         ) {
           return current;
@@ -3176,17 +3427,27 @@ function App() {
         return [
           ...current,
           {
+            mention_type:
+              agent.mention_type ||
+              "zoho_agent",
+
+            mention_key:
+              identity,
+
             zoho_agent_id:
-              agent.zoho_agent_id,
+              agent.zoho_agent_id ||
+              null,
 
             name:
               display,
 
             email:
-              agent.email,
+              agent.email ||
+              null,
 
             zuid:
-              agent.zuid,
+              agent.zuid ||
+              null,
           },
         ];
       }
@@ -3261,13 +3522,24 @@ function App() {
         const visible =
           `@${mention.name}`;
 
+        const placeholder =
+          mention.mention_type ===
+          "ticket_hub_user"
+            ? `[[HUB_MENTION:${String(
+                mention.email ||
+                  ""
+              )
+                .trim()
+                .toLowerCase()}]]`
+            : `[[MENTION:${mention.zoho_agent_id}]]`;
+
         transformed =
           transformed
             .split(
               visible
             )
             .join(
-              `[[MENTION:${mention.zoho_agent_id}]]`
+              placeholder
             );
       }
 
@@ -3306,8 +3578,21 @@ function App() {
                     (
                       mention
                     ) => ({
+                      mention_type:
+                        mention.mention_type ||
+                        "zoho_agent",
+
                       zoho_agent_id:
-                        mention.zoho_agent_id,
+                        mention.zoho_agent_id ||
+                        null,
+
+                      name:
+                        mention.name ||
+                        null,
+
+                      email:
+                        mention.email ||
+                        null,
                     })
                   ),
 
@@ -3796,10 +4081,40 @@ function App() {
   // FILTERING
   // ====================================================
 
+  function isVisibleMarketingTicket(
+    ticket
+  ) {
+    /*
+      Code Wiz Support tickets remain synced in Supabase so a Marketing
+      ticket can still be reassigned to Support and Support agents can
+      continue to be used in the Department and @mention controls.
+
+      They are simply excluded from the Marketing Ticket Hub's ticket
+      lists, searches, My Work views, status views, and counts.
+    */
+    if (
+      ticket?.source ===
+        "Code Wiz" &&
+      String(
+        ticket?.department ||
+          ""
+      )
+        .trim()
+        .toLowerCase() ===
+        "support"
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
   const filteredTickets =
     useMemo(() => {
       let rows =
-        [...tickets];
+        tickets.filter(
+          isVisibleMarketingTicket
+        );
 
       if (
         brandFilter !==
@@ -3812,6 +4127,25 @@ function App() {
             ) =>
               ticket.source ===
               brandFilter
+          );
+      }
+
+      if (
+        brandFilter ===
+          "Tutor Doctor" &&
+        departmentFilter !==
+          "all"
+      ) {
+        rows =
+          rows.filter(
+            (
+              ticket
+            ) =>
+              String(
+                ticket.department ||
+                  ""
+              ).trim() ===
+              departmentFilter
           );
       }
 
@@ -3843,6 +4177,14 @@ function App() {
           );
       }
 
+      const currentUserEmail =
+        String(
+          session?.user?.email ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
+
       if (
         filter ===
         "inprogress"
@@ -3853,7 +4195,16 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-              "In Progress"
+                "In Progress" &&
+              String(
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
+                ""
+              )
+                .trim()
+                .toLowerCase() ===
+                currentUserEmail
           );
       }
 
@@ -3867,7 +4218,16 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-              "On Hold"
+                "On Hold" &&
+              String(
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
+                ""
+              )
+                .trim()
+                .toLowerCase() ===
+                currentUserEmail
           );
       }
 
@@ -3881,7 +4241,16 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-              "Waiting"
+                "Waiting" &&
+              String(
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
+                ""
+              )
+                .trim()
+                .toLowerCase() ===
+                currentUserEmail
           );
       }
 
@@ -3967,31 +4336,6 @@ function App() {
           );
       }
 
-      if (filter === "needs") {
-        rows = rows.filter((ticket) => ticket.status !== "Closed" && (isOverdue(ticket) || isTicketUnassigned(ticket) || String(ticket.priority || "").toLowerCase() === "high" || ticket.status === "Escalated"));
-      }
-
-      if (filter === "high") {
-        rows = rows.filter((ticket) => ticket.status !== "Closed" && String(ticket.priority || "").toLowerCase() === "high");
-      }
-
-      if (filter === "due") {
-        const now = new Date();
-        rows = rows.filter((ticket) => {
-          if (ticket.status === "Closed" || !ticket.due_date) return false;
-          const d = new Date(ticket.due_date);
-          return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-        });
-      }
-
-      if (filter === "aging") {
-        rows = rows.filter((ticket) => {
-          if (ticket.status === "Closed") return false;
-          const value = ticket.created_at_zoho || ticket.created_at;
-          return value && Date.now() - new Date(value).getTime() >= 3 * 86400000;
-        });
-      }
-
       if (
         search.trim()
       ) {
@@ -4017,6 +4361,7 @@ function App() {
                   ticket.codewiz_agent_email,
                   ticket.status,
                   ticket.source,
+                  ticket.department,
                   ticket.description,
                 ]
                   .filter(Boolean)
@@ -4036,6 +4381,7 @@ function App() {
       tickets,
       filter,
       brandFilter,
+      departmentFilter,
       search,
       session,
     ]);
@@ -4099,17 +4445,41 @@ function App() {
           ?.email
           ?.toLowerCase();
 
-      const countTickets =
+      const visibleTickets =
+        tickets.filter(
+          isVisibleMarketingTicket
+        );
+
+      let countTickets =
         brandFilter ===
         "all"
-          ? tickets
-          : tickets.filter(
+          ? visibleTickets
+          : visibleTickets.filter(
               (
                 ticket
               ) =>
                 ticket.source ===
                 brandFilter
             );
+
+      if (
+        brandFilter ===
+          "Tutor Doctor" &&
+        departmentFilter !==
+          "all"
+      ) {
+        countTickets =
+          countTickets.filter(
+            (
+              ticket
+            ) =>
+              String(
+                ticket.department ||
+                  ""
+              ).trim() ===
+              departmentFilter
+          );
+      }
 
       return {
         active:
@@ -4152,7 +4522,14 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-              "In Progress"
+                "In Progress" &&
+              String(
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
+                ""
+              ).toLowerCase() ===
+                userEmail
           ).length,
 
         onhold:
@@ -4161,7 +4538,14 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-              "On Hold"
+                "On Hold" &&
+              String(
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
+                ""
+              ).toLowerCase() ===
+                userEmail
           ).length,
 
         waiting:
@@ -4170,7 +4554,14 @@ function App() {
               ticket
             ) =>
               ticket.status ===
-              "Waiting"
+                "Waiting" &&
+              String(
+                getTicketOwnerEmail(
+                  ticket
+                ) ||
+                ""
+              ).toLowerCase() ===
+                userEmail
           ).length,
 
         escalated:
@@ -4212,45 +4603,8 @@ function App() {
       tickets,
       session,
       brandFilter,
+      departmentFilter,
     ]);
-
-  const dashboardMetrics = useMemo(() => {
-    const active = tickets.filter((t) => t.status !== "Closed");
-    const high = active.filter((t) => String(t.priority || "").toLowerCase() === "high");
-    const dueToday = active.filter((t) => {
-      if (!t.due_date) return false;
-      const d = new Date(t.due_date), now = new Date();
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-    });
-    const aging = active.filter((t) => {
-      const value = t.created_at_zoho || t.created_at;
-      return value && Date.now() - new Date(value).getTime() >= 3 * 86400000;
-    });
-    const needs = active.filter((t) => isOverdue(t) || isTicketUnassigned(t) || String(t.priority || "").toLowerCase() === "high" || t.status === "Escalated");
-    const brandRows = ["Qualicare", "Tutor Doctor", "Code Wiz"].map((source) => {
-      const rows = active.filter((t) => t.source === source);
-      return { source, active: rows.length, overdue: rows.filter(isOverdue).length, high: rows.filter((t) => String(t.priority || "").toLowerCase() === "high").length, unassigned: rows.filter(isTicketUnassigned).length };
-    });
-    const currentEmail = String(session?.user?.email || "").trim().toLowerCase();
-    const yourTickets = active.filter((t) => {
-      const ownerEmail = String(t.assignee_email || "").trim().toLowerCase();
-      return currentEmail && ownerEmail === currentEmail;
-    });
-    const score = (t) => (isOverdue(t) ? 4 : 0) + (String(t.priority || "").toLowerCase() === "high" ? 3 : 0) + (t.status === "Escalated" ? 2 : 0) + (isTicketUnassigned(t) ? 1 : 0);
-    const yourTicketRows = [...yourTickets].sort((a,b) => {
-      const aRisk = (isOverdue(a) ? 3 : 0) + (String(a.priority || "").toLowerCase() === "high" ? 2 : 0);
-      const bRisk = (isOverdue(b) ? 3 : 0) + (String(b.priority || "").toLowerCase() === "high" ? 2 : 0);
-      return bRisk - aRisk || new Date(b.updated_at_zoho || b.created_at_zoho || 0) - new Date(a.updated_at_zoho || a.created_at_zoho || 0);
-    });
-    return { active: active.length, needs: needs.length, overdue: active.filter(isOverdue).length, high: high.length, dueToday: dueToday.length, unassigned: active.filter(isTicketUnassigned).length, aging: aging.length, waiting: active.filter((t) => t.status === "Waiting").length, closed: tickets.filter((t) => t.status === "Closed").length, yourTickets: yourTickets.length, yourTicketRows, brandRows, needsRows: [...needs].sort((a,b) => score(b)-score(a)).slice(0,7) };
-  }, [tickets]);
-
-  function openDashboardQueue(nextFilter, nextBrand = "all") {
-    setDashboardView(false);
-    setBrandFilter(nextBrand);
-    setSearch("");
-    setFilter(nextFilter);
-  }
 
   async function signOut() {
     await supabase
@@ -4689,14 +5043,43 @@ function App() {
 
         <div className="sidebar-section">
 
-          <button className={`nav-item ${dashboardView ? "active" : ""}`} onClick={() => setDashboardView(true)}>
-            <span>Dashboard</span>
-            <span className="nav-count">⌂</span>
-          </button>
-
           <div className="sidebar-label">
             MY WORK
           </div>
+
+          <button
+            className={`nav-item ${
+              showNotifications
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              setShowNotifications(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+          >
+            <span>
+              Notifications
+            </span>
+
+            <span className="nav-count">
+              {
+                unreadNotificationCount
+              }
+            </span>
+          </button>
+
+          <button
+            className={`nav-item ${showReminders ? "active" : ""}`}
+            onClick={() => setShowReminders((current) => !current)}
+          >
+            <span>Reminders</span>
+            <span className="nav-count">{activeReminderCount}</span>
+          </button>
 
           {[
             [
@@ -4734,10 +5117,9 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() => {
-                  setDashboardView(false);
-                  setFilter(id);
-                }}
+                onClick={() =>
+                  setFilter(id)
+                }
               >
                 <span>
                   {label}
@@ -4765,17 +5147,17 @@ function App() {
             ],
             [
               "inprogress",
-              "In Progress",
+              "My In Progress",
               counts.inprogress,
             ],
             [
               "onhold",
-              "On Hold",
+              "My On Hold",
               counts.onhold,
             ],
             [
               "waiting",
-              "Waiting",
+              "My Waiting",
               counts.waiting,
             ],
             [
@@ -4808,10 +5190,9 @@ function App() {
                     ? "active"
                     : ""
                 }`}
-                onClick={() => {
-                  setDashboardView(false);
-                  setFilter(id);
-                }}
+                onClick={() =>
+                  setFilter(id)
+                }
               >
                 <span>
                   {label}
@@ -4866,10 +5247,18 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
-                  setDashboardView(false);
                   setBrandFilter(
                     value
                   );
+
+                  if (
+                    value !==
+                    "Tutor Doctor"
+                  ) {
+                    setDepartmentFilter(
+                      "all"
+                    );
+                  }
 
                   setSearch(
                     ""
@@ -4889,6 +5278,63 @@ function App() {
             )
           )}
         </div>
+
+        {brandFilter ===
+          "Tutor Doctor" && (
+          <div className="sidebar-section">
+
+            <div className="sidebar-label">
+              TUTOR DOCTOR DEPARTMENT
+            </div>
+
+            {[
+              [
+                "all",
+                "All Departments",
+              ],
+              ...TUTOR_DOCTOR_DEPARTMENTS.map(
+                (
+                  department
+                ) => [
+                  department.value,
+                  department.label,
+                ]
+              ),
+            ].map(
+              (
+                [
+                  value,
+                  label,
+                ]
+              ) => (
+                <button
+                  key={
+                    value
+                  }
+                  className={`nav-item ${
+                    departmentFilter ===
+                    value
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setDepartmentFilter(
+                      value
+                    );
+
+                    setSearch(
+                      ""
+                    );
+                  }}
+                >
+                  <span>
+                    {label}
+                  </span>
+                </button>
+              )
+            )}
+          </div>
+        )}
 
         <div className="sidebar-footer">
 
@@ -4921,29 +5367,386 @@ function App() {
         </div>
       </aside>
 
-      {dashboardView && (
-        <main style={{ gridColumn: "2 / -1", overflow: "auto", background: "#f7f8fa", padding: "30px 34px 44px" }}>
-          <div style={{ maxWidth: 1480, margin: "0 auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 26 }}>
-              <div><div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "#7a8290" }}>Marketing Operations</div><h1 style={{ margin: "7px 0 0", fontSize: 30 }}>Command Center</h1><p style={{ margin: "7px 0 0", color: "#737b88" }}>A live overview of the queues that need attention across all three brands.</p></div>
-              <button onClick={() => setDashboardView(false)} style={{ background: "#fff", border: "1px solid #dfe3e8", borderRadius: 10, padding: "10px 15px", fontWeight: 700, cursor: "pointer" }}>Open ticket workspace →</button>
+      {showReminders && (
+        <div
+          style={{
+            position: "fixed",
+            left: "248px",
+            top: "16px",
+            width: "390px",
+            maxHeight: "calc(100vh - 32px)",
+            overflowY: "auto",
+            background: "#ffffff",
+            border: "1px solid #e5e7eb",
+            borderRadius: "14px",
+            boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+            zIndex: 1001,
+          }}
+        >
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px",borderBottom:"1px solid #e5e7eb"}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:"16px"}}>Reminders</div>
+              <div style={{fontSize:"12px",color:"#6b7280",marginTop:"2px"}}>{activeReminderCount} active</div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 18 }}>
-              {[['Active',dashboardMetrics.active,'all','#17191d'],['Needs attention',dashboardMetrics.needs,'needs','#b42318'],['Overdue',dashboardMetrics.overdue,'overdue','#b42318'],['High priority',dashboardMetrics.high,'high','#9a6700'],['Due today',dashboardMetrics.dueToday,'due','#175cd3'],['Unassigned',dashboardMetrics.unassigned,'unassigned','#6941c6']].map(([label,value,action,accent]) => <button key={label} onClick={() => openDashboardQueue(action)} style={{ textAlign:'left', background:'#fff', border:'1px solid #e4e7ec', borderRadius:14, padding:'15px 16px', cursor:'pointer' }}><div style={{fontSize:12,color:'#737b88',fontWeight:700}}>{label}</div><div style={{fontSize:28,fontWeight:800,color:accent,marginTop:7}}>{value}</div></button>)}
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1.2fr .8fr', gap:18 }}>
-              <section style={{background:'#fff',border:'1px solid #e4e7ec',borderRadius:16,overflow:'hidden'}}><div style={{padding:'18px 20px',borderBottom:'1px solid #eef0f3'}}><h2 style={{margin:0,fontSize:16}}>Needs attention</h2><p style={{margin:'5px 0 0',fontSize:12,color:'#89919d'}}>The highest-value work first.</p></div>{dashboardMetrics.needsRows.length ? dashboardMetrics.needsRows.map(t => <button key={t.ticket_key} onClick={() => {setDashboardView(false);setBrandFilter('all');setFilter('all');setSearch(String(t.ticket_number || t.subject || ''));}} style={{width:'100%',textAlign:'left',border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'14px 20px',cursor:'pointer',display:'grid',gridTemplateColumns:'112px minmax(0,1fr) auto',gap:12,alignItems:'center'}}><BrandBadge source={t.source}/><div><div style={{fontWeight:750,fontSize:13}}>#{t.ticket_number} · {t.subject || 'Untitled ticket'}</div><div style={{marginTop:4,color:'#7a8290',fontSize:12}}>{t.contact_name || t.contact_email || 'Unknown requester'} · {getTicketOwnerName(t) || 'Unassigned'}</div></div><div style={{fontSize:11,fontWeight:800,color:isOverdue(t)?'#b42318':'#7a8290'}}>{isOverdue(t)?'OVERDUE':t.status}</div></button>) : <div style={{padding:28,color:'#7a8290'}}>Nothing urgent right now.</div>}</section>
-              <section style={{background:'#fff',border:'1px solid #e4e7ec',borderRadius:16,overflow:'hidden'}}><div style={{padding:'18px 20px',borderBottom:'1px solid #eef0f3'}}><h2 style={{margin:0,fontSize:16}}>Workload by brand</h2><p style={{margin:'5px 0 0',fontSize:12,color:'#89919d'}}>Active tickets and risk indicators.</p></div>{dashboardMetrics.brandRows.map(r => { const meta={Qualicare:['#198754','Q'],'Tutor Doctor':['#2563eb','TD'],'Code Wiz':['#f97316','CW']}[r.source]; return <button key={r.source} onClick={() => openDashboardQueue('all',r.source)} style={{width:'100%',textAlign:'left',border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'17px 20px',cursor:'pointer'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{display:'flex',alignItems:'center',gap:10,fontWeight:750}}><span style={{width:31,height:31,borderRadius:9,display:'inline-flex',alignItems:'center',justifyContent:'center',background:meta[0],color:'#fff',fontSize:11,fontWeight:900}}>{meta[1]}</span>{r.source}</span><strong>{r.active}</strong></div><div style={{display:'flex',gap:15,marginTop:9,fontSize:11,color:'#7a8290'}}><span>{r.overdue} overdue</span><span>{r.high} high</span><span>{r.unassigned} unassigned</span></div></button>})}</section>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18,marginTop:18}}>{[['Aging 3+ days',dashboardMetrics.aging,'aging','Older active tickets'],['Waiting',dashboardMetrics.waiting,'waiting','Tickets waiting for the next step'],['Closed',dashboardMetrics.closed,'closed','Kept out of all operational queues']].map(([label,value,action,desc]) => <button key={label} onClick={() => openDashboardQueue(action)} style={{textAlign:'left',background:'#fff',border:'1px solid #e4e7ec',borderRadius:14,padding:18,cursor:'pointer'}}><div style={{fontSize:12,fontWeight:700,color:'#737b88'}}>{label}</div><div style={{fontSize:27,fontWeight:800,marginTop:7}}>{value}</div><div style={{fontSize:12,color:'#89919d',marginTop:5}}>{desc}</div></button>)}</div>
-            <section style={{marginTop:18,background:'#fff',border:'1px solid #e4e7ec',borderRadius:16,overflow:'hidden'}}><div style={{padding:'18px 20px',borderBottom:'1px solid #eef0f3',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><h2 style={{margin:0,fontSize:16}}>Your tickets</h2><p style={{margin:'5px 0 0',fontSize:12,color:'#89919d'}}>Active tickets currently assigned to you.</p></div><button onClick={() => openDashboardQueue('mine')} style={{border:'1px solid #dfe3e8',background:'#fff',borderRadius:9,padding:'7px 11px',fontSize:12,fontWeight:750,cursor:'pointer'}}>View all · {dashboardMetrics.yourTickets}</button></div>{dashboardMetrics.yourTicketRows.length ? dashboardMetrics.yourTicketRows.slice(0,8).map(t => <button key={t.ticket_key} onClick={() => {setDashboardView(false);setBrandFilter('all');setFilter('mine');setSearch(String(t.ticket_number || t.subject || ''));}} style={{width:'100%',textAlign:'left',border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'13px 20px',cursor:'pointer',display:'grid',gridTemplateColumns:'112px minmax(0,1fr) auto',gap:12,alignItems:'center'}}><BrandBadge source={t.source}/><div><div style={{fontWeight:750,fontSize:13}}>#{t.ticket_number} · {t.subject || 'Untitled ticket'}</div><div style={{marginTop:4,color:'#7a8290',fontSize:12}}>{t.contact_name || t.contact_email || 'Unknown requester'} · {t.status || 'Open'}</div></div><div style={{fontSize:11,fontWeight:800,color:isOverdue(t)?'#b42318':String(t.priority || '').toLowerCase()==='high'?'#9a6700':'#7a8290'}}>{isOverdue(t)?'OVERDUE':String(t.priority || '').toLowerCase()==='high'?'HIGH':t.status}</div></button>) : <div style={{padding:28,color:'#7a8290'}}>You have no active tickets assigned to you.</div>}</section>
+            <button type="button" onClick={() => setShowReminders(false)} style={{border:0,background:"transparent",fontSize:"20px",cursor:"pointer",color:"#64748b"}}>×</button>
           </div>
-        </main>
+
+          {selected && (
+            <div style={{padding:"14px 16px",borderBottom:"1px solid #e5e7eb",background:"#f8fafc"}}>
+              <div style={{fontSize:"11px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".04em"}}>Set reminder for</div>
+              <div style={{fontSize:"13px",fontWeight:650,color:"#172033",marginTop:"4px"}}>#{selected.ticket_number} · {selected.subject || "Untitled ticket"}</div>
+              <input type="datetime-local" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} style={{width:"100%",marginTop:"10px",padding:"9px",border:"1px solid #dbe3ec",borderRadius:"7px",boxSizing:"border-box"}} />
+              <input type="text" placeholder="Optional note" value={reminderNote} onChange={(e) => setReminderNote(e.target.value)} style={{width:"100%",marginTop:"8px",padding:"9px",border:"1px solid #dbe3ec",borderRadius:"7px",boxSizing:"border-box"}} />
+              <button type="button" onClick={createReminder} disabled={reminderBusy} className="primary-button" style={{marginTop:"8px",width:"100%"}}>{reminderBusy ? "Saving…" : "Set reminder"}</button>
+              {reminderNotice && <div style={{fontSize:"12px",color:"#475569",marginTop:"8px"}}>{reminderNotice}</div>}
+            </div>
+          )}
+
+          {reminders.length === 0 ? (
+            <div style={{padding:"24px 18px",color:"#64748b",fontSize:"13px"}}>No active reminders.</div>
+          ) : (
+            reminders.map((reminder) => (
+              <div key={reminder.id} style={{padding:"13px 16px",borderBottom:"1px solid #f1f5f9"}}>
+                <button type="button" onClick={() => {setSelectedKey(reminder.ticket_key);setShowReminders(false);}} style={{display:"block",width:"100%",textAlign:"left",border:0,background:"transparent",padding:0,cursor:"pointer"}}>
+                  <div style={{fontSize:"11px",fontWeight:700,color:"#64748b"}}>{reminder.source || "Ticket"} {reminder.ticket_number ? `#${reminder.ticket_number}` : ""}</div>
+                  <div style={{fontSize:"13px",fontWeight:650,color:"#172033",marginTop:"4px"}}>{reminder.subject || "Untitled ticket"}</div>
+                  <div style={{fontSize:"12px",color:"#2563eb",marginTop:"5px"}}>{reminder.reminder_at ? new Date(reminder.reminder_at).toLocaleString() : ""}</div>
+                  {reminder.note && <div style={{fontSize:"12px",color:"#64748b",marginTop:"4px"}}>{reminder.note}</div>}
+                </button>
+                <button type="button" onClick={() => completeReminder(reminder)} style={{marginTop:"7px",border:0,background:"transparent",padding:0,color:"#64748b",fontSize:"11px",fontWeight:650,cursor:"pointer"}}>✓ Mark complete</button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {showNotifications && (
+        <div
+          style={{
+            position:
+              "fixed",
+            left:
+              "248px",
+            top:
+              "16px",
+            width:
+              "380px",
+            maxHeight:
+              "calc(100vh - 32px)",
+            overflowY:
+              "auto",
+            background:
+              "#ffffff",
+            border:
+              "1px solid #e5e7eb",
+            borderRadius:
+              "14px",
+            boxShadow:
+              "0 18px 45px rgba(15, 23, 42, 0.18)",
+            zIndex:
+              1000,
+          }}
+        >
+          <div
+            style={{
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "space-between",
+              gap:
+                "12px",
+              padding:
+                "16px",
+              borderBottom:
+                "1px solid #e5e7eb",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontWeight:
+                    700,
+                  fontSize:
+                    "16px",
+                }}
+              >
+                Notifications
+              </div>
+
+              <div
+                style={{
+                  fontSize:
+                    "12px",
+                  color:
+                    "#6b7280",
+                  marginTop:
+                    "2px",
+                }}
+              >
+                {
+                  unreadNotificationCount
+                } unread
+              </div>
+            </div>
+
+            <div
+              style={{
+                display:
+                  "flex",
+                gap:
+                  "8px",
+              }}
+            >
+              {unreadNotificationCount >
+                0 && (
+                <button
+                  type="button"
+                  onClick={
+                    markAllNotificationsRead
+                  }
+                  style={{
+                    border:
+                      "0",
+                    background:
+                      "transparent",
+                    fontSize:
+                      "12px",
+                    cursor:
+                      "pointer",
+                    color:
+                      "#475569",
+                  }}
+                >
+                  Mark all read
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowNotifications(
+                    false
+                  )
+                }
+                style={{
+                  border:
+                    "0",
+                  background:
+                    "transparent",
+                  fontSize:
+                    "20px",
+                  lineHeight:
+                    1,
+                  cursor:
+                    "pointer",
+                  color:
+                    "#64748b",
+                }}
+                aria-label="Close notifications"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {loadingNotifications ? (
+            <div
+              style={{
+                padding:
+                  "20px",
+                color:
+                  "#64748b",
+                fontSize:
+                  "13px",
+              }}
+            >
+              Loading notifications…
+            </div>
+          ) : notifications.length ===
+            0 ? (
+            <div
+              style={{
+                padding:
+                  "24px 18px",
+                color:
+                  "#64748b",
+                fontSize:
+                  "13px",
+              }}
+            >
+              No notifications yet.
+            </div>
+          ) : (
+            notifications.map(
+              (
+                notification
+              ) => (
+                <button
+                  key={
+                    notification.id
+                  }
+                  type="button"
+                  onClick={() =>
+                    openNotification(
+                      notification
+                    )
+                  }
+                  style={{
+                    display:
+                      "block",
+                    width:
+                      "100%",
+                    textAlign:
+                      "left",
+                    border:
+                      "0",
+                    borderBottom:
+                      "1px solid #f1f5f9",
+                    background:
+                      notification.is_read
+                        ? "#ffffff"
+                        : "#f8fafc",
+                    padding:
+                      "14px 16px",
+                    cursor:
+                      "pointer",
+                  }}
+                >
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "space-between",
+                      gap:
+                        "10px",
+                    }}
+                  >
+                    <strong
+                      style={{
+                        fontSize:
+                          "13px",
+                        color:
+                          "#0f172a",
+                      }}
+                    >
+                      {notification.source}
+                      {notification.ticket_number
+                        ? ` #${notification.ticket_number}`
+                        : ""}
+                    </strong>
+
+                    {!notification.is_read && (
+                      <span
+                        style={{
+                          width:
+                            "8px",
+                          height:
+                            "8px",
+                          borderRadius:
+                            "999px",
+                          background:
+                            "#2563eb",
+                          flex:
+                            "0 0 auto",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize:
+                        "13px",
+                      fontWeight:
+                        600,
+                      color:
+                        "#334155",
+                      marginTop:
+                        "6px",
+                    }}
+                  >
+                    {
+                      notification.subject ||
+                      "Ticket mention"
+                    }
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize:
+                        "12px",
+                      color:
+                        "#475569",
+                      marginTop:
+                        "6px",
+                      lineHeight:
+                        1.45,
+                    }}
+                  >
+                    {notification.actor_name ||
+                      notification.actor_email ||
+                      "A teammate"}{" "}
+                    mentioned you
+                  </div>
+
+                  {notification.comment_text && (
+                    <div
+                      style={{
+                        fontSize:
+                          "12px",
+                        color:
+                          "#64748b",
+                        marginTop:
+                          "5px",
+                        lineHeight:
+                          1.45,
+                        display:
+                          "-webkit-box",
+                        WebkitLineClamp:
+                          2,
+                        WebkitBoxOrient:
+                          "vertical",
+                        overflow:
+                          "hidden",
+                      }}
+                    >
+                      {
+                        notification.comment_text
+                      }
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      fontSize:
+                        "11px",
+                      color:
+                        "#94a3b8",
+                      marginTop:
+                        "8px",
+                    }}
+                  >
+                    {notification.created_at
+                      ? new Date(
+                          notification.created_at
+                        ).toLocaleString()
+                      : ""}
+                  </div>
+                </button>
+              )
+            )
+          )}
+        </div>
       )}
 
       {/* TICKETS */}
 
-      <section className="ticket-column" style={{ display: dashboardView ? "none" : undefined }}>
+      <section className="ticket-column">
 
         <div className="ticket-column-header">
 
@@ -4952,7 +5755,21 @@ function App() {
               {brandFilter ===
               "all"
                 ? "Tickets"
-                : brandFilter}
+                : brandFilter ===
+                    "Tutor Doctor" &&
+                  departmentFilter !==
+                    "all"
+                  ? `Tutor Doctor · ${
+                      TUTOR_DOCTOR_DEPARTMENTS.find(
+                        (
+                          department
+                        ) =>
+                          department.value ===
+                          departmentFilter
+                      )?.label ||
+                      departmentFilter
+                    }`
+                  : brandFilter}
             </h1>
 
             <p>
@@ -5086,7 +5903,6 @@ function App() {
       {/* WORKSPACE */}
 
       <main
-        style={{ display: dashboardView ? "none" : undefined }}
         className={`conversation-column ${
           selected
             ? brandClass(
@@ -5166,8 +5982,10 @@ function App() {
                 </div>
               </div>
 
-              {selected.ticket_url && (
-                <a
+              <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                <button type="button" onClick={() => openReminderForTicket(selected)} style={{border:"1px solid #dbe3ec",background:"#fff",color:"#334155",borderRadius:"7px",padding:"8px 10px",fontSize:"11px",fontWeight:650,cursor:"pointer"}}>⏰ Remind me</button>
+                {selected.ticket_url && (
+                  <a
                   className="zoho-link"
                   href={
                     selected.ticket_url
@@ -5179,8 +5997,9 @@ function App() {
                   <span>
                     ↗
                   </span>
-                </a>
-              )}
+                  </a>
+                )}
+              </div>
             </header>
 
             {/* REPLY COMPOSER */}
@@ -5995,7 +6814,7 @@ function App() {
                     value={
                       commentText
                     }
-                    placeholder="Add a comment… Type @ to mention an agent."
+                    placeholder="Add a comment… Type @ to mention an agent or teammate."
                     onChange={(
                       event
                     ) =>
@@ -6019,7 +6838,9 @@ function App() {
                             <button
                               type="button"
                               key={
-                                agent.zoho_agent_id
+                                mentionIdentity(
+                                  agent
+                                )
                               }
                               onClick={() =>
                                 selectMention(
@@ -6051,6 +6872,10 @@ function App() {
                                     {
                                       agent.email
                                     }
+                                    {agent.mention_type ===
+                                      "ticket_hub_user"
+                                      ? " · Ticket Hub teammate"
+                                      : ""}
                                   </small>
                                 )}
                               </span>
@@ -6071,7 +6896,9 @@ function App() {
                       ) => (
                         <span
                           key={
-                            mention.zoho_agent_id
+                            mentionIdentity(
+                              mention
+                            )
                           }
                         >
                           @
@@ -6090,8 +6917,12 @@ function App() {
                                     (
                                       item
                                     ) =>
-                                      item.zoho_agent_id !==
-                                      mention.zoho_agent_id
+                                      mentionIdentity(
+                                        item
+                                      ) !==
+                                      mentionIdentity(
+                                        mention
+                                      )
                                   )
                               )
                             }
@@ -6367,7 +7198,7 @@ function App() {
 
       {/* DETAILS */}
 
-      <aside className="details-column" style={{ display: dashboardView ? "none" : undefined }}>
+      <aside className="details-column">
 
         {!selected ? (
           <div className="details-empty">
@@ -6810,6 +7641,19 @@ function App() {
                                 overflowY: "auto",
                               }}
                             >
+                              <div className="tag-suggestions-header">
+                                <span>Tags</span>
+                                <button
+                                  type="button"
+                                  className="tag-suggestions-close"
+                                  onClick={() =>
+                                    setShowTagSuggestions(false)
+                                  }
+                                  aria-label="Close tag list"
+                                >
+                                  ×
+                                </button>
+                              </div>
 
                               {!tagInput.trim() &&
                                 suggestedTags.length > 0 && (
