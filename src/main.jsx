@@ -797,7 +797,70 @@ function Login({
   );
 }
 
+const HUB_CLOSED = t => /^(closed|resolved)$/i.test(t.status || "");
+const hubDate = v => v && Number.isFinite(new Date(v).getTime()) ? new Date(v) : null;
+const hubSameDay = (a,b) => hubDate(a)?.toDateString() === hubDate(b)?.toDateString();
+function hubLocalInput(v) { const d=hubDate(v); return d ? new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16) : ""; }
+function hubUrgency(t, now=new Date()) {
+  if(HUB_CLOSED(t)) return "Completed";
+  const due=hubDate(t.due_date); if(!due) return "No deadline";
+  const mins=Math.ceil(Math.abs(due-now)/60000), span=mins>=1440 ? `${Math.floor(mins/1440)}d ${Math.floor(mins%1440/60)}h` : `${Math.floor(mins/60)}h ${mins%60}m`;
+  return due<now ? `Overdue by ${span}` : `Due ${hubSameDay(due,now) ? "today" : hubSameDay(due,new Date(+now+86400000)) ? "tomorrow" : `in ${span}`}`;
+}
+function hubAttention(t,now=new Date()) { const updated=hubDate(t.updated_at_zoho || t.created_at_zoho); return !HUB_CLOSED(t) && (hubDate(t.due_date)<now && !!hubDate(t.due_date) || String(t.priority).toLowerCase()==="high" && updated && now-updated>172800000); }
+function HubOperations({page,tickets,session,filters,onView,onOpen,onDue}) {
+  const [views,setViews]=useState([]), [notice,setNotice]=useState(""), [busy,setBusy]=useState(false);
+  const [name,setName]=useState(""), [shared,setShared]=useState(false), [brand,setBrand]=useState("all"), [owner,setOwner]=useState("all");
+  const [date,setDate]=useState(hubLocalInput(new Date()).slice(0,10)), [mode,setMode]=useState("month"), [metric,setMetric]=useState(null);
+  const [now,setNow]=useState(new Date());
+  useEffect(()=>{const id=setInterval(()=>setNow(new Date()),60000);return()=>clearInterval(id);},[]);
+  useEffect(()=>{let live=true; setNotice(""); supabase.from("hub_saved_views").select("*").order("name").then(({data,error})=>{if(live){setViews(data||[]);if(error)setNotice(`Saved views unavailable: ${error.message}. Run the supplied migration.`);}});return()=>{live=false;};},[session?.user?.id]);
+  const people=[...new Map(tickets.filter(t=>getTicketOwnerEmail(t)).map(t=>[getTicketOwnerEmail(t).toLowerCase(),{email:getTicketOwnerEmail(t).toLowerCase(),name:getTicketOwnerName(t)}])).values()];
+  const scoped=tickets.filter(t=>(brand==="all" || t.source===brand) && (owner==="all" || String(getTicketOwnerEmail(t)).toLowerCase()===owner));
+  const active=scoped.filter(t=>!HUB_CLOSED(t));
+  const email=String(session?.user?.email||"").toLowerCase();
+  const weekStart=new Date(now);weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
+  const weekEnd=new Date(+weekStart+7*86400000);
+  async function saveView(e){e.preventDefault();if(busy || !name.trim())return;setBusy(true);const {data,error}=await supabase.from("hub_saved_views").insert({name:name.trim(),user_id:session.user.id,shared,filters}).select().single();if(error)setNotice(error.message);else{setViews(v=>[...v,data]);setName("");setNotice("View saved.");}setBusy(false);}
+  async function removeView(v){setBusy(true);const {error}=await supabase.from("hub_saved_views").delete().eq("id",v.id);if(error)setNotice(error.message);else setViews(rows=>rows.filter(r=>r.id!==v.id));setBusy(false);}
+  const list=(rows)=> rows.length ? rows.map(t=><button type="button" className="hub-ticket" key={t.ticket_key} onClick={()=>onOpen(t)}><BrandBadge source={t.source}/><span>#{t.ticket_number} · {t.subject || "Untitled"}<small>{getTicketOwnerName(t)||"Unassigned"}</small></span><span className={hubAttention(t,now)?"hub-danger":""}>{hubUrgency(t,now)}</span></button>):<p className="hub-muted">No tickets in this group.</p>;
+  const presets=[["My Open Tickets",{filter:"mine"}],["Unassigned",{filter:"unassigned"}],["Due Today",{filter:"duetoday"}],["Overdue",{filter:"overdue"}],["High Priority",{filter:"highpriority"}],["Waiting for Requester",{filter:"waiting"}],...["Tutor Doctor","Code Wiz","Qualicare"].map(b=>[b,{brandFilter:b}])];
+  const chosen=hubDate(`${date}T12:00:00`)||now;
+  let start=new Date(chosen),days=1;
+  if(mode==="month"){start=new Date(chosen.getFullYear(),chosen.getMonth(),1);start.setDate(start.getDate()-((start.getDay()+6)%7));days=42;}
+  if(mode==="week"){start.setDate(start.getDate()-((start.getDay()+6)%7));days=7;}
+  function move(delta){const next=new Date(chosen);if(mode==="month")next.setMonth(next.getMonth()+delta,1);else next.setDate(next.getDate()+delta*(mode==="week"?7:1));setDate(hubLocalInput(next).slice(0,10));}
+  return <section className="dashboard-view hub-operations"><div className="dashboard-header"><div><div className="dashboard-eyebrow">MARKETING OPERATIONS</div><h1>{page}</h1><p>Plan deadlines, balance work, and keep every request moving.</p></div></div>
+    {notice && <p role="status" className="hub-notice">{notice}</p>}
+    {page==="Saved Views" ? <><form className="hub-toolbar" onSubmit={saveView}><input aria-label="View name" maxLength={100} placeholder="Name this view" value={name} onChange={e=>setName(e.target.value)}/><label><input type="checkbox" checked={shared} onChange={e=>setShared(e.target.checked)}/> Share with team</label><button disabled={busy||!name.trim()}>Save current filters</button></form><p className="hub-muted">Saves current filters, search and display mode. Views are personal unless shared.</p><div className="hub-view-grid">{presets.map(([label,f])=><button key={label} onClick={()=>onView({filter:"all",brandFilter:"all",assigneeFilter:"all",departmentFilter:"all",search:"",ticketViewMode:"compact",...f})}>{label}<small>Built-in view</small></button>)}{views.map(v=><div className="hub-saved" key={v.id}><button onClick={()=>onView(v.filters)}>{v.name}<small>{v.shared?"Shared team view":"Personal view"}</small></button>{v.user_id===session.user.id && <button disabled={busy} aria-label={`Delete ${v.name}`} onClick={()=>removeView(v)}>×</button>}</div>)}</div></> : <>
+      <div className="hub-toolbar"><select aria-label="Brand" value={brand} onChange={e=>{setBrand(e.target.value);setMetric(null);}}><option value="all">All brands</option>{[...new Set(tickets.map(t=>t.source))].map(b=><option key={b}>{b}</option>)}</select><select aria-label="Owner" value={owner} onChange={e=>{setOwner(e.target.value);setMetric(null);}}><option value="all">All owners</option>{people.map(p=><option key={p.email} value={p.email}>{p.name||p.email}</option>)}</select></div>
+      {page==="Calendar" && <><div className="hub-toolbar"><button onClick={()=>move(-1)}>Previous</button><input aria-label="Calendar date" type="date" value={date} onChange={e=>setDate(e.target.value)}/><button onClick={()=>move(1)}>Next</button>{["month","week","day"].map(m=><button key={m} aria-pressed={mode===m} onClick={()=>setMode(m)}>{m}</button>)}<button onClick={()=>setDate(hubLocalInput(now).slice(0,10))}>Today</button></div><p className="hub-muted">Drag a ticket to reschedule its Zoho deadline; the existing local time is preserved. On touch devices, edit the deadline inside the ticket.</p><div className={`hub-calendar hub-calendar-${mode}`}>{Array.from({length:days},(_,i)=>{const day=new Date(start);day.setDate(start.getDate()+i);const rows=scoped.filter(t=>hubSameDay(t.due_date,day));return <div key={i} className={`hub-day ${hubSameDay(day,now)?"hub-today":""}`} onDragOver={e=>e.preventDefault()} onDrop={async e=>{e.preventDefault();const key=e.dataTransfer.getData("text/plain"),t=tickets.find(t=>t.ticket_key===key);if(!t||busy)return;setBusy(true);try{const d=hubDate(t.due_date)||new Date(day);d.setFullYear(day.getFullYear(),day.getMonth(),day.getDate());await onDue(t,d.toISOString());setNotice("Zoho deadline updated.");}catch(err){setNotice(err.message);}finally{setBusy(false);}}}><strong>{day.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</strong>{rows.map(t=><button draggable={!busy} onDragStart={e=>e.dataTransfer.setData("text/plain",t.ticket_key)} className={`hub-calendar-ticket ${brandClass(t.source)}`} key={t.ticket_key} onClick={()=>onOpen(t)}>#{t.ticket_number} {t.subject}<small>{t.source} · {hubUrgency(t,now)}</small></button>)}</div>;})}</div><details><summary>No due date ({active.filter(t=>!hubDate(t.due_date)).length})</summary>{list(active.filter(t=>!hubDate(t.due_date)))}</details></>}
+      {page==="My Week" && (()=>{const mine=scoped.filter(t=>String(getTicketOwnerEmail(t)).toLowerCase()===email),open=mine.filter(t=>!HUB_CLOSED(t));return [["Overdue",open.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now)],["Due today",open.filter(t=>hubSameDay(t.due_date,now))],["Due this week",open.filter(t=>hubDate(t.due_date)>=weekStart&&hubDate(t.due_date)<weekEnd)],["Waiting on someone",open.filter(t=>/waiting|hold/i.test(t.status))],["Recently updated",mine.filter(t=>hubDate(t.updated_at_zoho)>=weekStart)],["Completed this week",mine.filter(t=>HUB_CLOSED(t)&&hubDate(t.closed_at_zoho)>=weekStart&&hubDate(t.closed_at_zoho)<weekEnd)]].map(([title,rows])=><section className="dashboard-section-card" key={title}><h3>{title} <small>{rows.length}</small></h3>{list(rows)}</section>);})()}
+      {page==="Workload" && <><div className="dashboard-kpi-grid">{[["Open backlog",active],["Created this week",scoped.filter(t=>hubDate(t.created_at_zoho)>=weekStart&&hubDate(t.created_at_zoho)<=now)],["Completed this week",scoped.filter(t=>HUB_CLOSED(t)&&hubDate(t.closed_at_zoho)>=weekStart&&hubDate(t.closed_at_zoho)<=now)],["Overdue",active.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now)],["Due today",active.filter(t=>hubSameDay(t.due_date,now))],["Needs attention",active.filter(t=>hubAttention(t,now))]].map(([label,rows])=><button className="dashboard-kpi" key={label} onClick={()=>setMetric({label,rows})}><span>{label}</span><strong>{rows.length}</strong></button>)}</div><div className="dashboard-section-card hub-scroll"><h3>Team workload</h3><table className="hub-table"><thead><tr><th>Team member</th>{["Active","In progress","Waiting","Overdue"].map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{[...people,{email:"",name:"Unassigned"}].map(p=>{const owned=active.filter(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===p.email);const groups=[owned,owned.filter(t=>/progress/i.test(t.status)),owned.filter(t=>/waiting|hold/i.test(t.status)),owned.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now)];return <tr key={p.email}><th>{p.name||p.email}</th>{groups.map((rows,i)=><td key={i}><button onClick={()=>setMetric({label:`${p.name} · ${["Active","In progress","Waiting","Overdue"][i]}`,rows})}>{rows.length}</button></td>)}</tr>;})}</tbody></table></div><div className="hub-view-grid">{["source","priority","status"].map(field=><section className="dashboard-section-card" key={field}><h3>By {field==="source"?"brand":field}</h3>{[...new Set(active.map(t=>t[field]||"Unspecified"))].map(v=>{const rows=active.filter(t=>(t[field]||"Unspecified")===v);return <button className="hub-bar" key={v} onClick={()=>setMetric({label:v,rows})}><span>{v}</span><meter min="0" max={Math.max(active.length,1)} value={rows.length}/><strong>{rows.length}</strong></button>;})}</section>)}</div>{metric&&<section className="dashboard-section-card"><h3>{metric.label}</h3>{list(metric.rows)}</section>}<p className="hub-muted">Metrics use loaded tickets. Completion metrics require Zoho closed_at_zoho; missing dates are excluded. Needs attention flags overdue work and high-priority work with no activity for 48 hours.</p></>}
+    </>}
+  </section>;
+}
+function TicketOperations({ticket,tickets,session,threads,comments,onOpen,onDue}) {
+  const [activity,setActivity]=useState([]),[links,setLinks]=useState([]),[rules,setRules]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[summary,setSummary]=useState("");
+  const [target,setTarget]=useState(""),[relation,setRelation]=useState("related"),[tab,setTab]=useState("activity");
+  const [now,setNow]=useState(new Date());
+  useEffect(()=>{const id=setInterval(()=>setNow(new Date()),60000);return()=>clearInterval(id);},[]);
+  useEffect(()=>{let live=true;async function load(){const results=await Promise.all([supabase.from("hub_ticket_activity").select("*").eq("ticket_key",ticket.ticket_key).order("created_at",{ascending:false}).limit(200),supabase.from("hub_ticket_relationships").select("*").or(`ticket_key.eq.${ticket.ticket_key},related_ticket_key.eq.${ticket.ticket_key}`),supabase.from("hub_sla_rules").select("*")]);if(!live)return;setActivity(results[0].data||[]);setLinks(results[1].data||[]);setRules(results[2].data||[]);const failed=results.find(r=>r.error);if(failed)setNotice(`Planning data unavailable: ${failed.error.message}`);}load();const channel=supabase.channel(`hub-planning-${ticket.ticket_key}`).on("postgres_changes",{event:"*",schema:"public",table:"hub_ticket_activity",filter:`ticket_key=eq.${ticket.ticket_key}`},load).on("postgres_changes",{event:"*",schema:"public",table:"hub_ticket_relationships"},load).subscribe();return()=>{live=false;supabase.removeChannel(channel);};},[ticket.ticket_key]);
+  const events=[...activity.map(a=>({key:`a-${a.id}`,date:a.created_at,text:`${a.actor || "Zoho sync"} · ${a.activity_type}: ${a.old_value||"—"} → ${a.new_value||"—"}`})),...threads.map(t=>({key:`t-${t.thread_key||t.id}`,date:t.created_at_zoho,text:`${t.author_name||t.from_email||"Email"} · Email: ${stripHtml(t.content||t.content_html||t.summary||"").slice(0,240)}`})),...comments.map(c=>({key:`c-${c.comment_key||c.id}`,date:c.commented_at_zoho,text:`${c.author_name||"Team"} · Comment: ${stripHtml(c.content||c.content_html||"").slice(0,240)}`}))].sort((a,b)=>(hubDate(b.date)||0)-(hubDate(a.date)||0));
+  async function run(fn){if(busy)return;setBusy(true);setNotice("");try{await fn();}catch(err){setNotice(err.message);}finally{setBusy(false);}}
+  async function link(){const {data,error}=await supabase.from("hub_ticket_relationships").insert({ticket_key:ticket.ticket_key,related_ticket_key:target,relationship_type:relation,created_by:session.user.id}).select().single();if(error)throw error;setLinks(v=>[...v,data]);setTarget("");}
+  async function unlink(l){const {error}=await supabase.from("hub_ticket_relationships").delete().eq("id",l.id);if(error)throw error;setLinks(v=>v.filter(r=>r.id!==l.id));}
+  async function applySla(){const matching=rules.filter(r=>(!r.brand||r.brand===ticket.source)&&r.priority.toLowerCase()===String(ticket.priority||"Normal").toLowerCase()).sort((a,b)=>Number(!!b.brand)-Number(!!a.brand));const rule=matching[0];if(!rule)throw new Error("No matching SLA rule. Configure hub_sla_rules first.");const d=hubDate(ticket.created_at_zoho);if(!d)throw new Error("Created date is missing; cannot calculate SLA.");if(rule.business_days){let remaining=rule.target;while(remaining>0){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)remaining--;}}else d.setHours(d.getHours()+rule.target);await onDue(d.toISOString());setNotice("SLA deadline saved to Zoho.");}
+  return <section className="hub-ticket-tools"><h3>Planning & activity</h3><p className={hubAttention(ticket,now)?"hub-danger":"hub-muted"}>{hubUrgency(ticket,now)}</p>{!ticket.due_date&&!HUB_CLOSED(ticket)&&<button disabled={busy} onClick={()=>run(applySla)}>Apply SLA deadline</button>}<div className="hub-toolbar">{["activity","related","summary"].map(t=><button key={t} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t}</button>)}</div>{notice&&<p role="status" className="hub-notice">{notice}</p>}
+  {tab==="activity"&&<div className="hub-activity">{events.length?events.map(e=><article key={e.key}><time>{formatDateTime(e.date)}</time><p>{e.text}</p></article>):<p>No recorded activity yet. New field changes are recorded after migration.</p>}</div>}
+  {tab==="related"&&<><select aria-label="Related ticket" value={target} onChange={e=>setTarget(e.target.value)}><option value="">Select ticket</option>{tickets.filter(t=>t.ticket_key!==ticket.ticket_key).map(t=><option key={t.ticket_key} value={t.ticket_key}>#{t.ticket_number} {t.subject}</option>)}</select><select aria-label="Relationship" value={relation} onChange={e=>setRelation(e.target.value)}>{["related","duplicate","parent","child","blocks","blocked by"].map(r=><option key={r}>{r}</option>)}</select><button disabled={busy||!target} onClick={()=>run(link)}>Link ticket</button>{links.map(l=>{const outgoing=l.ticket_key===ticket.ticket_key,key=outgoing?l.related_ticket_key:l.ticket_key,t=tickets.find(t=>t.ticket_key===key);const inverse={parent:"child",child:"parent",blocks:"blocked by","blocked by":"blocks"};return <div className="hub-link" key={l.id}><button disabled={!t} onClick={()=>onOpen(t)}>{outgoing?l.relationship_type:inverse[l.relationship_type]||l.relationship_type}: {t?`#${t.ticket_number} ${t.subject}`:key}</button><button disabled={busy} aria-label="Unlink ticket" onClick={()=>run(()=>unlink(l))}>×</button></div>;})}</>}
+  {tab==="summary"&&<><button disabled={busy} onClick={()=>run(async()=>{const {data,error}=await supabase.functions.invoke("hub-ticket-summary",{body:{ticket_key:ticket.ticket_key}});if(error||!data?.summary)throw new Error(data?.error||error?.message||"Summary unavailable. Deploy the supplied AI function.");setSummary(data.summary);})}>{busy?"Summarizing…":"✨ Summarize"}</button><p className="hub-muted">AI draft for review. Suggestions do not change tickets or send replies.</p>{summary&&<div className="hub-summary">{summary}</div>}</>}
+  </section>;
+}
+
 function App() {
+  const [opsPage, setOpsPage] = useState(null);
+
   const editorRef =
     useRef(null);
 
@@ -3796,7 +3859,7 @@ function App() {
       finalValue =
         value
           ? new Date(
-              `${value}T12:00:00`
+              value.length === 10 ? `${value}T12:00:00` : value
             ).toISOString()
           : null;
     }
@@ -4449,6 +4512,8 @@ function App() {
           );
       }
 
+      if (filter === "duetoday") rows = rows.filter(t => !HUB_CLOSED(t) && hubSameDay(t.due_date, new Date()));
+      if (filter === "highpriority") rows = rows.filter(t => !HUB_CLOSED(t) && String(t.priority).toLowerCase() === "high");
       return rows;
     }, [
       tickets,
@@ -4635,26 +4700,12 @@ function App() {
         );
       }
 
-      // Create an in-app notification and send an email to the new owner.
-      // Notification failures must never undo a successful Zoho assignment.
+      // In-app only. Zoho owns assignment emails.
       if (owner?.email) {
-        try {
-          await supabase.functions.invoke("notify-ticket-assignment", {
-            body: {
-              ticket_key: ticket.ticket_key,
-              recipient_email: owner.email,
-              recipient_name: owner.name || owner.email,
-              ticket_number: ticket.ticket_number || null,
-              subject: ticket.subject || null,
-              source: ticket.source,
-              actor_email: session?.user?.email || null,
-              actor_name: session?.user?.user_metadata?.full_name || session?.user?.email || "Ticket Hub user",
-              notification_type: "assignment",
-            },
-          });
-        } catch (notificationError) {
-          console.error("Assignment notification error:", notificationError);
-        }
+        const { error: notificationError } = await supabase.rpc("hub_notify_assignment", {
+          p_ticket_key: ticket.ticket_key, p_recipient: owner.email,
+        });
+        if (notificationError) console.error("In-app assignment notification failed:", notificationError.message);
       }
 
       await loadTickets(ticket.ticket_key);
@@ -5301,17 +5352,22 @@ function App() {
           <div className="sidebar-label">
             MY WORK
           </div>
+          {["Saved Views", "Calendar", "My Week", "Workload"].map(page => (
+            <button key={page} className={`nav-item ${opsPage === page ? "active" : ""}`}
+              onClick={() => { setOpsPage(page); setShowDashboard(true); }}><span>{page}</span></button>
+          ))}
+
 
           <button
             className={`nav-item ${showDashboard ? "active" : ""}`}
-            onClick={() => setShowDashboard(true)}
+            onClick={() => { setOpsPage(null); setShowDashboard(true); }}
           >
             <span>Dashboard</span>
           </button>
 
           <button
             className={`nav-item ${filter === "favorites" && !showDashboard ? "active" : ""}`}
-            onClick={() => { setShowDashboard(false); setFilter("favorites"); setAssigneeFilter("all"); }}
+            onClick={() => { setShowDashboard(false); setOpsPage(null); setFilter("favorites"); setAssigneeFilter("all"); }}
           >
             <span>Favorites</span>
             <span className="nav-count">{favoriteCount}</span>
@@ -5346,7 +5402,7 @@ function App() {
           <button
             className={`nav-item ${filter === "mentions" && !showDashboard ? "active" : ""}`}
             onClick={() => {
-              setShowDashboard(false);
+              setShowDashboard(false); setOpsPage(null);
               setShowNotifications(false);
               setFilter("mentions");
               setAssigneeFilter("all");
@@ -5405,7 +5461,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
-                  setShowDashboard(false);
+                  setShowDashboard(false); setOpsPage(null);
                   setFilter(id);
                 }}
               >
@@ -5479,7 +5535,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
-                  setShowDashboard(false);
+                  setShowDashboard(false); setOpsPage(null);
                   setFilter(id);
                 }}
               >
@@ -5502,7 +5558,7 @@ function App() {
             value={assigneeFilter}
             onChange={(event) => {
               const value = event.target.value;
-              setShowDashboard(false);
+              setShowDashboard(false); setOpsPage(null);
               setAssigneeFilter(value);
               if (value !== "all" && filter === "unassigned") {
                 setFilter("all");
@@ -5558,7 +5614,7 @@ function App() {
                     : ""
                 }`}
                 onClick={() => {
-                  setShowDashboard(false);
+                  setShowDashboard(false); setOpsPage(null);
                   setBrandFilter(
                     value
                   );
@@ -6015,7 +6071,7 @@ function App() {
                     {notification.actor_name ||
                       notification.actor_email ||
                       "A teammate"}{" "}
-                    mentioned you
+                    {notification.notification_type === "assignment" ? "assigned this ticket to you" : "mentioned you"}
                   </div>
 
                   {notification.comment_text && (
@@ -6538,7 +6594,13 @@ function App() {
         }`}
       >
 
-        {showDashboard ? (
+        {opsPage ? (
+          <HubOperations page={opsPage} tickets={tickets.filter(isVisibleMarketingTicket)} session={session}
+            filters={{filter, brandFilter, departmentFilter, assigneeFilter, search, ticketViewMode}}
+            onView={v => { setFilter(v.filter || "all"); setBrandFilter(v.brandFilter || "all"); setDepartmentFilter(v.departmentFilter || "all"); setAssigneeFilter(v.assigneeFilter || "all"); setSearch(v.search || ""); setTicketViewMode(v.ticketViewMode || "compact"); setOpsPage(null); setShowDashboard(false); }}
+            onOpen={t => { setBrandFilter("all"); setDepartmentFilter("all"); setAssigneeFilter("all"); setSearch(""); setFilter(t.status === "Closed" ? "closed" : "all"); setTicketViewMode("compact"); setSelectedKey(t.ticket_key); setOpsPage(null); setShowDashboard(false); }}
+            onDue={async (t, due) => { const {data,error} = await supabase.functions.invoke("update-zoho-ticket", {body:{ticket_key:t.ticket_key,changes:{dueDate:due}}}); if(error || !data?.success) throw new Error(data?.error || error?.message || "Due date update failed"); await loadTickets(); }} />
+        ) : showDashboard ? (
           <section className="dashboard-view">
             <div className="dashboard-header">
               <div><div className="dashboard-eyebrow">MARKETING OPERATIONS</div><h1>Dashboard</h1><p>Overview of your marketing ticket workload across all three brands.</p></div>
@@ -6546,7 +6608,7 @@ function App() {
             </div>
             <div className="dashboard-brand-grid">
               {["Qualicare", "Tutor Doctor", "Code Wiz"].map((brand) => { const count = dashboardScopedTickets.filter(t => t.source === brand && t.status !== "Closed").length; return (
-                <button key={brand} type="button" className={`dashboard-brand-card ${brandClass(brand)}`} onClick={() => { setBrandFilter(brand); setFilter("all"); setAssigneeFilter("all"); setShowDashboard(false); }}>
+                <button key={brand} type="button" className={`dashboard-brand-card ${brandClass(brand)}`} onClick={() => { setBrandFilter(brand); setFilter("all"); setAssigneeFilter("all"); setShowDashboard(false); setOpsPage(null); }}>
                   <BrandBadge source={brand} /><strong>{count}</strong><span>active tickets</span>
                 </button>
               ); })}
@@ -6562,7 +6624,7 @@ function App() {
             <div className="dashboard-section-card">
               <div className="dashboard-section-title">{assigneeFilter === "all" ? "Your tickets" : assigneeFilter === "mine" ? "Your tickets" : `${teamMemberOptions.find((member) => member.email === assigneeFilter)?.name || "Team member"}’s tickets`}</div>
               {dashboardScopedTickets.filter(t => t.status !== "Closed").slice(0, 8).map(ticket => (
-                <button key={ticket.ticket_key} type="button" className="dashboard-ticket-row" onClick={() => { setSelectedKey(ticket.ticket_key); setShowDashboard(false); setFilter("all"); }}>
+                <button key={ticket.ticket_key} type="button" className="dashboard-ticket-row" onClick={() => { setSelectedKey(ticket.ticket_key); setShowDashboard(false); setOpsPage(null); setFilter("all"); }}>
                   <BrandBadge source={ticket.source} /><span className="dashboard-ticket-subject">#{ticket.ticket_number} · {ticket.subject || "Untitled ticket"}</span><StatusBadge status={ticket.status} /><span>{isOverdue(ticket) ? "Overdue" : getTicketOwnerName(ticket) || "Unassigned"}</span>
                 </button>
               ))}
@@ -8473,14 +8535,15 @@ function App() {
                 </select>
               </Detail>
 
+              <TicketOperations key={selected.ticket_key} ticket={selected} tickets={tickets.filter(isVisibleMarketingTicket)} session={session} threads={threads} comments={comments}
+                onOpen={t => { setFilter(t.status === "Closed" ? "closed" : "all"); setBrandFilter("all"); setAssigneeFilter("all"); setDepartmentFilter("all"); setSearch(""); setTicketViewMode("compact"); setSelectedKey(t.ticket_key); }}
+                onDue={async due => { const {data,error} = await supabase.functions.invoke("update-zoho-ticket", {body:{ticket_key:selected.ticket_key,changes:{dueDate:due}}}); if(error || !data?.success) throw new Error(data?.error || error?.message || "Due date update failed"); await loadTickets(selected.ticket_key); }} />
               <Detail label="Due date">
 
                 <input
                   className="detail-control"
-                  type="date"
-                  value={dateInputValue(
-                    selected.due_date
-                  )}
+                  type="datetime-local"
+                  value={hubLocalInput(selected.due_date)}
                   onChange={(
                     event
                   ) =>
