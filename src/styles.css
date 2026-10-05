@@ -3473,30 +3473,48 @@ button:hover {
   .compact-ticket-owner{display:none}
 }
 
-/* FINAL BRAND COLOR OVERRIDES — brand-colored mark, black brand name */
+/* FINAL BRAND COLOR OVERRIDES — solid brand mark, black brand name */
 .brand-badge.brand-qualicare .brand-mark {
-  color: var(--qualicare) !important;
-  background: var(--qualicare-soft) !important;
-  border-color: var(--qualicare-border) !important;
+  color: #fff !important;
+  background: var(--qualicare) !important;
+  border-color: var(--qualicare) !important;
 }
 .brand-badge.brand-qualicare .brand-name {
   color: #000 !important;
 }
 
 .brand-badge.brand-tutordoctor .brand-mark {
-  color: var(--tutordoctor) !important;
-  background: var(--tutordoctor-soft) !important;
-  border-color: var(--tutordoctor-border) !important;
+  color: #fff !important;
+  background: var(--tutordoctor) !important;
+  border-color: var(--tutordoctor) !important;
 }
 .brand-badge.brand-tutordoctor .brand-name {
   color: #000 !important;
 }
 
 .brand-badge.brand-codewiz .brand-mark {
-  color: var(--codewiz) !important;
-  background: var(--codewiz-soft) !important;
-  border-color: var(--codewiz-border) !important;
+  color: #fff !important;
+  background: var(--codewiz) !important;
+  border-color: var(--codewiz) !important;
 }
 .brand-badge.brand-codewiz .brand-name {
   color: #000 !important;
+}
+
+/* Never use the generic CSG blue selection rail for ticket rows. */
+.ticket-row-compact.selected {
+  background: #f8fafc !important;
+  box-shadow: none !important;
+}
+.ticket-row-compact.brand-qualicare.selected {
+  background: var(--qualicare-soft) !important;
+  box-shadow: inset 3px 0 0 var(--qualicare) !important;
+}
+.ticket-row-compact.brand-tutordoctor.selected {
+  background: var(--tutordoctor-soft) !important;
+  box-shadow: inset 3px 0 0 var(--tutordoctor) !important;
+}
+.ticket-row-compact.brand-codewiz.selected {
+  background: var(--codewiz-soft) !important;
+  box-shadow: inset 3px 0 0 var(--codewiz) !important;
 }
