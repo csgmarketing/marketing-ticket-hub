@@ -3749,3 +3749,51 @@ button:hover {
   .dashboard-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .dashboard-ticket-row{grid-template-columns:1fr;gap:6px}
 }
+
+/* ======================================================
+   CLASSIC TICKET LIST — ZOHO-INSPIRED VIEW
+   ====================================================== */
+.ticket-list-toolbar{display:flex;align-items:center;gap:10px;padding:0 0 10px}
+.ticket-list-toolbar .search-wrap{flex:1;min-width:0}
+.ticket-list-toolbar .ticket-view-switcher{flex:0 0 auto}
+.ticket-list-classic{border-top:1px solid #e5eaf0;background:#fff}
+.ticket-row-classic{display:grid;grid-template-columns:30px 38px minmax(300px,1fr) 112px 46px 38px 38px 42px;align-items:center;gap:10px;min-height:72px;padding:8px 12px;border-bottom:1px solid #e9edf2;background:#fff;cursor:pointer;transition:background .12s ease,box-shadow .12s ease}
+.ticket-row-classic:hover{background:#f8fbff}
+.ticket-row-classic.selected{background:#f3f7ff;box-shadow:inset 3px 0 0 var(--csg-blue)}
+.ticket-row-classic.brand-qualicare.selected{background:var(--qualicare-soft);box-shadow:inset 3px 0 0 var(--qualicare)}
+.ticket-row-classic.brand-tutordoctor.selected{background:var(--tutordoctor-soft);box-shadow:inset 3px 0 0 var(--tutordoctor)}
+.ticket-row-classic.brand-codewiz.selected{background:var(--codewiz-soft);box-shadow:inset 3px 0 0 var(--codewiz)}
+.classic-ticket-check{display:flex;align-items:center;justify-content:center}
+.classic-ticket-check input{width:15px;height:15px;accent-color:#2563eb;cursor:pointer}
+.classic-ticket-icon{width:34px;height:34px;border:1px solid #d6dee8;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:#334155;background:#fff}
+.classic-ticket-main{min-width:0}
+.classic-ticket-subject{font-size:13px;font-weight:700;color:#111827;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.classic-ticket-meta{display:flex;align-items:center;gap:6px;margin-top:6px;color:#64748b;font-size:10px;min-width:0;white-space:nowrap;overflow:hidden}
+.classic-ticket-meta>span{overflow:hidden;text-overflow:ellipsis}
+.classic-ticket-meta .brand-badge{flex:0 0 auto}
+.classic-ticket-status{display:flex;justify-content:flex-start}
+.classic-ticket-activity,.classic-ticket-comment{display:flex;align-items:center;justify-content:center;gap:3px;color:#64748b;font-size:11px}
+.classic-ticket-comment{font-size:15px}
+.classic-ticket-star{border:0;background:transparent;color:#94a3b8;font-size:18px;line-height:1;padding:5px;cursor:pointer;border-radius:7px}
+.classic-ticket-star:hover{background:#fff8e8;color:#f59e0b}
+.classic-ticket-star.active{color:#f59e0b}
+.classic-ticket-owner{width:34px;height:34px;border:1px solid #d6dee8;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:#334155;font-size:10px;font-weight:700}
+
+.notification-filter-tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid #eef2f7;background:#fafbfc}
+.notification-filter-tabs button{border:0;background:transparent;color:#64748b;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:650;cursor:pointer}
+.notification-filter-tabs button:hover{background:#f1f5f9;color:#334155}
+.notification-filter-tabs button.active{background:#eaf2ff;color:#1d4ed8}
+
+@media (max-width: 1100px){
+  .ticket-row-classic{grid-template-columns:28px 34px minmax(220px,1fr) 100px 36px 34px 34px 38px;gap:7px;padding-left:9px;padding-right:9px}
+  .classic-ticket-meta>span:nth-of-type(3),.classic-ticket-meta>span:nth-of-type(4){display:none}
+}
+@media (max-width: 760px){
+  .ticket-list-toolbar{align-items:stretch;flex-direction:column}
+  .ticket-view-switcher{width:max-content}
+  .ticket-row-classic{grid-template-columns:28px 34px minmax(0,1fr) 34px 34px 34px;gap:7px}
+  .classic-ticket-status,.classic-ticket-activity{display:none}
+  .classic-ticket-comment{grid-column:auto}
+  .classic-ticket-owner{width:30px;height:30px}
+  .classic-ticket-meta{max-width:100%}
+}
