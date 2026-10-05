@@ -4080,6 +4080,37 @@ button:hover {
 /* ======================================================
    BOARD VIEW — ZOHO-STYLE KANBAN
    ====================================================== */
+/* Board is a full-width workspace just like Classic. The ticket
+   conversation and details panes stay hidden until a ticket is opened. */
+.app-shell.board-mode{
+  grid-template-columns:200px minmax(0,1fr);
+}
+.app-shell.board-mode .ticket-column{
+  border-right:0;
+  min-width:0;
+}
+.app-shell.board-mode .conversation-column,
+.app-shell.board-mode .details-column{
+  display:none;
+}
+.app-shell.board-mode .ticket-list{
+  flex:1;
+  min-height:0;
+  overflow:hidden;
+  padding:0;
+}
+.app-shell.board-mode .ticket-column-header{
+  padding-left:22px;
+  padding-right:22px;
+}
+.app-shell.board-mode .ticket-list-toolbar{
+  padding:0 22px 12px;
+}
+.app-shell.board-mode .ticket-board{
+  min-height:calc(100vh - 190px);
+  height:calc(100vh - 190px);
+}
+
 .ticket-view-switcher button{white-space:nowrap}
 .app-shell.board-mode .ticket-column{min-width:0}
 .ticket-board{display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:0;min-height:calc(100vh - 190px);background:#e8eef7;border-top:1px solid #dce4ee;overflow:hidden}
@@ -4125,3 +4156,22 @@ button:hover {
   .ticket-board{grid-template-columns:1fr}
   .ticket-board-column{min-height:420px}
 }
+
+/* ======================================================
+   QUICK STATUS CONTROL — CLASSIC + BOARD
+   ====================================================== */
+.list-status-control{position:relative;display:inline-flex;align-items:center}
+.list-status-trigger{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;padding:0;border-radius:7px;cursor:pointer}
+.list-status-trigger:hover,.list-status-trigger.active{background:#f5f8fc}
+.list-status-trigger .status-badge{cursor:pointer}
+.list-status-chevron{font-size:12px;line-height:1;color:#64748b;margin-right:3px}
+.list-status-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:180px;padding:6px;background:#fff;border:1px solid #dbe3ec;border-radius:9px;box-shadow:0 12px 28px rgba(15,23,42,.14);z-index:60}
+.list-status-menu-title{padding:5px 8px 7px;font-size:10px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8}
+.list-status-option{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;background:#fff;padding:7px 8px;border-radius:6px;cursor:pointer;text-align:left}
+.list-status-option:hover{background:#f7f9fc}
+.list-status-option.selected{background:#eef4ff}
+.list-status-option:disabled{opacity:.6;cursor:wait}
+.list-status-option .status-badge{pointer-events:none}
+.ticket-board-card-footer .list-status-control{margin-right:auto}
+.ticket-board-card-footer .list-status-menu{left:0;top:calc(100% + 5px)}
+.classic-ticket-status .list-status-menu{left:0}
