@@ -4386,3 +4386,19 @@ button:hover {
 .hub-signature-tabs{display:flex;gap:8px;margin:18px 0;flex-wrap:wrap}.hub-signature-tabs .active{background:#eef2ff;border-color:#a5b4fc;color:#4338ca;font-weight:700}
 .hub-signature-tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.hub-signature-editor,.hub-signature-preview{padding:18px;border:1px solid #dce4ef;border-radius:10px;min-height:130px;overflow:auto;background:#fff}.hub-signature-editor:focus{outline:2px solid #a5b4fc}.hub-signature-editor img,.hub-signature-preview img{max-width:100%;height:auto}.hub-signature-auto{display:flex;gap:10px;align-items:center;font-size:14px;margin:18px 0}.hub-signature-auto input{width:auto}.hub-signature-modal h3{font-size:14px}.hub-signature-modal footer{margin-top:20px;font-size:14px}.hub-signature-modal footer .primary-button{background:#4338ca;color:white;border-color:#4338ca}
 @media(max-width:600px){.hub-signature-modal{padding:18px}.hub-signature-backdrop{padding:8px}.hub-signature-modal header{align-items:flex-start}}
+
+.app-shell.ticket-reading-mode{grid-template-columns:200px minmax(0,1fr) 285px}
+.app-shell.ticket-reading-mode .ticket-column{display:none}
+.app-shell.ticket-reading-mode .conversation-column,.app-shell.ticket-reading-mode .details-column{display:block}
+.hub-ticket-reading-bar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.hub-ticket-reading-bar>div{display:flex;gap:8px}
+.hub-ticket-reading-bar button,.hub-cancel-reply{border:1px solid #dbe3ec;background:#fff;border-radius:8px;padding:9px 13px;color:#334155;font-weight:600;cursor:pointer}
+.hub-ticket-reading-bar>div button:first-child{background:#4338ca;color:white;border-color:#4338ca}
+.composer-area[hidden]{display:none!important}
+.hub-cancel-reply{float:right;margin-bottom:10px}
+.hub-internal-notes{margin:20px 0;border:1px solid #dbe3ec;border-radius:12px;background:#fff}
+.hub-internal-notes>summary{padding:16px;cursor:pointer;font-weight:650;color:#334155}
+.hub-internal-notes .comment-composer-section{margin:0;border:0}
+.app-shell.ticket-reading-mode .message-body{max-height:none;overflow:visible}
+@media(max-width:1050px){.app-shell.ticket-reading-mode{grid-template-columns:180px minmax(0,1fr)}.app-shell.ticket-reading-mode .details-column{display:none}}
+@media(max-width:700px){.app-shell.ticket-reading-mode{grid-template-columns:minmax(0,1fr)}.app-shell.ticket-reading-mode .sidebar{display:none}.hub-ticket-reading-bar button{font-size:12px;padding:8px}}
