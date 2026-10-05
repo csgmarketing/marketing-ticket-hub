@@ -893,6 +893,102 @@ function HubNavIcon({ name }) {
   return <svg className="hub-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.tickets} /></svg>;
 }
 
+function HubTicketSearch({onOpen,isVisible,session}) {
+  const [query,setQuery]=useState(""),[results,setResults]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[expanded,setExpanded]=useState(false);
+  const input=useRef(null),container=useRef(null);
+  useEffect(()=>{function shortcut(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();input.current?.focus();setExpanded(true);}if(e.key==="Escape")setExpanded(false);}function outside(e){if(!container.current?.contains(e.target))setExpanded(false);}document.addEventListener("keydown",shortcut);document.addEventListener("pointerdown",outside);return()=>{document.removeEventListener("keydown",shortcut);document.removeEventListener("pointerdown",outside);};},[]);
+  useEffect(()=>{let live=true;const q=query.trim();setResults([]);setError("");if(q.length<2 && !/^\d$/.test(q)){setBusy(false);return;}setBusy(true);const timer=setTimeout(async()=>{try{
+    // Quoted PostgREST values prevent punctuation from becoming filter syntax.
+    const literal=q.replace(/^#(?=\d)/," ").trim().replace(/\\/g,"\\\\").replace(/"/g,'\\"').replace(/%/g,"\\%").replace(/_/g,"\\_");
+    const value=`"%${literal}%"`;
+    const fields=["ticket_number","subject","contact_name","contact_email","assignee_name","assignee_email","codewiz_agent_name","codewiz_agent_email"];
+    const {data,error:failure}=await supabase.from("tickets").select("*").eq("is_deleted",false).eq("is_trashed",false).or(fields.map(f=>`${f}.ilike.${value}`).join(",")).order("updated_at_zoho",{ascending:false,nullsFirst:false}).limit(40);
+    if(!live)return;if(failure)throw failure;setResults((data||[]).filter(isVisible));
+  }catch(err){if(live)setError(err.message||"Search unavailable");}finally{if(live)setBusy(false);}},300);return()=>{live=false;clearTimeout(timer);};},[query,session?.user?.id]);
+  return <div className="hub-search" ref={container}><div className="hub-search-field"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><input ref={input} aria-label="Find ticket" placeholder="Find ticket…" value={query} onFocus={()=>setExpanded(true)} onChange={e=>{setQuery(e.target.value);setExpanded(true);}} onKeyDown={e=>{if(e.key==="Enter"&&results.length){onOpen(results[0]);setExpanded(false);}}}/><kbd title="Ctrl or Command + K">⌘K</kbd></div>{expanded&&<div className="hub-search-results"><div className="hub-search-caption">All statuses · ticket, subject, requester or owner</div>{query.trim().length<2 && !/^\d$/.test(query.trim())?<p>Enter a ticket number or at least 2 characters.</p>:busy?<p role="status">Searching…</p>:error?<p role="alert">{error}</p>:results.length?<>{results.map(t=><button type="button" key={t.ticket_key} onClick={()=>{onOpen(t);setExpanded(false);}}><div><BrandBadge source={t.source}/><small>#{t.ticket_number}</small></div><strong>{t.subject||"Untitled ticket"}</strong><span>{t.status} · {t.contact_name||t.contact_email||"No requester"}</span></button>)}<div className="hub-search-caption">{results.length} matches shown · newest first</div></>:<p>No matching tickets.</p>}<button type="button" className="hub-search-close" onClick={()=>setExpanded(false)}>Close search</button></div>}</div>;
+}
+function HubSyncHealth({session}) {
+  const [rows,setRows]=useState([]),[error,setError]=useState(""),[busy,setBusy]=useState(false),[open,setOpen]=useState(false),[now,setNow]=useState(Date.now());
+  const refresh=useCallback(async()=>{setBusy(true);const {data,error:failure}=await supabase.from("hub_sync_health").select("*");setRows(data||[]);setError(failure?"Sync monitoring unavailable. Run the sync-health SQL first.":"");setBusy(false);},[session?.user?.id]);
+  useEffect(()=>{refresh();const timer=setInterval(()=>{setNow(Date.now());refresh();},30000);return()=>clearInterval(timer);},[refresh]);
+  const state=r=>!r?.status?"Not recorded":r.status==="running"?(now-new Date(r.started_at).getTime()>10*60000?"Check needed":"Syncing"):r.status==="failed"?"Failed":"Healthy";
+  const brands=["Qualicare","Tutor Doctor","Code Wiz"];
+  const states=brands.map(b=>state(rows.find(r=>r.source===b)));
+  const label=error?"Unavailable":busy&&!rows.length?"Checking…":states.includes("Failed")?"Needs attention":states.includes("Check needed")?"Check needed":states.includes("Syncing")?"Syncing":states.every(s=>s==="Healthy")?"Healthy":"Not fully recorded";
+  const tone=label==="Healthy"?"healthy":label==="Syncing"?"syncing":["Needs attention","Check needed"].includes(label)?"failed":"unknown";
+  return <div className="hub-sync"><button className="hub-sync-toggle" type="button" aria-expanded={open} onClick={()=>setOpen(v=>!v)}><span className={`hub-sync-dot ${tone}`}/><span><strong>Ticket sync</strong><small>{label}</small></span><span aria-hidden="true">{open?"⌃":"⌄"}</span></button>{open&&<div className="hub-sync-details">{error&&<p role="status">{error}</p>}{brands.map(b=>{const r=rows.find(r=>r.source===b);return <div key={b}><strong>{b}</strong><span>{state(r)}</span><small>Last success: {r?.last_success_at?formatDateTime(r.last_success_at):"Not recorded"}</small>{r?.started_at&&<small>Latest attempt: {formatDateTime(r.started_at)}</small>}</div>;})}<p>Tracks individual ticket refreshes. Healthy means the latest recorded attempt succeeded; it does not verify a complete brand sync.</p><button type="button" disabled={busy} onClick={refresh}>{busy?"Checking…":"Refresh status"}</button></div>}</div>;
+}
+
+function MarketingDashboard({tickets,session,onOpen,onNavigate,onFind}) {
+  const [scope,setScope]=useState("team"),[brand,setBrand]=useState("all"),[metric,setMetric]=useState(null);
+  const [events,setEvents]=useState([]),[notice,setNotice]=useState(""),[loading,setLoading]=useState(true),[now,setNow]=useState(new Date());
+  useEffect(()=>{let live=true;async function refresh(){setLoading(true);const results=await Promise.all([
+    supabase.from("hub_ticket_activity").select("*").order("created_at",{ascending:false}).limit(80),
+    supabase.from("ticket_comments").select("*").order("commented_at_zoho",{ascending:false}).limit(40),
+    supabase.from("ticket_threads").select("*").order("created_at_zoho",{ascending:false}).limit(40),
+  ]);if(!live)return;const merged=[];
+    for(const a of results[0].data||[]){const labels={status:"Status changed",priority:"Priority changed",due_date:"Deadline changed",assignee_name:"Owner changed",assignee_email:"Owner email changed",codewiz_agent_name:"Owner changed",codewiz_agent_email:"Owner email changed",created:"Ticket created"};merged.push({id:`audit-${a.id}`,ticket_key:a.ticket_key,date:a.created_at,label:labels[a.activity_type]||a.activity_type,actor:a.actor||"Zoho sync",detail:a.activity_type==="created"?a.new_value:`${a.old_value||"None"} → ${a.new_value||"None"}`,kind:"audit"});}
+    for(const c of results[1].data||[])merged.push({id:`comment-${c.comment_key||c.id}`,ticket_key:c.ticket_key,date:c.commented_at_zoho,label:"Comment added",actor:c.commenter_name||c.author_name||c.commented_by_name||"Team member",detail:stripHtml(c.content_html||c.content||c.content_text||"").slice(0,140),kind:"comment"});
+    for(const t of results[2].data||[])merged.push({id:`email-${t.thread_key||t.id}`,ticket_key:t.ticket_key,date:t.created_at_zoho,label:isOutboundThread(t)?"Reply sent":"Email received",actor:t.author_name||t.from_email||"Email",detail:stripHtml(t.summary||t.content_text||"").slice(0,140),kind:"email"});
+    setEvents(merged.sort((a,b)=>(hubDate(b.date)?.getTime()||0)-(hubDate(a.date)?.getTime()||0)));setNotice(results.some(r=>r.error)?"Some activity sources could not be loaded. Showing the available history.":"");setLoading(false);
+  }refresh();const interval=setInterval(()=>{setNow(new Date());refresh();},60000);const channel=supabase.channel("hub-dashboard-activity");for(const table of ["hub_ticket_activity","ticket_comments","ticket_threads"])channel.on("postgres_changes",{event:"*",schema:"public",table},refresh);channel.subscribe();return()=>{live=false;clearInterval(interval);supabase.removeChannel(channel);};},[session?.user?.id]);
+  const email=String(session?.user?.email||"").toLowerCase();
+  const visible=tickets.filter(t=>(brand==="all"||t.source===brand)&&(scope==="team"||String(getTicketOwnerEmail(t)||"").toLowerCase()===email));
+  const active=visible.filter(t=>!HUB_CLOSED(t)),overdue=active.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now),today=active.filter(t=>hubSameDay(t.due_date,now)),unassigned=active.filter(isTicketUnassigned);
+  const attention=active.filter(t=>hubAttention(t,now)||isTicketUnassigned(t)).sort((a,b)=>{const score=t=>(hubDate(t.due_date)&&hubDate(t.due_date)<now?4:0)+(String(t.priority).toLowerCase()==="high"?2:0)+(isTicketUnassigned(t)?1:0);return score(b)-score(a)||(hubDate(a.due_date)?.getTime()||Infinity)-(hubDate(b.due_date)?.getTime()||Infinity);});
+  const map=new Map(visible.map(t=>[t.ticket_key,t]));const activity=events.filter(e=>map.has(e.ticket_key)).slice(0,12);
+  const name=(session?.user?.user_metadata?.full_name||getTicketOwnerName(tickets.find(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===email))||"").split(" ")[0];
+  const greeting=now.getHours()<12?"Good morning":now.getHours()<18?"Good afternoon":"Good evening";
+  const metrics=[{id:"active",label:"Active",rows:active,tone:"blue",icon:"tickets"},{id:"today",label:"Due today",rows:today,tone:"violet",icon:"calendar"},{id:"overdue",label:"Overdue",rows:overdue,tone:"rose",icon:"clock"},{id:"unassigned",label:"Unassigned",rows:unassigned,tone:"amber",icon:"unassigned"}];
+  const list=rows=>rows.length?rows.map(t=><button type="button" className="hub-dashboard-ticket" key={t.ticket_key} onClick={()=>onOpen(t)}><div><BrandBadge source={t.source}/><span>#{t.ticket_number}</span></div><strong>{t.subject||"Untitled ticket"}</strong><footer><span>{getTicketOwnerName(t)||"Unassigned"}</span><span className={hubDate(t.due_date)&&hubDate(t.due_date)<now?"hub-danger":""}>{hubUrgency(t,now)}</span></footer></button>):<div className="hub-dashboard-empty">No tickets in this view.</div>;
+  return <section className="dashboard-view hub-dashboard-home"><header className="hub-week-header"><div><div className="dashboard-eyebrow">MARKETING OVERVIEW</div><h1>{greeting}{name?`, ${name}`:""}.</h1><p>{now.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})} · Let's see what needs your attention.</p></div><div className="hub-dashboard-scope"><button type="button" aria-pressed={scope==="mine"} onClick={()=>{setScope("mine");setMetric(null);}}>My overview</button><button type="button" aria-pressed={scope==="team"} onClick={()=>{setScope("team");setMetric(null);}}>Team overview</button></div></header>
+    <div className="hub-dashboard-quick"><button type="button" onClick={onFind}><HubNavIcon name="views"/>Find ticket <kbd>⌘K</kbd></button><button type="button" onClick={()=>onNavigate("My Week")}><HubNavIcon name="week"/>My Week</button><button type="button" onClick={()=>onNavigate("Calendar")}><HubNavIcon name="calendar"/>Calendar</button><select aria-label="Dashboard brand" value={brand} onChange={e=>{setBrand(e.target.value);setMetric(null);}}><option value="all">All brands</option>{["Tutor Doctor","Qualicare","Code Wiz"].map(b=><option key={b}>{b}</option>)}</select></div>
+    <div className="hub-week-metrics">{metrics.map(m=><button type="button" key={m.id} className={`hub-week-metric hub-tone-${m.tone} ${metric===m.id?"selected":""}`} aria-pressed={metric===m.id} onClick={()=>setMetric(v=>v===m.id?null:m.id)}><span className="hub-week-metric-icon"><HubNavIcon name={m.icon}/></span><span className="hub-week-metric-value">{m.rows.length}</span><span className="hub-week-metric-label">{m.label}</span><span className="hub-week-metric-arrow" aria-hidden="true">↗</span></button>)}</div>
+    {metric&&<section className="hub-dashboard-panel hub-dashboard-metric-panel"><header><div><h2>{metrics.find(m=>m.id===metric)?.label} tickets</h2><p>Showing up to 20 tickets in the selected scope.</p></div><button type="button" onClick={()=>setMetric(null)}>Close</button></header>{list((metrics.find(m=>m.id===metric)?.rows||[]).slice(0,20))}</section>}
+    <div className="hub-dashboard-columns"><section className="hub-dashboard-panel"><header><div><h2>Needs attention <span>{attention.length}</span></h2><p>Overdue, unassigned, or high-priority work inactive for 48 hours.</p></div><HubNavIcon name="clock"/></header>{attention.length?list(attention.slice(0,8)):<div className="hub-dashboard-empty"><span>✓</span>No tickets need attention in this view.</div>}</section>
+    <section className="hub-dashboard-panel"><header><div><h2>Recent activity</h2><p>The latest recorded changes, comments and emails.</p></div><span className="hub-dashboard-live">Live</span></header>{notice&&<p className="hub-notice" role="status">{notice}</p>}{loading&&!events.length?<div className="hub-dashboard-empty" role="status">Loading activity…</div>:activity.length?<div className="hub-dashboard-feed">{activity.map(e=>{const t=map.get(e.ticket_key);return <button type="button" key={e.id} onClick={()=>onOpen(t)}><span className={`hub-dashboard-feed-icon ${e.kind}`}><HubNavIcon name={e.kind==="comment"?"mention":e.kind==="email"?"tickets":"clock"}/></span><div><strong>{e.label}</strong><p>#{t.ticket_number} · {t.subject||"Untitled ticket"}</p>{e.detail&&<small>{e.detail}</small>}<footer>{e.actor} · {formatDateTime(e.date)}</footer></div></button>;})}</div>:<div className="hub-dashboard-empty">No recorded activity for these tickets yet.</div>}</section></div>
+    <section className="hub-dashboard-brands"><header><h2>Brand snapshot</h2><p>{scope==="mine"?"Your assigned tickets":"Your team's tickets"} · select a brand to focus the dashboard.</p></header><div>{["Tutor Doctor","Qualicare","Code Wiz"].map(b=>{const rows=tickets.filter(t=>t.source===b&&!HUB_CLOSED(t)&&(scope==="team"||String(getTicketOwnerEmail(t)||"").toLowerCase()===email));return <button type="button" key={b} aria-pressed={brand===b} onClick={()=>{setBrand(v=>v===b?"all":b);setMetric(null);}}><BrandBadge source={b}/><strong>{rows.length}<small>active</small></strong><footer><span>{rows.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now).length} overdue</span><span>{rows.filter(isTicketUnassigned).length} unassigned</span></footer></button>;})}</div></section>
+    <TeamMoments session={session} tickets={tickets} onOpen={onOpen} />
+    <p className="hub-week-footnote">Counts use loaded tickets. Activity shows recent accessible records; field-change history starts when audit logging was enabled. Zoho sync changes retain their recorded actor.</p>
+  </section>;
+}
+
+function hubReadPreference(key,fallback){try{const v=localStorage.getItem(key);return v===null?fallback:JSON.parse(v);}catch{return fallback;}}
+function hubWritePreference(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{/* private browsing can disable local storage */}}
+function hubCompletionEvent(ticket,status){if(!HUB_CLOSED(ticket)&&/^(closed|resolved)$/i.test(status||""))window.dispatchEvent(new CustomEvent("hub-ticket-completed",{detail:{number:ticket.ticket_number,subject:ticket.subject}}));}
+function CompletionCelebration({session}) {
+  const [ticket,setTicket]=useState(null),[enabled,setEnabled]=useState(true);const timer=useRef(null);
+  useEffect(()=>{const key=`hub-celebrations:${session?.user?.id}`;setEnabled(hubReadPreference(key,true));function celebrate(e){if(!hubReadPreference(key,true))return;setTicket(e.detail);clearTimeout(timer.current);timer.current=setTimeout(()=>setTicket(null),3800);}function preference(){setEnabled(hubReadPreference(key,true));}window.addEventListener("hub-ticket-completed",celebrate);window.addEventListener("hub-celebrations-change",preference);return()=>{clearTimeout(timer.current);window.removeEventListener("hub-ticket-completed",celebrate);window.removeEventListener("hub-celebrations-change",preference);};},[session?.user?.id]);
+  if(!ticket||!enabled)return null;
+  return <div className="hub-celebration" role="status"><div className="hub-confetti" aria-hidden="true">{Array.from({length:26},(_,i)=><i key={i} style={{"--piece":i,"--drift":`${(i%5-2)*23}px`,left:`${(i*37)%100}%`,background:["#73c6a1","#e6b468","#8aa6df","#c6a5db"][i%4],animationDelay:`${i%7*55}ms`}}/>)}</div><span>🎉</span><div><strong>Nice work!</strong><p>Ticket #{ticket.number} is complete.</p></div><button type="button" aria-label="Dismiss celebration" onClick={()=>setTicket(null)}>×</button></div>;
+}
+const HUB_MOODS=[{value:"focused",emoji:"🎯",label:"Focused"},{value:"busy",emoji:"🔥",label:"Busy"},{value:"available",emoji:"🙌",label:"Happy to help"},{value:"help",emoji:"💬",label:"Could use help"}];
+function TeamMoments({session,tickets,onOpen}) {
+  const [wins,setWins]=useState([]),[moods,setMoods]=useState([]),[kudos,setKudos]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[goal,setGoal]=useState(5),[celebrations,setCelebrations]=useState(true),[now,setNow]=useState(new Date());
+  const start=new Date(now);start.setHours(0,0,0,0);start.setDate(start.getDate()-((start.getDay()+6)%7));const end=new Date(start);end.setDate(end.getDate()+7);
+  const weekKey=hubLocalInput(start).slice(0,10),goalKey=`hub-week-goal:${session.user.id}:${weekKey}`,prefKey=`hub-celebrations:${session.user.id}`;
+  useEffect(()=>{setGoal(hubReadPreference(goalKey,5));setCelebrations(hubReadPreference(prefKey,true));},[goalKey,prefKey]);
+  useEffect(()=>{let live=true;async function load(){const r=await Promise.all([supabase.rpc("hub_weekly_wins",{p_start:start.toISOString(),p_end:end.toISOString()}),supabase.from("hub_team_moods").select("*").order("updated_at",{ascending:false}),supabase.from("hub_kudos").select("*").order("created_at",{ascending:false}).limit(12)]);if(!live)return;setWins(r[0].data||[]);setMoods(r[1].data||[]);setKudos(r[2].data||[]);setNotice(r.some(x=>x.error)?"Team moments are unavailable until the community SQL is installed.":"");setLoading(false);}load();const id=setInterval(()=>{setNow(new Date());load();},60000);const channel=supabase.channel("hub-team-moments");for(const table of ["hub_team_moods","hub_kudos","hub_ticket_activity"])channel.on("postgres_changes",{event:"*",schema:"public",table},load);channel.subscribe();return()=>{live=false;clearInterval(id);supabase.removeChannel(channel);};},[session.user.id,weekKey]);
+  const email=String(session.user.email||"").toLowerCase(),mine=wins.filter(w=>String(w.owner_email||"").toLowerCase()===email),percent=Math.min(100,Math.round(mine.length/Math.max(goal,1)*100));
+  const mineMood=moods.find(m=>m.user_id===session.user.id)?.mood||"";
+  const recentMoods=moods.filter(m=>new Date(m.updated_at)>=new Date(now.getFullYear(),now.getMonth(),now.getDate()));
+  async function mood(value){if(busy)return;setBusy(true);setNotice("");let error;if(value){const r=await supabase.from("hub_team_moods").upsert({user_id:session.user.id,user_email:email,user_name:session.user.user_metadata?.full_name||getTicketOwnerName(tickets.find(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===email))||email,mood:value,updated_at:new Date().toISOString()},{onConflict:"user_id"}).select().single();error=r.error;if(!error)setMoods(v=>[r.data,...v.filter(m=>m.user_id!==session.user.id)]);}else{const r=await supabase.from("hub_team_moods").delete().eq("user_id",session.user.id);error=r.error;if(!error)setMoods(v=>v.filter(m=>m.user_id!==session.user.id));}if(error)setNotice(error.message);setBusy(false);}
+  function toggleCelebrations(){const next=!celebrations;setCelebrations(next);hubWritePreference(prefKey,next);window.dispatchEvent(new Event("hub-celebrations-change"));}
+  return <section className="hub-moments"><header><h2>A little team spirit</h2><p>Celebrate progress, check in, and thank someone.</p></header>{notice&&<p className="hub-notice" role="status">{notice}</p>}<div className="hub-moments-grid">
+    <section className="hub-garden-card"><div className="hub-moment-title"><span>🌱</span><h3>Your progress garden</h3></div><div className="hub-garden-scene" aria-hidden="true"><svg viewBox="0 0 200 130"><ellipse cx="100" cy="112" rx="60" ry="9" fill="#e1ede5"/><path d="M78 92h44l-6 25H84z" fill="#c99779"/><path d="M75 89h50v8H75z" fill="#dfb496"/><path d={`M100 91 Q96 75 100 ${mine.length?45:68}`} stroke="#76a68b" strokeWidth="4" fill="none"/>{mine.length>0&&<><path d="M99 70Q67 71 70 46Q98 45 99 70" fill="#94c8a5"/><path d="M100 59Q126 58 128 34Q100 35 100 59" fill="#78b997"/></>}{percent>=50&&<path d="M99 45Q76 44 77 24Q99 23 99 45" fill="#abd4b4"/>}{percent>=100&&<><circle cx="102" cy="23" r="10" fill="#e9b4c8"/><circle cx="91" cy="30" r="10" fill="#e9b4c8"/><circle cx="113" cy="31" r="10" fill="#e9b4c8"/><circle cx="102" cy="39" r="10" fill="#e9b4c8"/><circle cx="102" cy="31" r="7" fill="#efd18b"/></>}</svg><span>{percent>=100?"In full bloom":percent>=50?"Growing strong":mine.length?"Taking root":"Ready to grow"}</span></div><div className="hub-garden-progress"><strong>{mine.length}<small> / {goal} weekly goal</small></strong><progress aria-label="Weekly completion goal" value={Math.min(mine.length,goal)} max={goal}/></div><label className="hub-garden-goal">Your goal <input type="number" min="1" max="50" value={goal} onChange={e=>{const g=Math.min(50,Math.max(1,Number(e.target.value)||1));setGoal(g);hubWritePreference(goalKey,g);}}/> completions</label><p className="hub-moment-note">Recorded completions on tickets assigned to you. A personal goal, at your pace.</p><label className="hub-celebration-setting"><input type="checkbox" checked={celebrations} onChange={toggleCelebrations}/> Celebrate when I close a ticket</label></section>
+    <section className="hub-wins-card"><div className="hub-moment-title"><span>🏆</span><h3>This week's wins</h3></div><strong className="hub-wins-total">{loading?"…":wins.length}<small>recorded team completions</small></strong><div className="hub-wins-brands">{["Tutor Doctor","Qualicare","Code Wiz"].map(b=><span key={b}>{b}<strong>{wins.filter(w=>w.source===b).length}</strong></span>)}</div><div className="hub-wins-list">{wins.slice(0,4).map(w=><button type="button" key={w.ticket_key} onClick={()=>onOpen(w)}><span>✓</span><div><strong>{w.subject||"Untitled ticket"}</strong><small>#{w.ticket_number} · {w.owner_name||"Team effort"}</small></div></button>)}{!loading&&!wins.length&&<p className="hub-moment-note">Your next recorded completion will appear here.</p>}</div><p className="hub-moment-note">Team progress, without a leaderboard. Only tickets still closed are counted.</p></section>
+    <section className="hub-mood-card"><div className="hub-moment-title"><span>💬</span><h3>How's today going?</h3></div><p className="hub-moment-note">An optional check-in, visible to the team.</p><div className="hub-mood-options">{HUB_MOODS.map(m=><button type="button" key={m.value} aria-pressed={mineMood===m.value} disabled={busy} onClick={()=>mood(m.value)}><span>{m.emoji}</span>{m.label}</button>)}</div>{mineMood&&<button type="button" className="hub-mood-clear" disabled={busy} onClick={()=>mood("")}>Clear my check-in</button>}<div className="hub-team-checkins">{recentMoods.map(m=>{const v=HUB_MOODS.find(v=>v.value===m.mood);return <div key={m.user_id}><span>{v?.emoji}</span><strong>{m.user_name}</strong><small>{v?.label}</small></div>;})}</div><p className="hub-moment-note">Showing check-ins updated today.</p></section>
+  </div><section className="hub-kudos-wall"><div className="hub-moment-title"><span>🙌</span><h3>Team kudos</h3></div><div>{kudos.length?kudos.slice(0,6).map(k=><article key={k.id}><strong>{k.author_name} <span>→</span> {k.recipient_name}</strong><p>{k.message}</p><small>{formatDateTime(k.created_at)}</small></article>):<p className="hub-moment-note">Give a teammate kudos from a ticket to add the first thank-you.</p>}</div></section></section>;
+}
+function TicketKudos({ticket,session,people}) {
+  const [recipient,setRecipient]=useState(""),[message,setMessage]=useState(""),[rows,setRows]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+  const options=people.filter(p=>String(p.email).toLowerCase()!==String(session.user.email).toLowerCase());
+  useEffect(()=>{let live=true;const owner=String(getTicketOwnerEmail(ticket)||"").toLowerCase();setRecipient(options.some(p=>p.email===owner)?owner:"");supabase.from("hub_kudos").select("*").eq("ticket_key",ticket.ticket_key).order("created_at",{ascending:false}).limit(10).then(({data,error})=>{if(live){setRows(data||[]);if(error)setNotice("Kudos needs the community SQL migration.");}});return()=>{live=false;};},[ticket.ticket_key]);
+  async function submit(e){e.preventDefault();if(busy||!recipient||!message.trim())return;setBusy(true);setNotice("");const person=options.find(p=>p.email===recipient);const {data,error}=await supabase.from("hub_kudos").insert({ticket_key:ticket.ticket_key,author_id:session.user.id,author_email:String(session.user.email).toLowerCase(),author_name:session.user.user_metadata?.full_name||session.user.email,recipient_email:person.email,recipient_name:person.name,message:message.trim()}).select().single();if(error)setNotice(error.message);else{setRows(v=>[data,...v]);setMessage("");setNotice("Kudos added to the ticket and team wall.");}setBusy(false);}
+  async function remove(row){setBusy(true);const {error}=await supabase.from("hub_kudos").delete().eq("id",row.id);if(error)setNotice(error.message);else setRows(v=>v.filter(k=>k.id!==row.id));setBusy(false);}
+  return <section className="hub-ticket-kudos"><h3>🙌 Give kudos</h3><form onSubmit={submit}><select aria-label="Kudos recipient" value={recipient} onChange={e=>setRecipient(e.target.value)} required><option value="">Choose a teammate</option>{options.map(p=><option key={p.email} value={p.email}>{p.name}</option>)}</select><textarea aria-label="Kudos message" maxLength={400} rows={2} placeholder="Thanks for getting this live!" value={message} onChange={e=>setMessage(e.target.value)} required/><button disabled={busy||!recipient||!message.trim()}>Add kudos</button></form>{notice&&<p role="status" className="hub-moment-note">{notice}</p>}{rows.map(k=><article key={k.id}><strong>{k.recipient_name}</strong><p>{k.message}</p><small>From {k.author_name}</small>{k.author_id===session.user.id&&<button type="button" disabled={busy} onClick={()=>remove(k)} aria-label="Remove your kudos">×</button>}</article>)}</section>;
+}
+
 function App() {
   const [opsPage, setOpsPage] = useState(null);
 
@@ -3939,6 +4035,8 @@ function App() {
       return;
     }
 
+    if (field === "status") hubCompletionEvent(selected, finalValue);
+
     setUpdateNotice(
       "Saved"
     );
@@ -4694,6 +4792,7 @@ function App() {
         );
       }
 
+      hubCompletionEvent(ticket, status);
       await loadTickets(ticket.ticket_key);
       setStatusEditKey(null);
 
@@ -5354,6 +5453,8 @@ function App() {
   return (
     <div className={`app-shell ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
+      <CompletionCelebration session={session} />
+
       {/* SIDEBAR */}
 
       <aside className="sidebar">
@@ -5382,6 +5483,11 @@ function App() {
           </div>
         </div>
 
+        <HubTicketSearch session={session} isVisible={isVisibleMarketingTicket} onOpen={ticket => {
+          setTickets(current => current.some(t => t.ticket_key === ticket.ticket_key) ? current : [...current, ticket]);
+          setFilter(HUB_CLOSED(ticket) ? "closed" : "all"); setBrandFilter("all"); setDepartmentFilter("all"); setAssigneeFilter("all"); setSearch("");
+          setTicketViewMode("compact"); setOpsPage(null); setShowDashboard(false); setShowNotifications(false); setShowReminders(false); setSelectedKey(ticket.ticket_key);
+        }} />
         <div className="hub-dashboard-entry">
           <button type="button" className={`hub-dashboard-nav ${showDashboard && !opsPage ? "active" : ""}`}
             aria-current={showDashboard && !opsPage ? "page" : undefined}
@@ -5672,6 +5778,8 @@ function App() {
             )}
           </div>
         )}
+
+        <HubSyncHealth session={session} />
 
         <div className="sidebar-footer">
 
@@ -6567,38 +6675,13 @@ function App() {
           <HubOperations page={opsPage} tickets={tickets.filter(isVisibleMarketingTicket)} session={session}
             filters={{filter, brandFilter, departmentFilter, assigneeFilter, search, ticketViewMode}}
             onView={v => { setFilter(v.filter || "all"); setBrandFilter(v.brandFilter || "all"); setDepartmentFilter(v.departmentFilter || "all"); setAssigneeFilter(v.assigneeFilter || "all"); setSearch(v.search || ""); setTicketViewMode(v.ticketViewMode || "compact"); setOpsPage(null); setShowDashboard(false); }}
-            onOpen={t => { setBrandFilter("all"); setDepartmentFilter("all"); setAssigneeFilter("all"); setSearch(""); setFilter(t.status === "Closed" ? "closed" : "all"); setTicketViewMode("compact"); setSelectedKey(t.ticket_key); setOpsPage(null); setShowDashboard(false); }}
+            onOpen={t => { setTickets(current => current.some(row => row.ticket_key === t.ticket_key) ? current : [...current, t]); setBrandFilter("all"); setDepartmentFilter("all"); setAssigneeFilter("all"); setSearch(""); setFilter(t.status === "Closed" ? "closed" : "all"); setTicketViewMode("compact"); setSelectedKey(t.ticket_key); setOpsPage(null); setShowDashboard(false); }}
             onDue={async (t, due) => { const {data,error} = await supabase.functions.invoke("update-zoho-ticket", {body:{ticket_key:t.ticket_key,changes:{dueDate:due}}}); if(error || !data?.success) throw new Error(data?.error || error?.message || "Due date update failed"); await loadTickets(); }} />
         ) : showDashboard ? (
-          <section className="dashboard-view">
-            <div className="dashboard-header">
-              <div><div className="dashboard-eyebrow">MARKETING OPERATIONS</div><h1>Dashboard</h1><p>Overview of your marketing ticket workload across all three brands.</p></div>
-              <button type="button" className="primary-button" onClick={() => setShowDashboard(false)}>Open ticket workspace</button>
-            </div>
-            <div className="dashboard-brand-grid">
-              {["Qualicare", "Tutor Doctor", "Code Wiz"].map((brand) => { const count = dashboardScopedTickets.filter(t => t.source === brand && t.status !== "Closed").length; return (
-                <button key={brand} type="button" className={`dashboard-brand-card ${brandClass(brand)}`} onClick={() => { setBrandFilter(brand); setFilter("all"); setAssigneeFilter("all"); setShowDashboard(false); setOpsPage(null); }}>
-                  <BrandBadge source={brand} /><strong>{count}</strong><span>active tickets</span>
-                </button>
-              ); })}
-            </div>
-            <div className="dashboard-kpi-grid">
-              <div className="dashboard-kpi"><span>Active</span><strong>{counts.active}</strong></div>
-              <div className="dashboard-kpi"><span>Needs attention</span><strong>{counts.overdue + counts.unassigned}</strong></div>
-              <div className="dashboard-kpi"><span>Overdue</span><strong>{counts.overdue}</strong></div>
-              <div className="dashboard-kpi"><span>High priority</span><strong>{dashboardScopedTickets.filter(t => t.status !== "Closed" && String(t.priority || "").toLowerCase() === "high").length}</strong></div>
-              <div className="dashboard-kpi"><span>Due today</span><strong>{dashboardScopedTickets.filter(t => t.status !== "Closed" && t.due_date && new Date(t.due_date).toDateString() === new Date().toDateString()).length}</strong></div>
-              <div className="dashboard-kpi"><span>Favorites</span><strong>{favoriteCount}</strong></div>
-            </div>
-            <div className="dashboard-section-card">
-              <div className="dashboard-section-title">{assigneeFilter === "all" ? "Your tickets" : assigneeFilter === "mine" ? "Your tickets" : `${teamMemberOptions.find((member) => member.email === assigneeFilter)?.name || "Team member"}’s tickets`}</div>
-              {dashboardScopedTickets.filter(t => t.status !== "Closed").slice(0, 8).map(ticket => (
-                <button key={ticket.ticket_key} type="button" className="dashboard-ticket-row" onClick={() => { setSelectedKey(ticket.ticket_key); setShowDashboard(false); setOpsPage(null); setFilter("all"); }}>
-                  <BrandBadge source={ticket.source} /><span className="dashboard-ticket-subject">#{ticket.ticket_number} · {ticket.subject || "Untitled ticket"}</span><StatusBadge status={ticket.status} /><span>{isOverdue(ticket) ? "Overdue" : getTicketOwnerName(ticket) || "Unassigned"}</span>
-                </button>
-              ))}
-            </div>
-          </section>
+          <MarketingDashboard tickets={tickets.filter(isVisibleMarketingTicket)} session={session}
+            onOpen={t => { setTickets(current => current.some(row => row.ticket_key === t.ticket_key) ? current : [...current, t]); setBrandFilter("all"); setDepartmentFilter("all"); setAssigneeFilter("all"); setSearch(""); setFilter(t.status === "Closed" ? "closed" : "all"); setTicketViewMode("compact"); setSelectedKey(t.ticket_key); setOpsPage(null); setShowDashboard(false); }}
+            onNavigate={page => { setOpsPage(page); setShowDashboard(true); setShowNotifications(false); setShowReminders(false); }}
+            onFind={() => document.dispatchEvent(new KeyboardEvent("keydown", {key:"k", ctrlKey:true, bubbles:true}))} />
         ) : !selected ? (
           <div className="conversation-empty">
 
@@ -8507,6 +8590,8 @@ function App() {
               <TicketOperations key={selected.ticket_key} ticket={selected} tickets={tickets.filter(isVisibleMarketingTicket)} session={session} threads={threads} comments={comments}
                 onOpen={t => { setFilter(t.status === "Closed" ? "closed" : "all"); setBrandFilter("all"); setAssigneeFilter("all"); setDepartmentFilter("all"); setSearch(""); setTicketViewMode("compact"); setSelectedKey(t.ticket_key); }}
                 onDue={async due => { const {data,error} = await supabase.functions.invoke("update-zoho-ticket", {body:{ticket_key:selected.ticket_key,changes:{dueDate:due}}}); if(error || !data?.success) throw new Error(data?.error || error?.message || "Due date update failed"); await loadTickets(selected.ticket_key); }} />
+              <TicketKudos key={`kudos-${selected.ticket_key}`} ticket={selected} session={session} people={teamMemberOptions} />
+
               <Detail label="Due date">
 
                 <input
