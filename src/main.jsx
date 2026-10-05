@@ -650,6 +650,90 @@ function RecipientLine({
   );
 }
 
+const SIGNATURE_BRANDS = ["Tutor Doctor", "Qualicare", "Code Wiz"];
+function sanitizeSignatureHtml(value) {
+  const doc = new DOMParser().parseFromString(String(value || ""), "text/html");
+  const allowed = new Set(["P","DIV","SPAN","BR","B","STRONG","I","EM","U","A","IMG","TABLE","TBODY","THEAD","TR","TD","TH","UL","OL","LI","HR"]);
+  const styles = new Set(["color","background-color","font-family","font-size","font-weight","font-style","text-decoration","text-align","line-height","padding","padding-top","padding-bottom","padding-left","padding-right","margin","margin-top","margin-bottom","border","border-top","border-bottom","border-left","border-right","border-collapse","vertical-align","width","height","max-width"]);
+  for (const element of [...doc.body.querySelectorAll("*")]) {
+    if (["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","SVG","MATH","FORM","INPUT","BUTTON","META","LINK"].includes(element.tagName)) { element.remove(); continue; }
+    if (!allowed.has(element.tagName)) { element.replaceWith(...element.childNodes); continue; }
+    for (const attr of [...element.attributes]) {
+      const name = attr.name.toLowerCase();
+      if (name === "style") {
+        const safe = [...element.style].filter(key => styles.has(key)).map(key => [key, element.style.getPropertyValue(key)])
+          .filter(([,val]) => !/url\s*\(|expression|javascript|@import/i.test(val));
+        element.removeAttribute("style"); safe.forEach(([key,val]) => element.style.setProperty(key,val));
+      } else if (name === "href" && element.tagName === "A") {
+        if (!/^(https?:\/\/|mailto:|tel:)/i.test(attr.value.trim())) element.removeAttribute(attr.name);
+      } else if (name === "src" && element.tagName === "IMG") {
+        if (!/^https:\/\//i.test(attr.value.trim())) element.removeAttribute(attr.name);
+      } else if (!["alt","title","width","height","colspan","rowspan","cellpadding","cellspacing","border"].includes(name)) element.removeAttribute(attr.name);
+    }
+    if (element.tagName === "IMG" && !element.hasAttribute("src")) element.remove();
+  }
+  return doc.body.innerHTML;
+}
+function withoutHubSignature(html) {
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  doc.body.querySelectorAll("[data-hub-signature]").forEach(node => node.remove());
+  return doc.body.innerHTML;
+}
+function MySignatures({session, signatures, loadError, onSaved, onClose}) {
+  const [brand, setBrand] = useState("Tutor Doctor");
+  const [html, setHtml] = useState("");
+  const [automatic, setAutomatic] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const box = useRef(null);
+  useEffect(() => {
+    const saved = signatures[brand];
+    const next = sanitizeSignatureHtml(saved?.html || "");
+    setHtml(next); setAutomatic(saved?.automatic !== false);
+    if (box.current) box.current.innerHTML = next;
+  }, [brand, signatures]);
+  useEffect(() => {
+    const key = event => { if (event.key === "Escape" && !busy) onClose(); };
+    document.addEventListener("keydown", key); return () => document.removeEventListener("keydown", key);
+  }, [busy, onClose]);
+  async function save() {
+    setBusy(true); setMessage("");
+    const cleaned = sanitizeSignatureHtml(box.current?.innerHTML || "");
+    try {
+      if (cleaned.length > 50000) throw new Error("Signature is too large. Use hosted logo images instead of embedded images.");
+      const {error} = await supabase.from("hub_user_signatures").upsert({user_id:session.user.id, brand, html:cleaned, automatic, updated_at:new Date().toISOString()}, {onConflict:"user_id,brand"});
+      if (error) throw error;
+      onSaved(brand, {html:cleaned, automatic}); setHtml(cleaned);
+      if (box.current) box.current.innerHTML = cleaned;
+      setMessage("Signature saved.");
+    } catch (error) { setMessage(error.message || "Unable to save signature."); }
+    finally { setBusy(false); }
+  }
+  function paste(event) {
+    event.preventDefault();
+    const raw = event.clipboardData.getData("text/html");
+    const plain = event.clipboardData.getData("text/plain");
+    if (raw) document.execCommand("insertHTML",false,sanitizeSignatureHtml(raw));
+    else document.execCommand("insertText",false,plain);
+    setHtml(sanitizeSignatureHtml(box.current.innerHTML));
+  }
+  return <div className="hub-signature-backdrop"><section className="hub-signature-modal" role="dialog" aria-modal="true" aria-labelledby="signature-title">
+    <header><div><p className="hub-signature-eyebrow">PERSONAL SETTINGS</p><h2 id="signature-title">My Signatures</h2><p>Save your own email signature for each brand.</p></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close signatures">✕</button></header>
+    <div className="hub-signature-tabs">{SIGNATURE_BRANDS.map(name=><button type="button" disabled={busy} className={brand===name?"active":""} key={name} onClick={()=>{setMessage("");setBrand(name);}}>{name}</button>)}</div>
+    {loadError&&<p role="alert">Signatures could not be loaded: {loadError}</p>}
+    <p>Paste your existing signature below, including its formatting and logo. Images need a public HTTPS URL.</p>
+    <div className="hub-signature-tools">{[["bold","Bold"],["italic","Italic"],["underline","Underline"]].map(([command,label])=><button type="button" disabled={busy} key={command} onMouseDown={event=>{event.preventDefault();box.current?.focus();document.execCommand(command);setHtml(sanitizeSignatureHtml(box.current.innerHTML));}}>{label}</button>)}
+      <button type="button" disabled={busy} onClick={()=>{const url=window.prompt("Link URL (https://, mailto:, or tel:)");if(!url)return;box.current?.focus();document.execCommand("createLink",false,url);const clean=sanitizeSignatureHtml(box.current.innerHTML);box.current.innerHTML=clean;setHtml(clean);}}>Add link</button>
+      <button type="button" disabled={busy} onClick={()=>{const url=window.prompt("Public HTTPS logo image URL");if(!url||!/^https:\/\//i.test(url.trim()))return;box.current?.focus();document.execCommand("insertImage",false,url.trim());setHtml(sanitizeSignatureHtml(box.current.innerHTML));}}>Add logo</button>
+      <button type="button" disabled={busy} onClick={()=>{box.current.innerHTML="";setHtml("");}}>Clear</button>
+    </div>
+    <div ref={box} className="hub-signature-editor" contentEditable={!busy} suppressContentEditableWarning onPaste={paste} onInput={event=>setHtml(sanitizeSignatureHtml(event.currentTarget.innerHTML))} role="textbox" aria-label={`${brand} signature`} aria-multiline="true" />
+    <label className="hub-signature-auto"><input type="checkbox" disabled={busy} checked={automatic} onChange={event=>setAutomatic(event.target.checked)} />Automatically add to new replies, Reply All and forwards for {brand}</label>
+    <h3>Email preview</h3><div className="hub-signature-preview" dangerouslySetInnerHTML={{__html:sanitizeSignatureHtml(html)}} />
+    <footer><span role="status">{message}</span><button type="button" className="primary-button" disabled={busy||!!loadError} onClick={save}>{busy?"Saving…":"Save signature"}</button></footer>
+  </section></div>;
+}
+
 // ======================================================
 // LOGIN
 // ======================================================
@@ -993,6 +1077,11 @@ function App() {
   const [deleteBusy,setDeleteBusy]=useState(false);
   const [deleteNotice,setDeleteNotice]=useState("");
   const [opsPage, setOpsPage] = useState(null);
+  const [showSignatures, setShowSignatures] = useState(false);
+  const [signatures, setSignatures] = useState({});
+  const [signatureReady, setSignatureReady] = useState(false);
+  const [signatureError, setSignatureError] = useState("");
+  const signatureAttempt = useRef(null);
 
   const editorRef =
     useRef(null);
@@ -1019,6 +1108,21 @@ function App() {
     useState(null);
 
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(INITIAL_PASSWORD_SETUP);
+  useEffect(() => {
+    let cancelled = false;
+    setSignatures({}); setSignatureReady(false); setSignatureError("");
+    if (!session?.user?.id) return;
+    (async () => {
+      try {
+        const {data,error} = await supabase.from("hub_user_signatures").select("brand,html,automatic").eq("user_id",session.user.id);
+        if (error) throw error;
+        if (!cancelled) setSignatures(Object.fromEntries((data || []).map(row=>[row.brand,{html:sanitizeSignatureHtml(row.html),automatic:row.automatic}])));
+      } catch (error) { if (!cancelled) setSignatureError(error.message || "Unable to load signatures"); }
+      finally { if (!cancelled) setSignatureReady(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
+
 
   const [
     authLoading,
@@ -2881,6 +2985,7 @@ function App() {
       setShowCc(false);
       setShowBcc(false);
 
+      signatureAttempt.current = null;
       setEditorHtml("");
       setPendingFiles([]);
 
@@ -2903,6 +3008,21 @@ function App() {
     selectedKey,
     resetComposer,
   ]);
+
+  function insertBrandSignature() {
+    const signature = signatures[selected?.source];
+    if (!editorRef.current || !signature?.html) { setComposerNotice("Save a signature for this brand in My Signatures first."); return; }
+    const content = withoutHubSignature(editorRef.current.innerHTML);
+    const html = `${content || "<p><br></p>"}<div data-hub-signature="true">${sanitizeSignatureHtml(signature.html)}</div><p><br></p>`;
+    editorRef.current.innerHTML = html; setEditorHtml(html);
+    signatureAttempt.current = selected.ticket_key;
+  }
+  useEffect(() => {
+    if (!signatureReady || !selected || !editorRef.current || signatureAttempt.current === selected.ticket_key) return;
+    signatureAttempt.current = selected.ticket_key;
+    const signature = signatures[selected.source];
+    if (signature?.automatic && signature.html) insertBrandSignature();
+  }, [selectedKey, signatureReady, signatures, showDashboard, opsPage, resetComposer]);
 
   function scrollToComposer() {
     window.setTimeout(
@@ -3271,7 +3391,7 @@ function App() {
       editorHtml;
 
     if (
-      !stripHtml(html)
+      !stripHtml(withoutHubSignature(html))
     ) {
       setComposerNotice(
         "Write a message before sending."
@@ -3416,6 +3536,7 @@ function App() {
         successText
       );
 
+      signatureAttempt.current = null;
       setEditorHtml("");
 
       if (
@@ -5487,6 +5608,8 @@ function App() {
     <div className={`app-shell ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
       <CompletionCelebration session={session} />
+      {showSignatures && <MySignatures session={session} signatures={signatures} loadError={signatureError} onClose={()=>setShowSignatures(false)}
+        onSaved={(brand,signature)=>setSignatures(current=>({...current,[brand]:signature}))} />}
 
       {/* SIDEBAR */}
 
@@ -5814,6 +5937,7 @@ function App() {
 
         <HubSyncHealth session={session} />
 
+        <button type="button" className="hub-my-signatures" onClick={()=>setShowSignatures(true)}>✍️ My Signatures</button>
         <div className="sidebar-footer">
 
           <div className="user-avatar">
@@ -7096,6 +7220,7 @@ function App() {
                 </div>
 
                 <div className="rich-toolbar">
+                  <button type="button" disabled={composerBusy || !signatureReady} onMouseDown={event=>{event.preventDefault();insertBrandSignature();}}>✍️ Insert signature</button>
 
                   <button
                     type="button"
