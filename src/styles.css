@@ -3518,3 +3518,45 @@ button:hover {
   background: var(--codewiz-soft) !important;
   box-shadow: inset 3px 0 0 var(--codewiz) !important;
 }
+
+/* ======================================================
+   PASSWORD AUTHENTICATION
+   ====================================================== */
+.login-secondary-button {
+  width: 100%;
+  height: 38px;
+  margin-top: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--csg-blue);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.login-secondary-button:hover {
+  background: #f7faff;
+}
+
+.login-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.login-links button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--csg-blue);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.login-links button:hover {
+  text-decoration: underline;
+}
