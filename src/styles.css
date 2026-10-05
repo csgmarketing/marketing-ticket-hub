@@ -3473,42 +3473,30 @@ button:hover {
   .compact-ticket-owner{display:none}
 }
 
-/* FINAL BRAND COLOR OVERRIDES — keep the TD preview and label in brand red */
+/* FINAL BRAND COLOR OVERRIDES — brand-colored mark, black brand name */
 .brand-badge.brand-qualicare .brand-mark {
   color: var(--qualicare) !important;
+  background: var(--qualicare-soft) !important;
+  border-color: var(--qualicare-border) !important;
 }
-
 .brand-badge.brand-qualicare .brand-name {
   color: #000 !important;
 }
 
-.brand-badge.brand-qualicare .brand-mark {
-  background: var(--qualicare-soft) !important;
-  border-color: var(--qualicare-border) !important;
-}
-
 .brand-badge.brand-tutordoctor .brand-mark {
   color: var(--tutordoctor) !important;
+  background: var(--tutordoctor-soft) !important;
+  border-color: var(--tutordoctor-border) !important;
 }
-
 .brand-badge.brand-tutordoctor .brand-name {
   color: #000 !important;
 }
 
-.brand-badge.brand-tutordoctor .brand-mark {
-  background: var(--tutordoctor-soft) !important;
-  border-color: var(--tutordoctor-border) !important;
-}
-
 .brand-badge.brand-codewiz .brand-mark {
   color: var(--codewiz) !important;
-}
-
-.brand-badge.brand-codewiz .brand-name {
-  color: #000 !important;
-}
-
-.brand-badge.brand-codewiz .brand-mark {
   background: var(--codewiz-soft) !important;
   border-color: var(--codewiz-border) !important;
+}
+.brand-badge.brand-codewiz .brand-name {
+  color: #000 !important;
 }
