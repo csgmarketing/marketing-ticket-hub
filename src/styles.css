@@ -3954,3 +3954,174 @@ button:hover {
     display:none;
   }
 }
+
+/* ======================================================
+   CLASSIC VIEW — QUICK OWNER ASSIGNMENT
+   ====================================================== */
+.app-shell.classic-mode .classic-ticket-owner-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+  min-width:0;
+  overflow:visible;
+}
+.app-shell.classic-mode .classic-ticket-owner{
+  width:auto;
+  min-width:0;
+  height:38px;
+  padding:3px 8px 3px 3px;
+  border:1px solid #d6dee8;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  background:#fff;
+  color:#334155;
+  cursor:pointer;
+  transition:background .12s ease,border-color .12s ease,box-shadow .12s ease;
+}
+.app-shell.classic-mode .classic-ticket-owner:hover,
+.app-shell.classic-mode .classic-ticket-owner.active{
+  background:#f8fbff;
+  border-color:#9bb9d5;
+  box-shadow:0 2px 8px rgba(15,23,42,.08);
+}
+.app-shell.classic-mode .classic-ticket-owner-avatar{
+  width:30px;
+  height:30px;
+  flex:0 0 30px;
+  border:0;
+}
+.app-shell.classic-mode .classic-ticket-owner-name{
+  max-width:135px;
+}
+.classic-assignment-menu{
+  position:absolute;
+  z-index:100;
+  top:calc(100% + 7px);
+  right:0;
+  width:270px;
+  max-height:390px;
+  overflow:auto;
+  padding:7px;
+  border:1px solid #dbe3ec;
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 14px 34px rgba(15,23,42,.16),0 2px 7px rgba(15,23,42,.08);
+}
+.classic-assignment-title{
+  padding:5px 8px 7px;
+  color:#64748b;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.classic-assignment-option{
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:8px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  text-align:left;
+  cursor:pointer;
+}
+.classic-assignment-option:hover{background:#f4f7fb}
+.classic-assignment-option.selected{background:#edf4fb}
+.classic-assignment-option:disabled{opacity:.55;cursor:wait}
+.classic-assignment-avatar{
+  width:30px;
+  height:30px;
+  flex:0 0 30px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #d6dee8;
+  border-radius:50%;
+  background:#fff;
+  color:#334155;
+  font-size:9px;
+  font-weight:800;
+}
+.classic-assignment-option > span:last-child{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.classic-assignment-option strong{
+  color:#1e293b;
+  font-size:11px;
+  line-height:1.25;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.classic-assignment-option small{
+  color:#94a3b8;
+  font-size:9px;
+  line-height:1.2;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.app-shell.classic-mode .ticket-row-classic{
+  overflow:visible;
+}
+
+@media (max-width:760px){
+  .classic-assignment-menu{position:fixed;right:12px;width:min(270px,calc(100vw - 24px))}
+}
+
+/* ======================================================
+   BOARD VIEW — ZOHO-STYLE KANBAN
+   ====================================================== */
+.ticket-view-switcher button{white-space:nowrap}
+.app-shell.board-mode .ticket-column{min-width:0}
+.ticket-board{display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:0;min-height:calc(100vh - 190px);background:#e8eef7;border-top:1px solid #dce4ee;overflow:hidden}
+.ticket-board-column{display:flex;flex-direction:column;min-width:0;border-right:1px solid #d4dde9;background:#e8eef7}
+.ticket-board-column:last-child{border-right:0}
+.ticket-board-column-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:0 20px;border-bottom:1px solid #d4dde9;background:#e8eef7;color:#111827}
+.ticket-board-column-header strong{font-size:14px;font-weight:700}
+.ticket-board-column-header span{font-size:12px;color:#64748b;font-weight:700}
+.ticket-board-column-body{flex:1;min-height:0;overflow:auto;padding:12px 12px 24px}
+.ticket-board-empty{min-height:240px;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;color:#64748b;font-size:13px;position:relative}
+.ticket-board-empty:before{content:"";position:absolute;top:74px;width:74px;height:74px;border:1px dashed #c8d4e3;border-radius:18px;opacity:.8}
+.ticket-board-card{position:relative;background:#fff;border:1px solid #e0e6ee;border-radius:8px;padding:14px 14px 12px;margin-bottom:12px;box-shadow:0 1px 2px rgba(15,23,42,.04);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease}
+.ticket-board-card:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(15,23,42,.08);border-color:#cbd5e1}
+.ticket-board-card.brand-qualicare{border-top:3px solid var(--qualicare)}
+.ticket-board-card.brand-tutordoctor{border-top:3px solid var(--tutordoctor)}
+.ticket-board-card.brand-codewiz{border-top:3px solid var(--codewiz)}
+.ticket-board-card-top{display:flex;align-items:flex-start;gap:10px}
+.ticket-board-card-subject{flex:1;min-width:0;font-size:14px;line-height:1.32;font-weight:700;color:#111827;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ticket-board-owner{width:36px;height:36px;flex:0 0 36px;border:1px solid #cfd9e5;border-radius:50%;background:#fff;color:#334155;font-size:10px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.ticket-board-owner:hover,.ticket-board-owner.active{border-color:#2563eb;color:#1d4ed8;background:#f4f8ff}
+.ticket-board-card-meta{display:flex;align-items:center;gap:6px;margin-top:9px;color:#41577a;font-size:11px;min-width:0}
+.ticket-board-card-meta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticket-board-card-date{margin-top:8px;color:#64748b;font-size:11px}
+.ticket-board-card-footer{display:flex;align-items:center;gap:8px;margin-top:12px}
+.ticket-board-card-footer .status-badge{margin-right:auto}
+.ticket-board-activity{color:#64748b;font-size:11px;white-space:nowrap}
+.ticket-board-star{border:0;background:transparent;color:#94a3b8;font-size:18px;line-height:1;padding:3px 5px;cursor:pointer;border-radius:6px}
+.ticket-board-star:hover{background:#fff8e8;color:#f59e0b}
+.ticket-board-star.active{color:#f59e0b}
+.ticket-board-assignee{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:9px;border-top:1px solid #edf1f5;font-size:10px;color:#94a3b8}
+.ticket-board-assignee strong{color:#334155;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.board-assignment-menu{right:8px;left:auto;top:52px;z-index:30;max-height:360px;overflow:auto}
+.ticket-board-column.status-open .ticket-board-column-header{color:#0f172a}
+.ticket-board-column.status-escalated .ticket-board-column-header{color:#b42318}
+.ticket-board-column.status-waiting .ticket-board-column-header{color:#7c4a03}
+.ticket-board-column.status-closed .ticket-board-column-header{color:#64748b}
+
+@media (max-width:1200px){
+  .ticket-board{grid-template-columns:repeat(2,minmax(250px,1fr));overflow:auto}
+  .ticket-board-column{min-height:520px}
+}
+@media (max-width:720px){
+  .ticket-board{grid-template-columns:1fr}
+  .ticket-board-column{min-height:420px}
+}
