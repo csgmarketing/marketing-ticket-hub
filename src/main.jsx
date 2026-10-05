@@ -808,54 +808,89 @@ function hubUrgency(t, now=new Date()) {
   return due<now ? `Overdue by ${span}` : `Due ${hubSameDay(due,now) ? "today" : hubSameDay(due,new Date(+now+86400000)) ? "tomorrow" : `in ${span}`}`;
 }
 function hubAttention(t,now=new Date()) { const updated=hubDate(t.updated_at_zoho || t.created_at_zoho); return !HUB_CLOSED(t) && (hubDate(t.due_date)<now && !!hubDate(t.due_date) || String(t.priority).toLowerCase()==="high" && updated && now-updated>172800000); }
-function HubOperations({page,tickets,session,filters,onView,onOpen,onDue}) {
-  const [views,setViews]=useState([]), [notice,setNotice]=useState(""), [busy,setBusy]=useState(false);
-  const [name,setName]=useState(""), [shared,setShared]=useState(false), [brand,setBrand]=useState("all"), [owner,setOwner]=useState("all");
-  const [date,setDate]=useState(hubLocalInput(new Date()).slice(0,10)), [mode,setMode]=useState("month"), [metric,setMetric]=useState(null);
+function HubOperations({page,tickets,session,onOpen,onDue}) {
+  const [notice,setNotice]=useState(""), [busy,setBusy]=useState(false);
+  const [brand,setBrand]=useState("all"), [owner,setOwner]=useState("all");
+  const [date,setDate]=useState(hubLocalInput(new Date()).slice(0,10)), [mode,setMode]=useState("month");
   const [now,setNow]=useState(new Date());
   useEffect(()=>{const id=setInterval(()=>setNow(new Date()),60000);return()=>clearInterval(id);},[]);
-  useEffect(()=>{let live=true; setNotice(""); supabase.from("hub_saved_views").select("*").order("name").then(({data,error})=>{if(live){setViews(data||[]);if(error)setNotice(`Saved views unavailable: ${error.message}. Run the supplied migration.`);}});return()=>{live=false;};},[session?.user?.id]);
   const people=[...new Map(tickets.filter(t=>getTicketOwnerEmail(t)).map(t=>[getTicketOwnerEmail(t).toLowerCase(),{email:getTicketOwnerEmail(t).toLowerCase(),name:getTicketOwnerName(t)}])).values()];
-  const scoped=tickets.filter(t=>(brand==="all" || t.source===brand) && (owner==="all" || String(getTicketOwnerEmail(t)).toLowerCase()===owner));
+  const scoped=tickets.filter(t=>(brand==="all" || t.source===brand) && (page==="My Week" || owner==="all" || String(getTicketOwnerEmail(t)).toLowerCase()===owner));
   const active=scoped.filter(t=>!HUB_CLOSED(t));
-  const email=String(session?.user?.email||"").toLowerCase();
-  const weekStart=new Date(now);weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
-  const weekEnd=new Date(+weekStart+7*86400000);
-  async function saveView(e){e.preventDefault();if(busy || !name.trim())return;setBusy(true);const {data,error}=await supabase.from("hub_saved_views").insert({name:name.trim(),user_id:session.user.id,shared,filters}).select().single();if(error)setNotice(error.message);else{setViews(v=>[...v,data]);setName("");setNotice("View saved.");}setBusy(false);}
-  async function removeView(v){setBusy(true);const {error}=await supabase.from("hub_saved_views").delete().eq("id",v.id);if(error)setNotice(error.message);else setViews(rows=>rows.filter(r=>r.id!==v.id));setBusy(false);}
-  const list=(rows)=> rows.length ? rows.map(t=><button type="button" className="hub-ticket" key={t.ticket_key} onClick={()=>onOpen(t)}><BrandBadge source={t.source}/><span>#{t.ticket_number} · {t.subject || "Untitled"}<small>{getTicketOwnerName(t)||"Unassigned"}</small></span><span className={hubAttention(t,now)?"hub-danger":""}>{hubUrgency(t,now)}</span></button>):<p className="hub-muted">No tickets in this group.</p>;
-  const presets=[["My Open Tickets",{filter:"mine"}],["Unassigned",{filter:"unassigned"}],["Due Today",{filter:"duetoday"}],["Overdue",{filter:"overdue"}],["High Priority",{filter:"highpriority"}],["Waiting for Requester",{filter:"waiting"}],...["Tutor Doctor","Code Wiz","Qualicare"].map(b=>[b,{brandFilter:b}])];
+  const list=rows=>rows.length ? rows.map(t=><button type="button" className="hub-ticket" key={t.ticket_key} onClick={()=>onOpen(t)}><BrandBadge source={t.source}/><span>#{t.ticket_number} · {t.subject || "Untitled"}<small>{getTicketOwnerName(t)||"Unassigned"}</small></span><span className={hubAttention(t,now)?"hub-danger":""}>{hubUrgency(t,now)}</span></button>):<p className="hub-muted">No tickets in this group.</p>;
   const chosen=hubDate(`${date}T12:00:00`)||now;
   let start=new Date(chosen),days=1;
   if(mode==="month"){start=new Date(chosen.getFullYear(),chosen.getMonth(),1);start.setDate(start.getDate()-((start.getDay()+6)%7));days=42;}
   if(mode==="week"){start.setDate(start.getDate()-((start.getDay()+6)%7));days=7;}
   function move(delta){const next=new Date(chosen);if(mode==="month")next.setMonth(next.getMonth()+delta,1);else next.setDate(next.getDate()+delta*(mode==="week"?7:1));setDate(hubLocalInput(next).slice(0,10));}
-  return <section className="dashboard-view hub-operations"><div className="dashboard-header"><div><div className="dashboard-eyebrow">MARKETING OPERATIONS</div><h1>{page}</h1><p>Plan deadlines, balance work, and keep every request moving.</p></div></div>
+  return <section className={`dashboard-view hub-operations ${page==="My Week"?"hub-week-page":""}`}>
+    {page==="Calendar" && <div className="dashboard-header"><div><div className="dashboard-eyebrow">MARKETING OPERATIONS</div><h1>Calendar</h1><p>Your team's deadlines, in one place.</p></div></div>}
     {notice && <p role="status" className="hub-notice">{notice}</p>}
-    {page==="Saved Views" ? <><form className="hub-toolbar" onSubmit={saveView}><input aria-label="View name" maxLength={100} placeholder="Name this view" value={name} onChange={e=>setName(e.target.value)}/><label><input type="checkbox" checked={shared} onChange={e=>setShared(e.target.checked)}/> Share with team</label><button disabled={busy||!name.trim()}>Save current filters</button></form><p className="hub-muted">Saves current filters, search and display mode. Views are personal unless shared.</p><div className="hub-view-grid">{presets.map(([label,f])=><button key={label} onClick={()=>onView({filter:"all",brandFilter:"all",assigneeFilter:"all",departmentFilter:"all",search:"",ticketViewMode:"compact",...f})}>{label}<small>Built-in view</small></button>)}{views.map(v=><div className="hub-saved" key={v.id}><button onClick={()=>onView(v.filters)}>{v.name}<small>{v.shared?"Shared team view":"Personal view"}</small></button>{v.user_id===session.user.id && <button disabled={busy} aria-label={`Delete ${v.name}`} onClick={()=>removeView(v)}>×</button>}</div>)}</div></> : <>
-      <div className="hub-toolbar"><select aria-label="Brand" value={brand} onChange={e=>{setBrand(e.target.value);setMetric(null);}}><option value="all">All brands</option>{[...new Set(tickets.map(t=>t.source))].map(b=><option key={b}>{b}</option>)}</select><select aria-label="Owner" value={owner} onChange={e=>{setOwner(e.target.value);setMetric(null);}}><option value="all">All owners</option>{people.map(p=><option key={p.email} value={p.email}>{p.name||p.email}</option>)}</select></div>
+    {page==="Calendar" && <div className="hub-toolbar"><select aria-label="Brand" value={brand} onChange={e=>setBrand(e.target.value)}><option value="all">All brands</option>{[...new Set(tickets.map(t=>t.source))].map(b=><option key={b}>{b}</option>)}</select><select aria-label="Owner" value={owner} onChange={e=>setOwner(e.target.value)}><option value="all">All owners</option>{people.map(p=><option key={p.email} value={p.email}>{p.name||p.email}</option>)}</select></div>}
       {page==="Calendar" && <><div className="hub-toolbar"><button onClick={()=>move(-1)}>Previous</button><input aria-label="Calendar date" type="date" value={date} onChange={e=>setDate(e.target.value)}/><button onClick={()=>move(1)}>Next</button>{["month","week","day"].map(m=><button key={m} aria-pressed={mode===m} onClick={()=>setMode(m)}>{m}</button>)}<button onClick={()=>setDate(hubLocalInput(now).slice(0,10))}>Today</button></div><p className="hub-muted">Drag a ticket to reschedule its Zoho deadline; the existing local time is preserved. On touch devices, edit the deadline inside the ticket.</p><div className={`hub-calendar hub-calendar-${mode}`}>{Array.from({length:days},(_,i)=>{const day=new Date(start);day.setDate(start.getDate()+i);const rows=scoped.filter(t=>hubSameDay(t.due_date,day));return <div key={i} className={`hub-day ${hubSameDay(day,now)?"hub-today":""}`} onDragOver={e=>e.preventDefault()} onDrop={async e=>{e.preventDefault();const key=e.dataTransfer.getData("text/plain"),t=tickets.find(t=>t.ticket_key===key);if(!t||busy)return;setBusy(true);try{const d=hubDate(t.due_date)||new Date(day);d.setFullYear(day.getFullYear(),day.getMonth(),day.getDate());await onDue(t,d.toISOString());setNotice("Zoho deadline updated.");}catch(err){setNotice(err.message);}finally{setBusy(false);}}}><strong>{day.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</strong>{rows.map(t=><button draggable={!busy} onDragStart={e=>e.dataTransfer.setData("text/plain",t.ticket_key)} className={`hub-calendar-ticket ${brandClass(t.source)}`} key={t.ticket_key} onClick={()=>onOpen(t)}>#{t.ticket_number} {t.subject}<small>{t.source} · {hubUrgency(t,now)}</small></button>)}</div>;})}</div><details><summary>No due date ({active.filter(t=>!hubDate(t.due_date)).length})</summary>{list(active.filter(t=>!hubDate(t.due_date)))}</details></>}
-      {page==="My Week" && (()=>{const mine=scoped.filter(t=>String(getTicketOwnerEmail(t)).toLowerCase()===email),open=mine.filter(t=>!HUB_CLOSED(t));return [["Overdue",open.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now)],["Due today",open.filter(t=>hubSameDay(t.due_date,now))],["Due this week",open.filter(t=>hubDate(t.due_date)>=weekStart&&hubDate(t.due_date)<weekEnd)],["Waiting on someone",open.filter(t=>/waiting|hold/i.test(t.status))],["Recently updated",mine.filter(t=>hubDate(t.updated_at_zoho)>=weekStart)],["Completed this week",mine.filter(t=>HUB_CLOSED(t)&&hubDate(t.closed_at_zoho)>=weekStart&&hubDate(t.closed_at_zoho)<weekEnd)]].map(([title,rows])=><section className="dashboard-section-card" key={title}><h3>{title} <small>{rows.length}</small></h3>{list(rows)}</section>);})()}
-      {page==="Workload" && <><div className="dashboard-kpi-grid">{[["Open backlog",active],["Created this week",scoped.filter(t=>hubDate(t.created_at_zoho)>=weekStart&&hubDate(t.created_at_zoho)<=now)],["Completed this week",scoped.filter(t=>HUB_CLOSED(t)&&hubDate(t.closed_at_zoho)>=weekStart&&hubDate(t.closed_at_zoho)<=now)],["Overdue",active.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now)],["Due today",active.filter(t=>hubSameDay(t.due_date,now))],["Needs attention",active.filter(t=>hubAttention(t,now))]].map(([label,rows])=><button className="dashboard-kpi" key={label} onClick={()=>setMetric({label,rows})}><span>{label}</span><strong>{rows.length}</strong></button>)}</div><div className="dashboard-section-card hub-scroll"><h3>Team workload</h3><table className="hub-table"><thead><tr><th>Team member</th>{["Active","In progress","Waiting","Overdue"].map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{[...people,{email:"",name:"Unassigned"}].map(p=>{const owned=active.filter(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===p.email);const groups=[owned,owned.filter(t=>/progress/i.test(t.status)),owned.filter(t=>/waiting|hold/i.test(t.status)),owned.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now)];return <tr key={p.email}><th>{p.name||p.email}</th>{groups.map((rows,i)=><td key={i}><button onClick={()=>setMetric({label:`${p.name} · ${["Active","In progress","Waiting","Overdue"][i]}`,rows})}>{rows.length}</button></td>)}</tr>;})}</tbody></table></div><div className="hub-view-grid">{["source","priority","status"].map(field=><section className="dashboard-section-card" key={field}><h3>By {field==="source"?"brand":field}</h3>{[...new Set(active.map(t=>t[field]||"Unspecified"))].map(v=>{const rows=active.filter(t=>(t[field]||"Unspecified")===v);return <button className="hub-bar" key={v} onClick={()=>setMetric({label:v,rows})}><span>{v}</span><meter min="0" max={Math.max(active.length,1)} value={rows.length}/><strong>{rows.length}</strong></button>;})}</section>)}</div>{metric&&<section className="dashboard-section-card"><h3>{metric.label}</h3>{list(metric.rows)}</section>}<p className="hub-muted">Metrics use loaded tickets. Completion metrics require Zoho closed_at_zoho; missing dates are excluded. Needs attention flags overdue work and high-priority work with no activity for 48 hours.</p></>}
-    </>}
+
+    {page==="My Week" && <MyWeekWorkspace tickets={tickets} session={session} now={now} onOpen={onOpen} />}
   </section>;
 }
-function TicketOperations({ticket,tickets,session,threads,comments,onOpen,onDue}) {
-  const [activity,setActivity]=useState([]),[links,setLinks]=useState([]),[rules,setRules]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[summary,setSummary]=useState("");
-  const [target,setTarget]=useState(""),[relation,setRelation]=useState("related"),[tab,setTab]=useState("activity");
+function MyWeekWorkspace({tickets,session,now,onOpen}) {
+  const [brand,setBrand]=useState("all"),[focus,setFocus]=useState("all");
+  const email=String(session?.user?.email||"").toLowerCase();
+  const mine=tickets.filter(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===email && (brand==="all"||t.source===brand));
+  const open=mine.filter(t=>!HUB_CLOSED(t));
+  const weekStart=new Date(now);weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
+  const weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+7);
+  const todayStart=new Date(now);todayStart.setHours(0,0,0,0);
+  const tomorrow=new Date(todayStart);tomorrow.setDate(tomorrow.getDate()+1);
+  const overdue=open.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now);
+  const today=open.filter(t=>hubSameDay(t.due_date,now));
+  const upcoming=open.filter(t=>hubDate(t.due_date)>=tomorrow&&hubDate(t.due_date)<weekEnd);
+  const waiting=open.filter(t=>/waiting|hold/i.test(t.status));
+  const completed=mine.filter(t=>HUB_CLOSED(t)&&hubDate(t.closed_at_zoho)>=weekStart&&hubDate(t.closed_at_zoho)<=now);
+  const noDate=open.filter(t=>!hubDate(t.due_date));
+  const groups=[{id:"overdue",title:"Needs attention",subtitle:"Past their deadline",rows:overdue,tone:"rose",icon:"clock",empty:"You're caught up. No overdue tickets."},{id:"today",title:"Today's focus",subtitle:"Your deadlines for today",rows:today,tone:"blue",icon:"week",empty:"No deadlines today. A little room to get ahead."},{id:"upcoming",title:"Coming up",subtitle:"Later this week",rows:upcoming,tone:"violet",icon:"calendar",empty:"No more deadlines scheduled this week."},{id:"waiting",title:"Waiting on others",subtitle:"Waiting or on hold",rows:waiting,tone:"amber",icon:"mention",empty:"No tickets waiting on someone else."},{id:"completed",title:"Completed this week",subtitle:"Your progress since Monday",rows:completed,tone:"green",icon:"tickets",empty:"Completed tickets with a closure date will appear here."},{id:"nodate",title:"Ready to plan",subtitle:"Active tickets without a deadline",rows:noDate,tone:"slate",icon:"views",empty:"Every active ticket has a deadline."}];
+  const endLabel=new Date(weekEnd);endLabel.setDate(endLabel.getDate()-1);
+  const range=`${weekStart.toLocaleDateString(undefined,{month:"short",day:"numeric"})} – ${endLabel.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}`;
+  const sorted=rows=>[...rows].sort((a,b)=>(hubDate(a.due_date)?.getTime()||Infinity)-(hubDate(b.due_date)?.getTime()||Infinity));
+  const metrics=[{id:"overdue",label:"Overdue",count:overdue.length,tone:"rose",icon:"clock"},{id:"today",label:"Due today",count:today.length,tone:"blue",icon:"week"},{id:"upcoming",label:"Coming up",count:upcoming.length,tone:"violet",icon:"calendar"},{id:"completed",label:"Completed",count:completed.length,tone:"green",icon:"tickets"}];
+  return <>
+    <header className="hub-week-header"><div><div className="dashboard-eyebrow">YOUR WORKSPACE</div><h1>My Week<span className="hub-week-header-dot" /></h1><p>A clear view of what needs your attention.</p></div><div className="hub-week-range"><HubNavIcon name="calendar"/><span>{range}</span></div></header>
+    <div className="hub-week-metrics">{metrics.map(m=><button type="button" key={m.id} className={`hub-week-metric hub-tone-${m.tone} ${focus===m.id?"selected":""}`} aria-pressed={focus===m.id} onClick={()=>setFocus(f=>f===m.id?"all":m.id)}><span className="hub-week-metric-icon"><HubNavIcon name={m.icon}/></span><span className="hub-week-metric-value">{m.count}</span><span className="hub-week-metric-label">{m.label}</span><span className="hub-week-metric-arrow" aria-hidden="true">↗</span></button>)}</div>
+    <div className="hub-week-agenda" aria-label="Deadlines this week">{Array.from({length:7},(_,i)=>{const day=new Date(weekStart);day.setDate(day.getDate()+i);const rows=open.filter(t=>hubSameDay(t.due_date,day)),id=`day-${i}`;return <button type="button" key={id} aria-pressed={focus===id} className={`hub-week-day ${hubSameDay(day,now)?"today":""} ${focus===id?"selected":""}`} onClick={()=>setFocus(f=>f===id?"all":id)}><span>{day.toLocaleDateString(undefined,{weekday:"short"})}</span><strong>{day.getDate()}</strong><small>{rows.length?`${rows.length} due`:"No deadlines"}</small>{hubSameDay(day,now)&&<i aria-hidden="true"/>}</button>;})}</div>
+    <div className="hub-week-controls"><div><h2>{focus==="all"?"Your priorities":"Focused view"}</h2><p>{open.length} active ticket{open.length===1?"":"s"} assigned to you</p></div><div className="hub-week-control-actions">{focus!=="all"&&<button type="button" onClick={()=>setFocus("all")}>Show everything</button>}<select aria-label="My Week brand" value={brand} onChange={e=>setBrand(e.target.value)}><option value="all">All brands</option>{[...new Set(tickets.map(t=>t.source))].map(b=><option key={b}>{b}</option>)}</select></div></div>
+    <div className="hub-week-grid">{(focus.startsWith("day-")?(()=>{const day=new Date(weekStart);day.setDate(day.getDate()+Number(focus.slice(4)));return [{id:focus,title:day.toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}),subtitle:"Tickets due on this day",rows:open.filter(t=>hubSameDay(t.due_date,day)),tone:"blue",icon:"calendar",empty:"No deadlines on this day."}];})():groups.filter(g=>focus==="all"||g.id===focus)).map(g=><section key={g.id} className={`hub-week-card hub-tone-${g.tone}`}><header><span className="hub-week-group-icon"><HubNavIcon name={g.icon}/></span><div><h3>{g.title}</h3><p>{g.subtitle}</p></div><span className="hub-week-group-count">{g.rows.length}</span></header><div className="hub-week-card-list">{g.rows.length?sorted(g.rows).map(t=><button type="button" className="hub-week-ticket" key={t.ticket_key} onClick={()=>onOpen(t)}><div className="hub-week-ticket-top"><BrandBadge source={t.source}/><span>#{t.ticket_number}</span>{String(t.priority).toLowerCase()==="high"&&<span className="hub-week-high">High priority</span>}</div><strong>{t.subject||"Untitled ticket"}</strong><div className="hub-week-ticket-bottom"><span className="hub-week-status">{t.status}</span><span className={hubDate(t.due_date)&&hubDate(t.due_date)<now&&!HUB_CLOSED(t)?"hub-danger":""}>{hubUrgency(t,now)}</span></div></button>):<div className="hub-week-empty"><span aria-hidden="true">✓</span><p>{g.empty}</p></div>}</div></section>)}</div>
+    <p className="hub-week-footnote">Only tickets assigned to you are shown. A ticket can appear in more than one group. Completion counts use recorded closure dates.</p>
+  </>;
+}
+function TicketOperations({ticket,threads,comments,onDue}) {
+  const [activity,setActivity]=useState([]),[rules,setRules]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[summary,setSummary]=useState("");
+  const [tab,setTab]=useState("activity");
   const [now,setNow]=useState(new Date());
   useEffect(()=>{const id=setInterval(()=>setNow(new Date()),60000);return()=>clearInterval(id);},[]);
-  useEffect(()=>{let live=true;async function load(){const results=await Promise.all([supabase.from("hub_ticket_activity").select("*").eq("ticket_key",ticket.ticket_key).order("created_at",{ascending:false}).limit(200),supabase.from("hub_ticket_relationships").select("*").or(`ticket_key.eq.${ticket.ticket_key},related_ticket_key.eq.${ticket.ticket_key}`),supabase.from("hub_sla_rules").select("*")]);if(!live)return;setActivity(results[0].data||[]);setLinks(results[1].data||[]);setRules(results[2].data||[]);const failed=results.find(r=>r.error);if(failed)setNotice(`Planning data unavailable: ${failed.error.message}`);}load();const channel=supabase.channel(`hub-planning-${ticket.ticket_key}`).on("postgres_changes",{event:"*",schema:"public",table:"hub_ticket_activity",filter:`ticket_key=eq.${ticket.ticket_key}`},load).on("postgres_changes",{event:"*",schema:"public",table:"hub_ticket_relationships"},load).subscribe();return()=>{live=false;supabase.removeChannel(channel);};},[ticket.ticket_key]);
+  useEffect(()=>{let live=true;async function load(){const results=await Promise.all([supabase.from("hub_ticket_activity").select("*").eq("ticket_key",ticket.ticket_key).order("created_at",{ascending:false}).limit(200),supabase.from("hub_sla_rules").select("*")]);if(!live)return;setActivity(results[0].data||[]);setRules(results[1].data||[]);const failed=results.find(r=>r.error);if(failed)setNotice(`Planning data unavailable: ${failed.error.message}`);}load();const channel=supabase.channel(`hub-planning-${ticket.ticket_key}`).on("postgres_changes",{event:"*",schema:"public",table:"hub_ticket_activity",filter:`ticket_key=eq.${ticket.ticket_key}`},load).subscribe();return()=>{live=false;supabase.removeChannel(channel);};},[ticket.ticket_key]);
   const events=[...activity.map(a=>({key:`a-${a.id}`,date:a.created_at,text:`${a.actor || "Zoho sync"} · ${a.activity_type}: ${a.old_value||"—"} → ${a.new_value||"—"}`})),...threads.map(t=>({key:`t-${t.thread_key||t.id}`,date:t.created_at_zoho,text:`${t.author_name||t.from_email||"Email"} · Email: ${stripHtml(t.content||t.content_html||t.summary||"").slice(0,240)}`})),...comments.map(c=>({key:`c-${c.comment_key||c.id}`,date:c.commented_at_zoho,text:`${c.author_name||"Team"} · Comment: ${stripHtml(c.content||c.content_html||"").slice(0,240)}`}))].sort((a,b)=>(hubDate(b.date)||0)-(hubDate(a.date)||0));
   async function run(fn){if(busy)return;setBusy(true);setNotice("");try{await fn();}catch(err){setNotice(err.message);}finally{setBusy(false);}}
-  async function link(){const {data,error}=await supabase.from("hub_ticket_relationships").insert({ticket_key:ticket.ticket_key,related_ticket_key:target,relationship_type:relation,created_by:session.user.id}).select().single();if(error)throw error;setLinks(v=>[...v,data]);setTarget("");}
-  async function unlink(l){const {error}=await supabase.from("hub_ticket_relationships").delete().eq("id",l.id);if(error)throw error;setLinks(v=>v.filter(r=>r.id!==l.id));}
   async function applySla(){const matching=rules.filter(r=>(!r.brand||r.brand===ticket.source)&&r.priority.toLowerCase()===String(ticket.priority||"Normal").toLowerCase()).sort((a,b)=>Number(!!b.brand)-Number(!!a.brand));const rule=matching[0];if(!rule)throw new Error("No matching SLA rule. Configure hub_sla_rules first.");const d=hubDate(ticket.created_at_zoho);if(!d)throw new Error("Created date is missing; cannot calculate SLA.");if(rule.business_days){let remaining=rule.target;while(remaining>0){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)remaining--;}}else d.setHours(d.getHours()+rule.target);await onDue(d.toISOString());setNotice("SLA deadline saved to Zoho.");}
-  return <section className="hub-ticket-tools"><h3>Planning & activity</h3><p className={hubAttention(ticket,now)?"hub-danger":"hub-muted"}>{hubUrgency(ticket,now)}</p>{!ticket.due_date&&!HUB_CLOSED(ticket)&&<button disabled={busy} onClick={()=>run(applySla)}>Apply SLA deadline</button>}<div className="hub-toolbar">{["activity","related","summary"].map(t=><button key={t} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t}</button>)}</div>{notice&&<p role="status" className="hub-notice">{notice}</p>}
+  return <section className="hub-ticket-tools"><h3>Activity &amp; Summary</h3><p className={hubAttention(ticket,now)?"hub-danger":"hub-muted"}>{hubUrgency(ticket,now)}</p>{!ticket.due_date&&!HUB_CLOSED(ticket)&&<button disabled={busy} onClick={()=>run(applySla)}>Apply SLA deadline</button>}<div className="hub-toolbar">{["activity","summary"].map(t=><button key={t} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t === "activity" ? "Activity" : "Summary"}</button>)}</div>{notice&&<p role="status" className="hub-notice">{notice}</p>}
   {tab==="activity"&&<div className="hub-activity">{events.length?events.map(e=><article key={e.key}><time>{formatDateTime(e.date)}</time><p>{e.text}</p></article>):<p>No recorded activity yet. New field changes are recorded after migration.</p>}</div>}
-  {tab==="related"&&<><select aria-label="Related ticket" value={target} onChange={e=>setTarget(e.target.value)}><option value="">Select ticket</option>{tickets.filter(t=>t.ticket_key!==ticket.ticket_key).map(t=><option key={t.ticket_key} value={t.ticket_key}>#{t.ticket_number} {t.subject}</option>)}</select><select aria-label="Relationship" value={relation} onChange={e=>setRelation(e.target.value)}>{["related","duplicate","parent","child","blocks","blocked by"].map(r=><option key={r}>{r}</option>)}</select><button disabled={busy||!target} onClick={()=>run(link)}>Link ticket</button>{links.map(l=>{const outgoing=l.ticket_key===ticket.ticket_key,key=outgoing?l.related_ticket_key:l.ticket_key,t=tickets.find(t=>t.ticket_key===key);const inverse={parent:"child",child:"parent",blocks:"blocked by","blocked by":"blocks"};return <div className="hub-link" key={l.id}><button disabled={!t} onClick={()=>onOpen(t)}>{outgoing?l.relationship_type:inverse[l.relationship_type]||l.relationship_type}: {t?`#${t.ticket_number} ${t.subject}`:key}</button><button disabled={busy} aria-label="Unlink ticket" onClick={()=>run(()=>unlink(l))}>×</button></div>;})}</>}
   {tab==="summary"&&<><button disabled={busy} onClick={()=>run(async()=>{const {data,error}=await supabase.functions.invoke("hub-ticket-summary",{body:{ticket_key:ticket.ticket_key}});if(error||!data?.summary)throw new Error(data?.error||error?.message||"Summary unavailable. Deploy the supplied AI function.");setSummary(data.summary);})}>{busy?"Summarizing…":"✨ Summarize"}</button><p className="hub-muted">AI draft for review. Suggestions do not change tickets or send replies.</p>{summary&&<div className="hub-summary">{summary}</div>}</>}
   </section>;
+}
+
+function HubNavIcon({ name }) {
+  const paths = {
+    dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
+    week: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2 M8 15l3 3 5-5",
+    tickets: "M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5",
+    star: "m12 3 2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3L3 9.6l6.2-.9z",
+    bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4",
+    mention: "M16 8v8h2a4 4 0 0 0 4-4 10 10 0 1 0-4 8 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
+    clock: "M12 8v5l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
+    views: "M4 5h16 M4 12h16 M4 19h16 M9 3v4 M15 10v4 M8 17v4",
+    calendar: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2 M7 14h2 M12 14h2 M17 14h1 M7 18h2 M12 18h2",
+    workload: "M4 20V10 M10 20V4 M16 20v-8 M22 20H2",
+    unassigned: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 12-7 M18 16v6 M15 19h6",
+  };
+  return <svg className="hub-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.tickets} /></svg>;
 }
 
 function App() {
@@ -5347,134 +5382,68 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-section">
+        <div className="hub-dashboard-entry">
+          <button type="button" className={`hub-dashboard-nav ${showDashboard && !opsPage ? "active" : ""}`}
+            aria-current={showDashboard && !opsPage ? "page" : undefined}
+            onClick={() => { setOpsPage(null); setShowDashboard(true); setShowNotifications(false); setShowReminders(false); }}>
+            <span className="hub-dashboard-symbol"><HubNavIcon name="dashboard" /></span>
+            <span className="hub-dashboard-copy"><strong>Dashboard</strong><small>Marketing overview</small></span>
+            <span className="hub-dashboard-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
 
-          <div className="sidebar-label">
-            MY WORK
-          </div>
-          {["Saved Views", "Calendar", "My Week", "Workload"].map(page => (
-            <button key={page} className={`nav-item ${opsPage === page ? "active" : ""}`}
-              onClick={() => { setOpsPage(page); setShowDashboard(true); }}><span>{page}</span></button>
+        <div className="sidebar-section hub-nav-section">
+          <div className="sidebar-label">MY WORK</div>
+          <button type="button" className={`nav-item ${opsPage === "My Week" ? "active" : ""}`} aria-current={opsPage === "My Week" ? "page" : undefined}
+            onClick={() => { setOpsPage("My Week"); setShowDashboard(true); setShowNotifications(false); setShowReminders(false); }}>
+            <span className="hub-nav-label"><HubNavIcon name="week" />My Week</span>
+          </button>
+          <button type="button" className={`nav-item ${filter === "mine" && !showDashboard ? "active" : ""}`}
+            onClick={() => { setShowDashboard(false); setOpsPage(null); setFilter("mine"); setAssigneeFilter("all"); }}>
+            <span className="hub-nav-label"><HubNavIcon name="tickets" />My Tickets</span><span className="nav-count">{counts.mine}</span>
+          </button>
+          <button type="button" className={`nav-item ${filter === "favorites" && !showDashboard ? "active" : ""}`}
+            onClick={() => { setShowDashboard(false); setOpsPage(null); setFilter("favorites"); setAssigneeFilter("all"); }}>
+            <span className="hub-nav-label"><HubNavIcon name="star" />Favorites</span><span className="nav-count">{favoriteCount}</span>
+          </button>
+          <button type="button" className={`nav-item ${filter === "mentions" && !showDashboard ? "active" : ""}`}
+            onClick={() => { setShowDashboard(false); setOpsPage(null); setShowNotifications(false); setFilter("mentions"); setAssigneeFilter("all"); }}>
+            <span className="hub-nav-label"><HubNavIcon name="mention" />Mentions</span><span className={`nav-count ${unreadMentionCount ? "hub-unread-count" : ""}`}>{unreadMentionCount}</span>
+          </button>
+          <button type="button" className={`nav-item ${showNotifications ? "active" : ""}`} aria-expanded={showNotifications}
+            onClick={() => { setShowNotifications(current => !current); setShowReminders(false); }}>
+            <span className="hub-nav-label"><HubNavIcon name="bell" />Notifications</span><span className={`nav-count ${unreadNotificationCount ? "hub-unread-count" : ""}`}>{unreadNotificationCount}</span>
+          </button>
+          <button type="button" className={`nav-item ${showReminders ? "active" : ""}`} aria-expanded={showReminders}
+            onClick={() => { setShowReminders(current => !current); setShowNotifications(false); }}>
+            <span className="hub-nav-label"><HubNavIcon name="clock" />Reminders</span><span className="nav-count">{activeReminderCount}</span>
+          </button>
+        </div>
+
+        <div className="sidebar-section hub-nav-section">
+          <div className="sidebar-label">PLANNING</div>
+          {[["Calendar", "calendar"]].map(([page, icon]) => (
+            <button type="button" key={page} className={`nav-item ${opsPage === page ? "active" : ""}`}
+              aria-current={opsPage === page ? "page" : undefined}
+              onClick={() => { setOpsPage(page); setShowDashboard(true); setShowNotifications(false); setShowReminders(false); }}>
+              <span className="hub-nav-label"><HubNavIcon name={icon} />{page}</span>
+            </button>
           ))}
+        </div>
 
-
-          <button
-            className={`nav-item ${showDashboard ? "active" : ""}`}
-            onClick={() => { setOpsPage(null); setShowDashboard(true); }}
-          >
-            <span>Dashboard</span>
-          </button>
-
-          <button
-            className={`nav-item ${filter === "favorites" && !showDashboard ? "active" : ""}`}
-            onClick={() => { setShowDashboard(false); setOpsPage(null); setFilter("favorites"); setAssigneeFilter("all"); }}
-          >
-            <span>Favorites</span>
-            <span className="nav-count">{favoriteCount}</span>
-          </button>
-
-          <button
-            className={`nav-item ${
-              showNotifications
-                ? "active"
-                : ""
-            }`}
-            onClick={() =>
-              setShowNotifications(
-                (
-                  current
-                ) =>
-                  !current
-              )
-            }
-          >
-            <span>
-              Notifications
-            </span>
-
-            <span className="nav-count">
-              {
-                unreadNotificationCount
-              }
-            </span>
-          </button>
-
-          <button
-            className={`nav-item ${filter === "mentions" && !showDashboard ? "active" : ""}`}
-            onClick={() => {
-              setShowDashboard(false); setOpsPage(null);
-              setShowNotifications(false);
-              setFilter("mentions");
-              setAssigneeFilter("all");
-            }}
-          >
-            <span>Mentions</span>
-            <span className="nav-count">{unreadMentionCount}</span>
-          </button>
-
-          <button
-            className={`nav-item ${showReminders ? "active" : ""}`}
-            onClick={() => setShowReminders((current) => !current)}
-          >
-            <span>Reminders</span>
-            <span className="nav-count">{activeReminderCount}</span>
-          </button>
-
+        <div className="sidebar-section hub-nav-section">
+          <div className="sidebar-label">TICKETS</div>
           {[
-            [
-              "mine",
-              "My Tickets",
-              counts.mine,
-            ],
-            [
-              "all",
-              "Active Tickets",
-              counts.active,
-            ],
-            ...(assigneeFilter === "all"
-              ? [
-                  [
-                    "unassigned",
-                    "Unassigned",
-                    counts.unassigned,
-                  ],
-                ]
-              : []),
-            [
-              "overdue",
-              "Overdue",
-              counts.overdue,
-            ],
-          ].map(
-            (
-              [
-                id,
-                label,
-                count,
-              ]
-            ) => (
-              <button
-                key={id}
-                className={`nav-item ${
-                  filter === id
-                    ? "active"
-                    : ""
-                }`}
-                onClick={() => {
-                  setShowDashboard(false); setOpsPage(null);
-                  setFilter(id);
-                }}
-              >
-                <span>
-                  {label}
-                </span>
-
-                <span className="nav-count">
-                  {count}
-                </span>
-              </button>
-            )
-          )}
+            ["all", "Active Tickets", counts.active, "tickets"],
+            ...(assigneeFilter === "all" ? [["unassigned", "Unassigned", counts.unassigned, "unassigned"]] : []),
+            ["overdue", "Overdue", counts.overdue, "clock"],
+          ].map(([id, label, count, icon]) => (
+            <button type="button" key={id} className={`nav-item ${filter === id && !showDashboard ? "active" : ""}`}
+              onClick={() => { setShowDashboard(false); setOpsPage(null); setFilter(id); }}>
+              <span className="hub-nav-label"><HubNavIcon name={icon} />{label}</span>
+              <span className={`nav-count ${id === "overdue" && count ? "hub-overdue-count" : ""}`}>{count}</span>
+            </button>
+          ))}
         </div>
 
         <div className="sidebar-section">
@@ -5530,7 +5499,7 @@ function App() {
                     ? "closed-nav"
                     : ""
                 } ${
-                  filter === id
+                  filter === id && !showDashboard
                     ? "active"
                     : ""
                 }`}
