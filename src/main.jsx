@@ -312,24 +312,19 @@ function getTicketOwnerName(ticket) {
 }
 
 function getTicketOwnerEmail(ticket) {
-  if (!ticket) {
-    return "";
-  }
-
-  if (
-    ticket.source ===
-    "Code Wiz"
-  ) {
-    return (
-      ticket.codewiz_agent_email ||
-      ""
-    );
-  }
-
-  return (
-    ticket.assignee_email ||
-    ""
-  );
+  if (!ticket) return "";
+  // Code Wiz's marketing assignment is separate from the Zoho owner.
+  const email = String(ticket.source === "Code Wiz"
+    ? ticket.codewiz_agent_email || ""
+    : ticket.assignee_email || "").trim().toLowerCase();
+  if (email) return email;
+  // Some synced tickets only contain the owner's display name. Resolve only
+  // an exact, unique full-name match in our configured team directory.
+  const normalizeName = value => String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+  const name = normalizeName(getTicketOwnerName(ticket));
+  if (!name) return "";
+  const matches = CODEWIZ_TICKET_OWNERS.filter(person => normalizeName(person.name) === name);
+  return matches.length === 1 ? String(matches[0].email).trim().toLowerCase() : "";
 }
 
 function isTicketUnassigned(ticket) {
@@ -4739,21 +4734,16 @@ function App() {
         filter ===
         "mine"
       ) {
-        const ownerEmail =
-          assigneeFilter === "all"
-            ? currentUserEmail
-            : assigneeFilter === "mine"
-              ? currentUserEmail
-              : String(assigneeFilter).trim().toLowerCase();
+        const ownerEmail = currentUserEmail;
 
         rows = rows.filter(
           (ticket) =>
-            String(getTicketOwnerEmail(ticket) || "").trim().toLowerCase() === ownerEmail &&
+            ownerEmail && getTicketOwnerEmail(ticket) === ownerEmail &&
             ticket.status !== "Closed"
         );
       }
 
-      if (assigneeFilter !== "all") {
+      if (assigneeFilter !== "all" && filter !== "mine") {
         const ownerEmail =
           assigneeFilter === "mine"
             ? currentUserEmail
@@ -5072,6 +5062,11 @@ function App() {
                 brandFilter
             );
 
+      const myTickets = countTickets.filter(ticket => userEmail &&
+        getTicketOwnerEmail(ticket) === userEmail && ticket.status !== "Closed" &&
+        (brandFilter !== "Tutor Doctor" || departmentFilter === "all" ||
+          String(ticket.department || "").trim() === departmentFilter));
+
       // The Team Member selector scopes every sidebar count, not just the
       // ticket list. "Mine" means the signed-in user; a named member means
       // that member. When viewing everyone, counts remain combined.
@@ -5118,14 +5113,7 @@ function App() {
               "Closed"
           ).length,
 
-        mine:
-          (selectedOwnerEmail
-            ? countTickets.filter((ticket) => ticket.status !== "Closed").length
-            : countTickets.filter(
-                (ticket) =>
-                  ticket.status !== "Closed" &&
-                  String(getTicketOwnerEmail(ticket) || "").toLowerCase() === userEmail
-              ).length),
+        mine: myTickets.length,
 
         open:
           countTickets.filter(
