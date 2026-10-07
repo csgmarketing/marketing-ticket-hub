@@ -4578,6 +4578,16 @@ function App() {
       return false;
     }
 
+    if (ticket?.source === "Qualicare") {
+      // Missing owner email alone does not mean a ticket is unassigned.
+      const hasOwner = [ticket.assignee_id, ticket.assignee_name, ticket.assignee_email]
+        .some(value => String(value || "").trim());
+      if (!hasOwner) return true;
+      const ownerEmail = getTicketOwnerEmail(ticket);
+      return !!ownerEmail && CODEWIZ_TICKET_OWNERS.some(person =>
+        String(person.email || "").trim().toLowerCase() === ownerEmail);
+    }
+
     return true;
   }
 
