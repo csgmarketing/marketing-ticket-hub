@@ -973,6 +973,7 @@ function MyWeekWorkspace({tickets,session,now,onOpen}) {
   const metrics=[{id:"overdue",label:"Overdue",count:overdue.length,tone:"rose",icon:"clock"},{id:"today",label:"Due today",count:today.length,tone:"blue",icon:"week"},{id:"upcoming",label:"Coming up",count:upcoming.length,tone:"violet",icon:"calendar"},{id:"completed",label:"Completed",count:completed.length,tone:"green",icon:"tickets"}];
   return <>
     <header className="hub-week-header"><div><div className="dashboard-eyebrow">YOUR WORKSPACE</div><h1>My Week<span className="hub-week-header-dot" /></h1><p>A clear view of what needs your attention.</p></div><div className="hub-week-range"><HubNavIcon name="calendar"/><span>{range}</span></div></header>
+    <TicketPerformance tickets={visible} />
     <div className="hub-week-metrics">{metrics.map(m=><button type="button" key={m.id} className={`hub-week-metric hub-tone-${m.tone} ${focus===m.id?"selected":""}`} aria-pressed={focus===m.id} onClick={()=>setFocus(f=>f===m.id?"all":m.id)}><span className="hub-week-metric-icon"><HubNavIcon name={m.icon}/></span><span className="hub-week-metric-value">{m.count}</span><span className="hub-week-metric-label">{m.label}</span><span className="hub-week-metric-arrow" aria-hidden="true">↗</span></button>)}</div>
     <div className="hub-week-agenda" aria-label="Deadlines this week">{Array.from({length:7},(_,i)=>{const day=new Date(weekStart);day.setDate(day.getDate()+i);const rows=open.filter(t=>hubSameDay(t.due_date,day)),id=`day-${i}`;return <button type="button" key={id} aria-pressed={focus===id} className={`hub-week-day ${hubSameDay(day,now)?"today":""} ${focus===id?"selected":""}`} onClick={()=>setFocus(f=>f===id?"all":id)}><span>{day.toLocaleDateString(undefined,{weekday:"short"})}</span><strong>{day.getDate()}</strong><small>{rows.length?`${rows.length} due`:"No deadlines"}</small>{hubSameDay(day,now)&&<i aria-hidden="true"/>}</button>;})}</div>
     <div className="hub-week-controls"><div><h2>{focus==="all"?"Your priorities":"Focused view"}</h2><p>{open.length} active ticket{open.length===1?"":"s"} assigned to you</p></div><div className="hub-week-control-actions">{focus!=="all"&&<button type="button" onClick={()=>setFocus("all")}>Show everything</button>}<select aria-label="My Week brand" value={brand} onChange={e=>setBrand(e.target.value)}><option value="all">All brands</option>{[...new Set(tickets.map(t=>t.source))].map(b=><option key={b}>{b}</option>)}</select></div></div>
@@ -1036,6 +1037,46 @@ function HubSyncHealth({session}) {
   const label=error?"Unavailable":busy&&!rows.length?"Checking…":states.includes("Failed")?"Needs attention":states.includes("Check needed")?"Check needed":states.includes("Syncing")?"Syncing":states.every(s=>s==="Healthy")?"Healthy":"Not fully recorded";
   const tone=label==="Healthy"?"healthy":label==="Syncing"?"syncing":["Needs attention","Check needed"].includes(label)?"failed":"unknown";
   return <div className="hub-sync"><button className="hub-sync-toggle" type="button" aria-expanded={open} onClick={()=>setOpen(v=>!v)}><span className={`hub-sync-dot ${tone}`}/><span><strong>Ticket sync</strong><small>{label}</small></span><span aria-hidden="true">{open?"⌃":"⌄"}</span></button>{open&&<div className="hub-sync-details">{error&&<p role="status">{error}</p>}{brands.map(b=>{const r=rows.find(r=>r.source===b);return <div key={b}><strong>{b}</strong><span>{state(r)}</span><small>Last success: {r?.last_success_at?formatDateTime(r.last_success_at):"Not recorded"}</small>{r?.started_at&&<small>Latest attempt: {formatDateTime(r.started_at)}</small>}</div>;})}<p>Tracks individual ticket refreshes. Healthy means the latest recorded attempt succeeded; it does not verify a complete brand sync.</p><button type="button" disabled={busy} onClick={refresh}>{busy?"Checking…":"Refresh status"}</button></div>}</div>;
+}
+
+function TicketPerformance({tickets}) {
+  const [period,setPeriod]=useState("week"),[start,setStart]=useState(""),[end,setEnd]=useState("");
+  const [rows,setRows]=useState([]),[error,setError]=useState(""),[loading,setLoading]=useState(true);
+  useEffect(()=>{let live=true;async function refresh(){setLoading(true);try{
+    const all=[];for(let offset=0;;offset+=1000){const r=await supabase.from("hub_ticket_metrics").select("ticket_key,first_response_seconds,total_response_seconds,response_count,resolution_seconds,closed_at_zoho,synced_at").order("ticket_key").range(offset,offset+999);if(r.error)throw r.error;all.push(...r.data);if(r.data.length<1000)break;}
+    if(live){setRows(all);setError("");}
+  }catch(e){if(live)setError(e.message||"Unable to load performance metrics");}finally{if(live)setLoading(false);}}
+  refresh();const timer=setInterval(refresh,60000);return()=>{live=false;clearInterval(timer);};},[]);
+  const now=new Date(),from=new Date(now);from.setHours(0,0,0,0);let until=new Date(now);until.setHours(24,0,0,0);
+  if(period==="week")from.setDate(from.getDate()-((from.getDay()+6)%7));
+  if(period==="month")from.setDate(1);
+  if(period==="custom"){from.setTime(new Date(`${start}T00:00:00`).getTime());until=new Date(`${end}T00:00:00`);until.setDate(until.getDate()+1);}
+  const valid=Number.isFinite(from.getTime())&&Number.isFinite(until.getTime())&&until>from;
+  const inRange=value=>{const d=hubDate(value);return valid&&d&&d>=from&&d<until;};
+  const lookup=new Map(rows.map(r=>[r.ticket_key,r]));
+  const cohort=tickets.filter(t=>inRange(t.created_at_zoho));
+  const measured=cohort.map(t=>lookup.get(t.ticket_key)).filter(Boolean);
+  const average=values=>values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
+  const seconds=value=>value!==null&&value!==undefined&&Number.isFinite(Number(value))&&Number(value)>=0;
+  const first=average(measured.filter(r=>seconds(r.first_response_seconds)).map(r=>Number(r.first_response_seconds)));
+  const responses=measured.filter(r=>seconds(r.total_response_seconds)&&r.response_count>0);
+  const responseCount=responses.reduce((n,r)=>n+r.response_count,0);
+  const response=responseCount?responses.reduce((n,r)=>n+Number(r.total_response_seconds),0)/responseCount:null;
+  const resolved=cohort.filter(t=>HUB_CLOSED(t)).map(t=>lookup.get(t.ticket_key)).filter(r=>r&&seconds(r.resolution_seconds));
+  const resolution=average(resolved.map(r=>Number(r.resolution_seconds)));
+  const closed=tickets.filter(t=>HUB_CLOSED(t)&&inRange(lookup.get(t.ticket_key)?.closed_at_zoho));
+  const format=value=>value===null?"—":`${Math.floor(Math.round(value/60)/60)}h ${String(Math.round(value/60)%60).padStart(2,"0")}m`;
+  const cards=[{label:"First response time",value:format(first),note:`${measured.filter(r=>seconds(r.first_response_seconds)).length} tickets`},{label:"Response time",value:format(response),note:`${responseCount} responses`},{label:"Resolution time",value:format(resolution),note:`${resolved.length} closed tickets`},{label:"New tickets",value:valid?cohort.length:"—",note:"Created in period"},{label:"Closed tickets",value:valid?closed.length:"—",note:"Closed in period"},{label:"Current backlog",value:tickets.filter(t=>!HUB_CLOSED(t)).length,note:"Now, independent of date range"}];
+  const days=[];if(valid){for(let d=new Date(from);d<until&&days.length<93;d.setDate(d.getDate()+1)){const day=new Date(d),next=new Date(d);next.setDate(next.getDate()+1);const inside=v=>{const x=hubDate(v);return x&&x>=day&&x<next;};days.push({label:day.toLocaleDateString(undefined,{month:"short",day:"numeric"}),created:cohort.filter(t=>inside(t.created_at_zoho)).length,closed:closed.filter(t=>inside(lookup.get(t.ticket_key)?.closed_at_zoho)).length});}}
+  const max=Math.max(1,...days.flatMap(d=>[d.created,d.closed]));
+  return <section className="hub-dashboard-panel hub-performance"><header><div><h2>Performance</h2><p>Uses the selected brand and My / Team overview.</p></div><select aria-label="Performance period" value={period} onChange={e=>setPeriod(e.target.value)}><option value="day">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom range</option></select></header>
+    {period==="custom"&&<div className="hub-performance-dates"><label>From <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Through <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>}
+    {error&&<p role="alert">Performance data unavailable: {error}</p>}{loading&&<p role="status">Updating metrics…</p>}{!valid&&<p>Select a valid date range.</p>}
+    <div className="hub-performance-cards">{cards.map(c=><div key={c.label}><span>{c.label}</span><strong>{c.value}</strong><small>{c.note}</small></div>)}</div>
+    <p className="hub-muted">Timing averages use Zoho's latest lifetime metrics for tickets created in this period. Response time is weighted by response count. Missing timings are excluded; zero is included. {measured.length} of {cohort.length} tickets have synced metrics. Dates use your browser's timezone.</p>
+    {valid&&<><h3>Created vs closed <small>Blue: created · Green: closed</small></h3><div className="hub-performance-chart">{days.map((d,i)=><div key={i} title={`${d.label}: ${d.created} created, ${d.closed} closed`}><div className="hub-performance-bars"><i style={{height:`${d.created/max*100}%`}}/><i style={{height:`${d.closed/max*100}%`}}/></div><small>{d.label}</small></div>)}</div>{days.length===93&&<p>Chart shows the first 93 days. Totals cover the full selected range.</p>}</>}
+    <p className="hub-muted">Counts cover tickets loaded in the Hub. Closed dates require a successful metrics sync. Historical average backlog is not available yet.</p>
+  </section>;
 }
 
 function MarketingDashboard({tickets,session,onOpen,onNavigate,onFind}) {
@@ -1205,7 +1246,7 @@ function App() {
 
   const [
     selectedKey,
-    setSelectedKey,
+    setSelectedKeyState,
   ] =
     useState(null);
 
@@ -1214,6 +1255,25 @@ function App() {
     setLoadingTickets,
   ] =
     useState(false);
+
+  const ticketReturnView = useRef(null);
+  function setSelectedKey(value) {
+    if (typeof value === "string" && !selectedKey) {
+      ticketReturnView.current = {filter, brandFilter, departmentFilter, assigneeFilter, search, ticketViewMode};
+    }
+    setSelectedKeyState(value);
+  }
+  function returnToTicketList() {
+    const view = ticketReturnView.current;
+    if (view) {
+      setFilter(view.filter); setBrandFilter(view.brandFilter);
+      setDepartmentFilter(view.departmentFilter); setAssigneeFilter(view.assigneeFilter);
+      setSearch(view.search); setTicketViewMode(view.ticketViewMode);
+    }
+    ticketReturnView.current = null;
+    setSelectedKeyState(null); setComposerOpen(false);
+    setTicketDetailsOpen(false); setOpsPage(null); setShowDashboard(false);
+  }
 
   useEffect(() => { setDeleteNotice(""); }, [selectedKey]);
 
@@ -2147,19 +2207,7 @@ function App() {
               return desired;
             }
 
-            return (
-              rows.find(
-                (
-                  ticket
-                ) =>
-                  ticket.status !==
-                  "Closed"
-              )
-                ?.ticket_key ||
-              rows[0]
-                ?.ticket_key ||
-              null
-            );
+            return null;
           }
         );
 
@@ -4838,52 +4886,12 @@ function App() {
       session,
     ]);
 
-  /*
-    Keep selected ticket aligned with
-    CURRENT filtered list.
-  */
+  // Preserve a user's selection while visible; never open another ticket
+  // automatically when a closure or filter change removes it from the list.
   useEffect(() => {
-    if (
-      filteredTickets.length ===
-      0
-    ) {
-      setSelectedKey(
-        null
-      );
-
-      return;
-    }
-
-    setSelectedKey(
-      (
-        current
-      ) => {
-        const stillVisible =
-          current &&
-          filteredTickets.some(
-            (
-              ticket
-            ) =>
-              ticket.ticket_key ===
-              current
-          );
-
-        if (
-          stillVisible
-        ) {
-          return current;
-        }
-
-        return (
-          filteredTickets[0]
-            ?.ticket_key ||
-          null
-        );
-      }
-    );
-  }, [
-    filteredTickets,
-  ]);
+    setSelectedKey(current => current && filteredTickets.some(ticket =>
+      ticket.ticket_key === current) ? current : null);
+  }, [filteredTickets]);
 
   // ====================================================
   // The Team Member filter is intentionally limited to the CSG marketing
@@ -6900,7 +6908,7 @@ function App() {
             {/* HEADER */}
 
             <div className="hub-ticket-reading-bar">
-              <button type="button" onClick={()=>{setSelectedKey(null);setComposerOpen(false);}}>← Back to tickets</button>
+              <button type="button" onClick={returnToTicketList}>← Back to tickets</button>
               <div><button type="button" onClick={()=>{const editor=document.getElementById("hub-internal-comment-editor");if(editor){editor.open=true;editor.scrollIntoView({behavior:"smooth",block:"start"});commentInputRef.current?.focus({preventScroll:true});}}}>Add comment</button><button type="button" className="hub-details-toggle" onClick={()=>setTicketDetailsOpen(value=>!value)} aria-expanded={ticketDetailsOpen}>Ticket details</button><button type="button" className="hub-primary-reply" onClick={()=>configureComposer("reply")}>Reply</button><button type="button" onClick={()=>configureComposer("reply_all")}>Reply All</button><button type="button" onClick={()=>configureComposer("forward")}>Forward</button></div>
             </div>
             <header className="conversation-header">
