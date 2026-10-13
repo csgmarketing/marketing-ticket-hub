@@ -5021,6 +5021,21 @@ function App() {
       }
     } catch (error) {
       console.error("Ticket status update error:", error);
+      const message =
+        error?.message ||
+        "Could not update the ticket status.";
+
+      setUpdateNotice(
+        `Could not update ${ticket.source || "ticket"} #${
+          ticket.ticket_number || ticket.ticket_key
+        }: ${message}`
+      );
+
+      window.alert(
+        `Could not update ${ticket.source || "ticket"} #${
+          ticket.ticket_number || ticket.ticket_key
+        }.\n\n${message}`
+      );
     } finally {
       setStatusEditBusy(false);
     }
