@@ -427,6 +427,12 @@ function escapeHtml(value) {
     );
 }
 
+function formatOutgoingEmailHtml(html) {
+  const content = String(html || "").trim();
+
+  return `<div data-hub-email-body="true" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#263746;">${content}</div>`;
+}
+
 function extractEmail(value) {
   if (!value) {
     return "";
@@ -3454,6 +3460,59 @@ function App() {
     );
   }
 
+  function handleEditorPaste(event) {
+    const clipboard = event.clipboardData;
+
+    if (!clipboard) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const pastedHtml = clipboard.getData("text/html");
+    const pastedText = clipboard.getData("text/plain");
+
+    if (!pastedHtml) {
+      document.execCommand(
+        "insertText",
+        false,
+        pastedText
+      );
+    } else {
+      const container = document.createElement("div");
+      container.innerHTML = pastedHtml;
+
+      container
+        .querySelectorAll("font")
+        .forEach((element) => {
+          element.removeAttribute("face");
+          element.removeAttribute("size");
+        });
+
+      container
+        .querySelectorAll("[style]")
+        .forEach((element) => {
+          element.style.removeProperty("font-family");
+          element.style.removeProperty("font-size");
+          element.style.removeProperty("line-height");
+
+          if (!element.getAttribute("style")?.trim()) {
+            element.removeAttribute("style");
+          }
+        });
+
+      document.execCommand(
+        "insertHTML",
+        false,
+        container.innerHTML
+      );
+    }
+
+    setEditorHtml(
+      editorRef.current?.innerHTML || ""
+    );
+  }
+
   function addLink() {
     const url =
       window.prompt(
@@ -3685,6 +3744,9 @@ function App() {
         ?.innerHTML ||
       editorHtml;
 
+    const outgoingHtml =
+      formatOutgoingEmailHtml(html);
+
     if (
       !stripHtml(withoutHubSignature(html))
     ) {
@@ -3767,7 +3829,7 @@ function App() {
                   sendAction,
 
                 content_html:
-                  html,
+                  outgoingHtml,
 
                 to:
                   recipientTo,
@@ -3844,8 +3906,8 @@ function App() {
         bcc: recipientBcc || null,
         author_name: data.zoho_agent_name || session?.user?.user_metadata?.full_name || session?.user?.email || "Team",
         author_email: data.sent_by || session?.user?.email || detectedFromEmail,
-        content_html: html,
-        content_text: stripHtml(html),
+        content_html: outgoingHtml,
+        content_text: stripHtml(outgoingHtml),
         created_at_zoho: sentAt,
         attachments: uploaded.map(attachment => ({
           id: attachment.id,
@@ -7740,6 +7802,9 @@ function App() {
                         .currentTarget
                         .innerHTML
                     )
+                  }
+                  onPaste={
+                    handleEditorPaste
                   }
                 />
 
