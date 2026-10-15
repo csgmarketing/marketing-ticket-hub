@@ -3137,6 +3137,28 @@ function App() {
       );
     }
 
+    if (selected.source === "Code Wiz") {
+      const inbound = !isOutboundThread(thread)
+        ? thread
+        : newestThreads.find(item => !isOutboundThread(item));
+      const blocked = new Set([
+        "marketing@thecodewiz.com",
+        extractEmail(detectedFromEmail),
+        extractEmail(session?.user?.email || ""),
+      ].filter(Boolean));
+      const candidates = [
+        inbound?.from_email,
+        inbound?.author_email,
+        thread?.to_email,
+        selected.contact_email,
+      ].flatMap(splitAddresses);
+      const actualSender = candidates.find(value => {
+        const email = extractEmail(value);
+        return email && !blocked.has(email);
+      });
+      if (actualSender) return actualSender;
+    }
+
     if (
       isOutboundThread(
         thread
