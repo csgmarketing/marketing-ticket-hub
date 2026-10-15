@@ -39,6 +39,21 @@ const INITIAL_PASSWORD_SETUP = (() => {
   catch { return false; }
 })();
 
+const INITIAL_ZOHO_RESULT = (() => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("zoho");
+    if (!status) return null;
+    return {
+      status,
+      source: params.get("source") || "",
+      message: params.get("message") || "",
+    };
+  } catch {
+    return null;
+  }
+})();
+
 const supabase =
   createClient(
     SUPABASE_URL,
@@ -769,6 +784,111 @@ function MySignatures({session, signatures, ready, loadError, onSaved, onClose})
   </section></div>;
 }
 
+function ZohoConnections({session, oauthResult, onClose}) {
+  const brands = ["Tutor Doctor", "Qualicare", "Code Wiz"];
+  const [connections, setConnections] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [busySource, setBusySource] = useState("");
+  const [message, setMessage] = useState(
+    oauthResult?.status === "connected"
+      ? `${oauthResult.source} connected successfully.`
+      : oauthResult?.status === "error"
+      ? oauthResult.message || "Zoho could not be connected."
+      : ""
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const {data,error} = await supabase.functions.invoke("zoho-user-connections", {
+      body: {action: "list"},
+    });
+    if (error || !data?.success) {
+      setMessage(data?.error || error?.message || "Could not load Zoho connections.");
+    } else {
+      setConnections(Object.fromEntries((data.connections || []).map(row => [row.source, row])));
+    }
+    setLoading(false);
+  }, [session?.user?.id]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const close = event => { if (event.key === "Escape" && !busySource) onClose(); };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [busySource, onClose]);
+
+  async function connect(source) {
+    setBusySource(source);
+    setMessage(`Opening Zoho for ${source}…`);
+    const {data,error} = await supabase.functions.invoke("zoho-oauth-start", {
+      body: {source},
+    });
+    if (error || !data?.success || !data?.authorization_url) {
+      setMessage(data?.error || error?.message || "Could not start Zoho authorization.");
+      setBusySource("");
+      return;
+    }
+    window.location.assign(data.authorization_url);
+  }
+
+  async function disconnect(source) {
+    if (!window.confirm(`Disconnect your ${source} Zoho account from the Hub?`)) return;
+    setBusySource(source);
+    setMessage("");
+    const {data,error} = await supabase.functions.invoke("zoho-user-connections", {
+      body: {action: "disconnect", source},
+    });
+    if (error || !data?.success) {
+      setMessage(data?.error || error?.message || "Could not disconnect Zoho.");
+    } else {
+      setConnections(current => {
+        const next = {...current};
+        delete next[source];
+        return next;
+      });
+      setMessage(`${source} disconnected.`);
+    }
+    setBusySource("");
+  }
+
+  return <div className="hub-signature-backdrop">
+    <section className="hub-signature-modal hub-zoho-modal" role="dialog" aria-modal="true" aria-labelledby="zoho-connections-title">
+      <header>
+        <div>
+          <p className="hub-signature-eyebrow">PERSONAL SETTINGS</p>
+          <h2 id="zoho-connections-title">Zoho Connections</h2>
+          <p>Connect your own Zoho agent account so replies sent through the Hub appear under your name.</p>
+        </div>
+        <button type="button" disabled={!!busySource} onClick={onClose} aria-label="Close Zoho connections">✕</button>
+      </header>
+
+      {message && <p className={`hub-zoho-notice ${oauthResult?.status === "error" ? "error" : ""}`} role="status">{message}</p>}
+      {loading ? <p role="status">Loading your connections…</p> : <div className="hub-zoho-connections">
+        {brands.map(source => {
+          const connection = connections[source];
+          const connected = connection?.connection_status === "connected";
+          return <article key={source} className={connected ? "connected" : ""}>
+            <div className="hub-zoho-brand">
+              <span className="hub-zoho-status" aria-hidden="true">{connected ? "✓" : "○"}</span>
+              <div>
+                <h3>{source}</h3>
+                {connected
+                  ? <><strong>Connected as {connection.zoho_agent_name || connection.zoho_agent_email}</strong><small>{connection.zoho_agent_email}</small></>
+                  : <span>Not connected</span>}
+              </div>
+            </div>
+            {connected
+              ? <button type="button" className="hub-zoho-disconnect" disabled={!!busySource} onClick={() => disconnect(source)}>{busySource === source ? "Disconnecting…" : "Disconnect"}</button>
+              : <button type="button" className="primary-button" disabled={!!busySource} onClick={() => connect(source)}>{busySource === source ? "Opening Zoho…" : "Connect Zoho"}</button>}
+          </article>;
+        })}
+      </div>}
+
+      <p className="hub-zoho-help">Connect only the brands you work with. Your authorization is encrypted and is never exposed in the browser.</p>
+    </section>
+  </div>;
+}
+
 // ======================================================
 // LOGIN
 // ======================================================
@@ -1188,6 +1308,7 @@ function App() {
   const [ticketDetailsOpen, setTicketDetailsOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [showSignatures, setShowSignatures] = useState(false);
+  const [showZohoConnections, setShowZohoConnections] = useState(Boolean(INITIAL_ZOHO_RESULT));
   const [signatures, setSignatures] = useState({});
   const [signatureReady, setSignatureReady] = useState(false);
   const [signatureError, setSignatureError] = useState("");
@@ -1216,6 +1337,15 @@ function App() {
     setSession,
   ] =
     useState(null);
+
+  useEffect(() => {
+    if (!session || !INITIAL_ZOHO_RESULT) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("zoho");
+    url.searchParams.delete("source");
+    url.searchParams.delete("message");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [session?.user?.id]);
 
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(INITIAL_PASSWORD_SETUP);
   useEffect(() => {
@@ -5703,6 +5833,7 @@ function App() {
       <CompletionCelebration session={session} />
       {showSignatures && <MySignatures session={session} signatures={signatures} ready={signatureReady} loadError={signatureError} onClose={()=>setShowSignatures(false)}
         onSaved={(brand,signature)=>setSignatures(current=>({...current,[brand]:signature}))} />}
+      {showZohoConnections && session && <ZohoConnections session={session} oauthResult={INITIAL_ZOHO_RESULT} onClose={()=>setShowZohoConnections(false)} />}
 
       {/* SIDEBAR */}
 
@@ -6031,6 +6162,7 @@ function App() {
         <HubSyncHealth session={session} />
 
         <button type="button" className="hub-my-signatures" onClick={()=>setShowSignatures(true)}>✍️ My Signatures</button>
+        <button type="button" className="hub-zoho-connections-button" onClick={()=>setShowZohoConnections(true)}>🔗 Zoho Connections</button>
         <div className="sidebar-footer">
 
           <div className="user-avatar">
