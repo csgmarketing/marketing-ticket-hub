@@ -785,7 +785,7 @@ function MySignatures({session, signatures, ready, loadError, onSaved, onClose})
 }
 
 function ZohoConnections({session, oauthResult, onClose}) {
-  const brands = ["Tutor Doctor", "Qualicare", "Code Wiz"];
+  const brands = ["Tutor Doctor", "Qualicare"];
   const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [busySource, setBusySource] = useState("");
@@ -884,7 +884,7 @@ function ZohoConnections({session, oauthResult, onClose}) {
         })}
       </div>}
 
-      <p className="hub-zoho-help">Connect only the brands you work with. Your authorization is encrypted and is never exposed in the browser.</p>
+      <p className="hub-zoho-help">Connect only the brands you work with. Code Wiz continues using the shared Hub connection. Your authorization is encrypted and is never exposed in the browser.</p>
     </section>
   </div>;
 }
