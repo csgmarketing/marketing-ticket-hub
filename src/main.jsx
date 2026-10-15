@@ -1750,6 +1750,17 @@ function App() {
     useState("");
 
   const [
+    sendConfirmation,
+    setSendConfirmation,
+  ] = useState("");
+
+  useEffect(() => {
+    if (!sendConfirmation) return;
+    const timer = setTimeout(() => setSendConfirmation(""), 6000);
+    return () => clearTimeout(timer);
+  }, [sendConfirmation]);
+
+  const [
     pendingFiles,
     setPendingFiles,
   ] =
@@ -2458,9 +2469,22 @@ function App() {
 
           setThreads([]);
         } else {
-          setThreads(
-            data || []
-          );
+          setThreads(current => {
+            const serverThreads = data || [];
+            const optimistic = current.filter(thread => thread._hubPending);
+            const unmatched = optimistic.filter(pending => !serverThreads.some(saved => {
+              const sameDirection = isOutboundThread(saved);
+              const savedTime = new Date(saved.created_at_zoho || 0).getTime();
+              const pendingTime = new Date(pending.created_at_zoho || 0).getTime();
+              const closeInTime = Math.abs(savedTime - pendingTime) < 5 * 60 * 1000;
+              const savedText = stripHtml(saved.content_html || saved.content_text || saved.summary || "").trim();
+              const pendingText = stripHtml(pending.content_html || pending.content_text || "").trim();
+              return sameDirection && closeInTime && savedText === pendingText;
+            }));
+            return [...serverThreads, ...unmatched].sort((a,b) =>
+              new Date(a.created_at_zoho || 0).getTime() - new Date(b.created_at_zoho || 0).getTime()
+            );
+          });
         }
 
         setLoadingThreads(
@@ -3785,6 +3809,33 @@ function App() {
       setComposerNotice(
         successText
       );
+      setSendConfirmation(`${successText}. It is now syncing with Zoho.`);
+
+      const sentAt = new Date().toISOString();
+      const optimisticThread = {
+        id: `hub-pending-${Date.now()}`,
+        thread_key: `hub-pending-${Date.now()}`,
+        ticket_key: selected.ticket_key,
+        direction: "outbound",
+        from_email: detectedFromEmail,
+        to_email: recipientTo,
+        cc: recipientCc || null,
+        bcc: recipientBcc || null,
+        author_name: data.zoho_agent_name || session?.user?.user_metadata?.full_name || session?.user?.email || "Team",
+        author_email: data.sent_by || session?.user?.email || detectedFromEmail,
+        content_html: html,
+        content_text: stripHtml(html),
+        created_at_zoho: sentAt,
+        attachments: uploaded.map(attachment => ({
+          id: attachment.id,
+          name: attachment.name,
+          size: attachment.size,
+          contentType: attachment.content_type,
+        })),
+        _hubPending: true,
+      };
+
+      setThreads(current => [...current, optimisticThread]);
 
       setComposerOpen(false);
       signatureAttempt.current = null;
@@ -3800,9 +3851,14 @@ function App() {
       setPendingFiles([]);
       setUploadProgress("");
 
-      await loadThreads(
-        selected.ticket_key
-      );
+      await loadThreads(selected.ticket_key);
+
+      void (async () => {
+        for (const delay of [1200, 3000, 6000]) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          await loadThreads(selected.ticket_key);
+        }
+      })().catch(error => console.warn("Delayed sent-reply refresh failed:", error));
 
       await loadTickets(
         selected.ticket_key
@@ -5525,7 +5581,9 @@ function App() {
               </div>
 
               <div className="message-direction">
-                {outbound
+                {thread._hubPending
+                  ? "Sent · syncing with Zoho…"
+                  : outbound
                   ? "Team email"
                   : "Customer email"}
               </div>
@@ -5831,6 +5889,7 @@ function App() {
     <div className={`app-shell ${selected && !showDashboard && !opsPage ? `ticket-reading-mode ${ticketDetailsOpen ? "ticket-details-open" : ""}` : ""} ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
       <CompletionCelebration session={session} />
+      {sendConfirmation && <div className="hub-send-confirmation" role="status" aria-live="polite"><span>✓</span>{sendConfirmation}<button type="button" onClick={()=>setSendConfirmation("")} aria-label="Dismiss confirmation">×</button></div>}
       {showSignatures && <MySignatures session={session} signatures={signatures} ready={signatureReady} loadError={signatureError} onClose={()=>setShowSignatures(false)}
         onSaved={(brand,signature)=>setSignatures(current=>({...current,[brand]:signature}))} />}
       {showZohoConnections && session && <ZohoConnections session={session} oauthResult={INITIAL_ZOHO_RESULT} onClose={()=>setShowZohoConnections(false)} />}
