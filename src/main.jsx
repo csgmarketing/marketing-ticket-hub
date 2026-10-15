@@ -1383,6 +1383,11 @@ function App() {
     useState([]);
 
   const [
+    pendingSentThreads,
+    setPendingSentThreads,
+  ] = useState([]);
+
+  const [
     comments,
     setComments,
   ] =
@@ -1753,12 +1758,6 @@ function App() {
     sendConfirmation,
     setSendConfirmation,
   ] = useState("");
-
-  useEffect(() => {
-    if (!sendConfirmation) return;
-    const timer = setTimeout(() => setSendConfirmation(""), 6000);
-    return () => clearTimeout(timer);
-  }, [sendConfirmation]);
 
   const [
     pendingFiles,
@@ -2469,10 +2468,10 @@ function App() {
 
           setThreads([]);
         } else {
-          setThreads(current => {
-            const serverThreads = data || [];
-            const optimistic = current.filter(thread => thread._hubPending);
-            const unmatched = optimistic.filter(pending => !serverThreads.some(saved => {
+          const serverThreads = data || [];
+          setPendingSentThreads(current => current.filter(pending => {
+            if (pending.ticket_key !== ticketKey) return true;
+            return !serverThreads.some(saved => {
               const sameDirection = isOutboundThread(saved);
               const savedTime = new Date(saved.created_at_zoho || 0).getTime();
               const pendingTime = new Date(pending.created_at_zoho || 0).getTime();
@@ -2480,11 +2479,9 @@ function App() {
               const savedText = stripHtml(saved.content_html || saved.content_text || saved.summary || "").trim();
               const pendingText = stripHtml(pending.content_html || pending.content_text || "").trim();
               return sameDirection && closeInTime && savedText === pendingText;
-            }));
-            return [...serverThreads, ...unmatched].sort((a,b) =>
-              new Date(a.created_at_zoho || 0).getTime() - new Date(b.created_at_zoho || 0).getTime()
-            );
-          });
+            });
+          }));
+          setThreads(serverThreads);
         }
 
         setLoadingThreads(
@@ -3033,7 +3030,7 @@ function App() {
   const timelineItems =
     useMemo(() => {
       const emailItems =
-        threads.map(
+        [...threads, ...pendingSentThreads.filter(thread => thread.ticket_key === selectedKey)].map(
           (
             thread
           ) => ({
@@ -3089,6 +3086,8 @@ function App() {
       );
     }, [
       threads,
+      pendingSentThreads,
+      selectedKey,
       comments,
     ]);
 
@@ -3835,7 +3834,7 @@ function App() {
         _hubPending: true,
       };
 
-      setThreads(current => [...current, optimisticThread]);
+      setPendingSentThreads(current => [...current.filter(thread => thread.ticket_key !== selected.ticket_key || thread.content_text !== optimisticThread.content_text), optimisticThread]);
 
       setComposerOpen(false);
       signatureAttempt.current = null;
@@ -5886,7 +5885,7 @@ function App() {
   // ====================================================
 
   return (
-    <div className={`app-shell ${selected && !showDashboard && !opsPage ? `ticket-reading-mode ${ticketDetailsOpen ? "ticket-details-open" : ""}` : ""} ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
+    <div data-hub-build="2026.10.15-reply-sync-v2" className={`app-shell ${selected && !showDashboard && !opsPage ? `ticket-reading-mode ${ticketDetailsOpen ? "ticket-details-open" : ""}` : ""} ${showDashboard ? "dashboard-mode" : ""} ${ticketViewMode === "classic" && !showDashboard ? "classic-mode" : ""} ${ticketViewMode === "board" && !showDashboard ? "board-mode" : ""}`}>
 
       <CompletionCelebration session={session} />
       {sendConfirmation && <div className="hub-send-confirmation" role="status" aria-live="polite"><span>✓</span>{sendConfirmation}<button type="button" onClick={()=>setSendConfirmation("")} aria-label="Dismiss confirmation">×</button></div>}
@@ -6222,6 +6221,7 @@ function App() {
 
         <button type="button" className="hub-my-signatures" onClick={()=>setShowSignatures(true)}>✍️ My Signatures</button>
         <button type="button" className="hub-zoho-connections-button" onClick={()=>setShowZohoConnections(true)}>🔗 Zoho Connections</button>
+        <div className="hub-build-version">Build 2026.10.15.2</div>
         <div className="sidebar-footer">
 
           <div className="user-avatar">
