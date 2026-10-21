@@ -4565,3 +4565,14 @@ button:hover {
 
 .hub-send-confirmation{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:12000;display:flex;align-items:center;gap:10px;max-width:min(520px,calc(100vw - 28px));padding:12px 14px;border:1px solid #bfe1ce;border-radius:11px;background:#f2fbf6;color:#286746;box-shadow:0 12px 34px #0f172a24;font-size:13px;font-weight:600}.hub-send-confirmation>span{display:grid;place-items:center;width:23px;height:23px;flex:0 0 23px;border-radius:50%;background:#d7f2e2;color:#24734b}.hub-send-confirmation button{margin-left:auto;border:0;background:transparent;color:#527263;font-size:20px;line-height:1;cursor:pointer}
 .hub-build-version{padding:0 18px 8px;color:#94a3b8;font-size:9px;letter-spacing:.04em;text-align:center}
+.hub-perf-auto-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #16834a;
+  font-size: 12px;
+  font-weight: 750;
+}
