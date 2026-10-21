@@ -6,8 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v30: resilient Brandy ownership matching, required AI tiers,
-// strong missing-tag warnings, shared unread state, and fast syncing.
+// CSG Ticket Hub v31: automatic Zoho metric backfill and unified in-app
+// notifications for assignments, comments, mentions, and kudos.
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
@@ -1274,7 +1274,7 @@ function HubSyncHealth({session}) {
 function TicketPerformance({tickets,onRefreshTickets}) {
   const [period,setPeriod]=useState("week"),[start,setStart]=useState(""),[end,setEnd]=useState("");
   const [rows,setRows]=useState([]),[error,setError]=useState(""),[loading,setLoading]=useState(true),[syncing,setSyncing]=useState(false),[progress,setProgress]=useState(""),[hover,setHover]=useState(null);
-  const alive=useRef(true),stop=useRef(false);
+  const alive=useRef(true),stop=useRef(false),attempted=useRef(new Set()),autoTimer=useRef(null);
   const refresh=useCallback(async()=>{
     const all=[];for(let offset=0;;offset+=1000){const r=await supabase.from("hub_ticket_metrics").select("ticket_key,first_response_seconds,total_response_seconds,response_count,resolution_seconds,closed_at_zoho,synced_at,raw_metrics").order("ticket_key").range(offset,offset+999);if(r.error)throw r.error;all.push(...(r.data||[]));if((r.data||[]).length<1000)break;}
     if(alive.current){setRows(all);setError("");}return all;
@@ -1306,15 +1306,17 @@ function TicketPerformance({tickets,onRefreshTickets}) {
   const resolution=average(resolved.map(r=>Number(r.resolution_seconds)));
   const format=v=>v===null?"—":`${Math.floor(Math.round(v/60)/60)}:${String(Math.round(v/60)%60).padStart(2,"0")}`;
   const hasMetrics=t=>Object.keys(lookup.get(t.ticket_key)?.raw_metrics||{}).length>0;
-  const pending=tickets.filter(t=>!hasMetrics(t)||(HUB_CLOSED(t)&&!hubDate(closure(t))));
+  const pending=tickets.filter(t=>(!hasMetrics(t)||(HUB_CLOSED(t)&&!hubDate(closure(t))))&&!attempted.current.has(t.ticket_key));
   async function populate(){
     if(syncing)return;stop.current=false;setSyncing(true);setError("");const batch=pending.slice(0,20);let failed=0,done=0;
-    try{for(const t of batch){if(stop.current||!alive.current)break;setProgress(`Syncing ${done+1} of ${batch.length}: #${t.ticket_number||t.zoho_ticket_id}`);
+    try{for(const t of batch){if(stop.current||!alive.current)break;setProgress(`Automatically syncing ${done+1} of ${batch.length}: #${t.ticket_number||t.zoho_ticket_id}`);
       try{const r=await supabase.functions.invoke("sync-zoho-ticket",{body:{source:t.source,zoho_ticket_id:t.zoho_ticket_id}});if(r.error||r.data?.success===false)throw new Error(r.data?.error||r.error?.message||"Ticket sync failed");}catch(e){failed++;if(alive.current)setError(`${t.source}: ${e.message}`);}done++;}
       const latest=await refresh();if(onRefreshTickets)await onRefreshTickets();const map=new Map(latest.map(r=>[r.ticket_key,r]));const populated=batch.slice(0,done).filter(t=>Object.keys(map.get(t.ticket_key)?.raw_metrics||{}).length>0).length;
-      if(alive.current){setProgress(`${done} tickets processed · ${populated} have Zoho timings${failed?` · ${failed} failed`:""}. Continue in batches of 20.`);if(done>0&&populated===0)setError("No Zoho timings were returned. Check sync-zoho-ticket logs for ‘Performance metrics sync failed’. Closure dates are saved separately.");}
+      batch.slice(0,done).forEach(t=>attempted.current.add(t.ticket_key));
+      if(alive.current){setProgress(`${done} tickets processed · ${populated} have Zoho timings${failed?` · ${failed} failed`:""}. Automatic backfill will continue.`);if(done>0&&populated===0)setError("No Zoho timings were returned for this batch. The remaining tickets will continue automatically; check sync-zoho-ticket logs for failed Zoho requests.");}
     }catch(e){if(alive.current)setError(e.message);}finally{if(alive.current)setSyncing(false);}
   }
+  useEffect(()=>{if(loading||syncing||stop.current||!pending.length)return;autoTimer.current=setTimeout(()=>populate(),900);return()=>clearTimeout(autoTimer.current);},[loading,syncing,pending.length,rows.length,tickets.length]);
   const buckets=[];
   if(valid){if(["day","yesterday","24hours"].includes(period)){for(let h=0;h<24;h++){const d=new Date(from.getTime()+h*3600000);const next=new Date(d.getTime()+3600000);buckets.push({date:d,next,label:period==="24hours"?d.toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric"}):d.toLocaleTimeString(undefined,{hour:"numeric"})});}}
     else {const total=Math.ceil((until-from)/86400000),step=Math.max(1,Math.ceil(total/62));for(let d=new Date(from);d<until;){const date=new Date(d);d.setDate(d.getDate()+step);buckets.push({date,next:new Date(Math.min(d.getTime(),until.getTime())),label:date.toLocaleDateString(undefined,{month:"short",day:"numeric"})});}}}
@@ -1331,7 +1333,7 @@ function TicketPerformance({tickets,onRefreshTickets}) {
     {period==="custom"&&<div className="hub-performance-dates"><label>From <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Through <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>}
     <div className="hub-perf-body"><div className="hub-perf-range">{valid?`${from.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})} – ${new Date(until.getTime()-1).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}`:"Choose your date range"}{loading&&<span>Updating…</span>}</div>
     <section className="hub-perf-handling"><div className="hub-perf-chart-head"><h3>Average handling time</h3><span>Hours : minutes</span></div>{metricCards.map(c=><div className="hub-perf-timing" key={c.label}><div><span>{c.label}</span><strong>{c.value}</strong></div><div className="hub-perf-track"><i style={{width:`${c.seconds===null?0:c.seconds/timingMax*100}%`}}/></div><small>{c.note}</small></div>)}</section>
-    <div className="hub-perf-sync"><div><strong>{tickets.filter(hasMetrics).length} / {tickets.length} tickets have Zoho metrics</strong><p>{progress||"Populate existing tickets to fill response and resolution times."}</p></div>{syncing?<button onClick={()=>{stop.current=true;setProgress("Stopping after the current ticket…");}}>Stop after this ticket</button>:<button disabled={!!error&&!rows.length||!pending.length} onClick={populate}>{pending.length?`Populate next ${Math.min(20,pending.length)} tickets`:"Metrics up to date"}</button>}</div>
+    <div className="hub-perf-sync"><div><strong>{tickets.filter(hasMetrics).length} / {tickets.length} tickets have Zoho metrics</strong><p>{progress||(pending.length?"Automatically populating response and resolution times in the background.":"Zoho metrics are up to date.")}</p></div>{syncing?<button onClick={()=>{stop.current=true;setProgress("Automatic backfill paused after the current ticket.");}}>Pause automatic sync</button>:pending.length&&stop.current?<button onClick={()=>{stop.current=false;setProgress("Automatic backfill resumed.");populate();}}>Resume automatic sync</button>:<span className="hub-perf-auto-state">{pending.length?"Automatic":"Complete"}</span>}</div>
     {error&&<p className="hub-perf-notice" role="alert">{error}</p>}{unknownClosed>0&&<p className="hub-perf-notice">{unknownClosed} closed tickets still need their closure date from Zoho. The chart shows confirmed dates; closed totals are incomplete until these tickets sync.</p>}
     <div className="hub-perf-chart-head"><h3>Created vs closed</h3><div><span className="hub-perf-dot blue"/>Created <span className="hub-perf-dot green"/>Closed</div></div>
     <div className="hub-perf-stats">{stats.map(c=><div className={c.tone} key={c.label}><strong>{c.value}</strong><span>{c.label}</span></div>)}</div>
@@ -4615,6 +4617,29 @@ function App() {
         );
       }
 
+      // Zoho stores the comment, while the Hub owns teammate notifications.
+      const hubMentions = commentMentions.filter((mention) => mention.email);
+      await Promise.allSettled(hubMentions.map((mention) =>
+        supabase.rpc("hub_notify_ticket_event", {
+          p_ticket_key: selected.ticket_key,
+          p_recipient: mention.email,
+          p_type: "mention",
+          p_comment_text: commentText.trim(),
+        })
+      ));
+
+      const ownerEmail = String(getTicketOwnerEmail(selected) || "").trim().toLowerCase();
+      const authorEmail = String(session?.user?.email || "").trim().toLowerCase();
+      const mentionedEmails = new Set(hubMentions.map((mention) => canonicalTeamEmail(mention.email)));
+      if (ownerEmail && canonicalTeamEmail(ownerEmail) !== canonicalTeamEmail(authorEmail) && !mentionedEmails.has(canonicalTeamEmail(ownerEmail))) {
+        await supabase.rpc("hub_notify_ticket_event", {
+          p_ticket_key: selected.ticket_key,
+          p_recipient: ownerEmail,
+          p_type: "comment",
+          p_comment_text: commentText.trim(),
+        });
+      }
+
       setCommentText("");
       setCommentMentions([]);
       setCommentFiles([]);
@@ -4766,6 +4791,23 @@ function App() {
     }
 
     if (field === "status") hubCompletionEvent(selected, finalValue);
+
+    // Ticket-detail assignments previously skipped the notification RPC.
+    // Code Wiz uses its marketing owner; the other brands use the Zoho agent.
+    let assignedPerson = null;
+    if (field === "codewizAgentName" && finalValue) {
+      assignedPerson = CODEWIZ_TICKET_OWNERS.find((person) => person.name === finalValue) || null;
+    } else if (field === "assigneeId" && selected.source !== "Code Wiz" && finalValue) {
+      assignedPerson = agents.find((agent) => String(agent.zoho_agent_id) === String(finalValue)) || null;
+    }
+    if (assignedPerson?.email) {
+      const { error: notificationError } = await supabase.rpc("hub_notify_assignment", {
+        p_ticket_key: selected.ticket_key,
+        p_recipient: assignedPerson.email,
+      });
+      if (notificationError) console.error("In-app assignment notification failed:", notificationError.message);
+      await loadNotifications();
+    }
 
     setUpdateNotice(
       "Saved"
@@ -6953,10 +6995,8 @@ function App() {
                         1.45,
                     }}
                   >
-                    {notification.actor_name ||
-                      notification.actor_email ||
-                      "A teammate"}{" "}
-                    {notification.notification_type === "assignment" ? "assigned this ticket to you" : "mentioned you"}
+                    {notification.actor_name || notification.actor_email || "A teammate"}{" "}
+                    {{assignment:"assigned this ticket to you",mention:"mentioned you in a comment",comment:"added a comment to your ticket",kudos:"sent you kudos"}[String(notification.notification_type||"").toLowerCase()]||"updated this ticket"}
                   </div>
 
                   {notification.comment_text && (
