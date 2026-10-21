@@ -6,8 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v31: automatic Zoho metric backfill and unified in-app
-// notifications for assignments, comments, mentions, and kudos.
+// CSG Ticket Hub v32: reliable new-ticket/new-reply unread state, automatic
+// Zoho metric backfill, and unified in-app notifications.
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
@@ -3026,6 +3026,8 @@ function App() {
 
   useEffect(() => {
     loadReplyState();
+    const timer = window.setInterval(loadReplyState, 30000);
+    return () => window.clearInterval(timer);
   }, [loadReplyState]);
 
   useEffect(() => {
@@ -3066,6 +3068,18 @@ function App() {
           },
           () => {
             loadTickets();
+            loadReplyState();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "ticket_team_read_state",
+          },
+          () => {
+            loadReplyState();
           }
         )
         .on(
@@ -7191,7 +7205,7 @@ function App() {
                           >
                             <div className="ticket-board-card-top">
                               <div className="ticket-board-card-subject">
-                                {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New customer reply" />}
+                                {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New ticket or customer reply" />}
                                 {ticket.subject || "Untitled ticket"}
                               </div>
                               <button
@@ -7334,7 +7348,7 @@ function App() {
                   <div className="classic-ticket-icon">✉</div>
                   <div className="classic-ticket-main">
                     <div className="classic-ticket-subject">
-                      {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New customer reply" />}
+                      {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New ticket or customer reply" />}
                       {ticket.subject || "Untitled ticket"}
                     </div>
                     <div className="classic-ticket-meta">
@@ -7470,7 +7484,7 @@ function App() {
                   <span className="ticket-number">#{ticket.ticket_number}</span>
                 </div>
                 <div className="ticket-subject">
-                  {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New customer reply" />}
+                  {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New ticket or customer reply" />}
                   {ticket.subject || "Untitled ticket"}
                 </div>
                 <div className="ticket-summary">{getTicketSummary(ticket) || "No preview available"}</div>
