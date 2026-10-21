@@ -4576,3 +4576,78 @@ button:hover {
   font-size: 12px;
   font-weight: 750;
 }
+.ticket-response-timing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.ticket-response-timing span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ticket-response-timing strong {
+  color: #475569;
+  font-weight: 750;
+}
+
+.ticket-response-timing time {
+  color: #7b8798;
+  white-space: nowrap;
+}
+
+.ticket-response-timing .requester-time::before,
+.ticket-response-timing .team-time::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.ticket-response-timing .requester-time::before { background: #f59e0b; }
+.ticket-response-timing .team-time::before { background: #2563eb; }
+
+.conversation-response-timing {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  max-width: 620px;
+}
+
+.conversation-response-timing > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid #e5eaf1;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.conversation-response-timing span {
+  color: #718096;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.conversation-response-timing strong {
+  color: #263348;
+  font-size: 12px;
+}
+
+.conversation-response-timing .requester { border-left: 3px solid #f59e0b; }
+.conversation-response-timing .team { border-left: 3px solid #2563eb; }
+
+@media (max-width: 760px) {
+  .conversation-response-timing { grid-template-columns: 1fr; }
+}
