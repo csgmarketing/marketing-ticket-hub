@@ -6,8 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v32: reliable new-ticket/new-reply unread state, automatic
-// Zoho metric backfill, and unified in-app notifications.
+// CSG Ticket Hub v33: clear requester/team reply timing, reliable unread
+// state, automatic Zoho metric backfill, and unified in-app notifications.
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
@@ -2996,7 +2996,7 @@ function App() {
     }
 
     const [latestResult, readResult, baselineResult] = await Promise.all([
-      supabase.from("hub_ticket_reply_state").select("ticket_key, latest_customer_reply_at"),
+      supabase.from("hub_ticket_reply_state").select("ticket_key, latest_customer_reply_at, ticket_created_at, latest_inbound_reply_at, latest_team_reply_at, latest_team_reply_email, latest_team_reply_name"),
       supabase.from("ticket_team_read_state").select("ticket_key, last_read_at"),
       supabase.from("hub_inbox_baseline").select("baseline_at").eq("id", true).maybeSingle(),
     ]);
@@ -3017,6 +3017,11 @@ function App() {
         : baselineAt;
       next[row.ticket_key] = {
         latestCustomerReplyAt: row.latest_customer_reply_at,
+        ticketCreatedAt: row.ticket_created_at,
+        latestInboundReplyAt: row.latest_inbound_reply_at,
+        latestTeamReplyAt: row.latest_team_reply_at,
+        latestTeamReplyEmail: row.latest_team_reply_email,
+        latestTeamReplyName: row.latest_team_reply_name,
         lastReadAt,
         unread: Boolean(row.latest_customer_reply_at) && new Date(row.latest_customer_reply_at) > new Date(effectiveReadAt),
       };
@@ -3044,6 +3049,19 @@ function App() {
         if (error) console.warn("Could not save read state:", error);
       });
   }, [selectedKey, session?.user?.id]);
+
+  function renderTicketResponseTiming(ticket) {
+    const state = replyState[ticket.ticket_key] || {};
+    const requesterAt = state.latestInboundReplyAt || state.ticketCreatedAt;
+    const teamAt = state.latestTeamReplyAt;
+    const isMe = canonicalTeamEmail(state.latestTeamReplyEmail) === canonicalTeamEmail(session?.user?.email);
+    const teamLabel = isMe ? "You replied" : `${state.latestTeamReplyName || "Team"} replied`;
+    if (!requesterAt && !teamAt) return null;
+    return <div className="ticket-response-timing">
+      {requesterAt && <span className="requester-time"><strong>{state.latestInboundReplyAt ? "Requester replied" : "Requester submitted"}</strong><time>{formatDateTime(requesterAt)}</time></span>}
+      {teamAt && <span className="team-time"><strong>{teamLabel}</strong><time>{formatDateTime(teamAt)}</time></span>}
+    </div>;
+  }
 
   // ====================================================
   // REALTIME
@@ -3226,6 +3244,11 @@ function App() {
   const latestThread =
     newestThreads[0] ||
     null;
+
+  const latestRequesterThread = newestThreads.find((thread) => !isOutboundThread(thread)) || null;
+  const latestTeamThread = newestThreads.find((thread) => isOutboundThread(thread)) || null;
+  const latestTeamThreadIsMine = latestTeamThread &&
+    canonicalTeamEmail(latestTeamThread.author_email) === canonicalTeamEmail(session?.user?.email);
 
   const timelineItems =
     useMemo(() => {
@@ -7227,6 +7250,7 @@ function App() {
                               <span>{ticket.contact_name || ticket.contact_email || "Unknown requester"}</span>
                             </div>
                             <div className="ticket-board-card-date">{formatDateTime(ticket.updated_at || ticket.created_at)}</div>
+                            {renderTicketResponseTiming(ticket)}
                             <div className="ticket-board-card-footer">
                               <div className="list-status-control">
                                 <button
@@ -7360,6 +7384,7 @@ function App() {
                       <span>·</span>
                       <span>{formatDateTime(ticket.updated_at || ticket.created_at)}</span>
                     </div>
+                    {renderTicketResponseTiming(ticket)}
                   </div>
                   <div className="classic-ticket-status">
                     <div className="list-status-control">
@@ -7489,6 +7514,7 @@ function App() {
                 </div>
                 <div className="ticket-summary">{getTicketSummary(ticket) || "No preview available"}</div>
                 <div className="ticket-requester">{ticket.contact_name || ticket.contact_email || "Unknown requester"}</div>
+                {renderTicketResponseTiming(ticket)}
                 <div className="ticket-row-bottom">
                   <div className="list-status-control compact-status-control">
                     <button
@@ -7624,6 +7650,17 @@ function App() {
                       }
                     </span>
                   )}
+                </div>
+
+                <div className="conversation-response-timing">
+                  <div className="requester">
+                    <span>{latestRequesterThread ? "Latest requester reply" : "Ticket submitted"}</span>
+                    <strong>{formatDateTime(latestRequesterThread?.created_at_zoho || selected.created_at_zoho) || "Not recorded"}</strong>
+                  </div>
+                  <div className="team">
+                    <span>{latestTeamThreadIsMine ? "Your latest reply" : latestTeamThread ? `${latestTeamThread.author_name || "Team"}'s latest reply` : "Latest team reply"}</span>
+                    <strong>{latestTeamThread ? formatDateTime(latestTeamThread.created_at_zoho) : "No reply sent yet"}</strong>
+                  </div>
                 </div>
               </div>
 
