@@ -6,8 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v29: shared unread state, fast optimistic syncing,
-// complete AI tag/tier suggestions, and Code Wiz email aliases.
+// CSG Ticket Hub v30: resilient Brandy ownership matching, required AI tiers,
+// strong missing-tag warnings, shared unread state, and fast syncing.
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
@@ -398,6 +398,46 @@ function getTicketOwnerEmail(ticket) {
     return sameFirstAndLast || uniqueFirstName;
   });
   return matches.length === 1 ? String(matches[0].email).trim().toLowerCase() : email;
+}
+
+function normalizeTeamName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function getTeamMemberForUser(user) {
+  if (!user) return null;
+  const email = String(user.email || "").trim().toLowerCase();
+  const fullName = normalizeTeamName(user.user_metadata?.full_name || user.user_metadata?.name);
+  const localPart = email.split("@")[0].replace(/[^a-z]/g, "");
+  return CODEWIZ_TICKET_OWNERS.find((person) => {
+    const emails = [person.email, ...(person.emailAliases || [])]
+      .map((candidate) => String(candidate || "").trim().toLowerCase());
+    const names = [person.name, ...(person.aliases || [])].map(normalizeTeamName);
+    const personLocal = String(person.email || "").split("@")[0].replace(/[^a-z]/g, "");
+    const first = normalizeTeamName(person.name).split(" ")[0];
+    return emails.includes(email) ||
+      (fullName && names.some((name) => fullName === name || fullName.startsWith(`${first} `))) ||
+      (localPart && (localPart === personLocal || localPart.includes(first)));
+  }) || null;
+}
+
+function isTicketOwnedByUser(ticket, user) {
+  if (!ticket || !user) return false;
+  const ownerEmail = canonicalTeamEmail(getTicketOwnerEmail(ticket));
+  const signedInEmail = canonicalTeamEmail(user.email);
+  if (ownerEmail && signedInEmail && ownerEmail === signedInEmail) return true;
+  const teammate = getTeamMemberForUser(user);
+  if (!teammate) return false;
+  if (ownerEmail === canonicalTeamEmail(teammate.email)) return true;
+  const ownerName = normalizeTeamName(getTicketOwnerName(ticket));
+  return [teammate.name, ...(teammate.aliases || [])]
+    .map(normalizeTeamName)
+    .some((name) => ownerName === name || ownerName.startsWith(`${name.split(" ")[0]} `));
 }
 
 function isTicketUnassigned(ticket) {
@@ -1138,7 +1178,7 @@ function HubOperations({page,tickets,session,onOpen,onDue}) {
 function MyWeekWorkspace({tickets,session,now,onOpen}) {
   const [brand,setBrand]=useState("all"),[focus,setFocus]=useState("all");
   const email=canonicalTeamEmail(session?.user?.email);
-  const mine=tickets.filter(t=>canonicalTeamEmail(getTicketOwnerEmail(t))===email && (brand==="all"||t.source===brand));
+  const mine=tickets.filter(t=>isTicketOwnedByUser(t, session?.user) && (brand==="all"||t.source===brand));
   const open=mine.filter(t=>!HUB_CLOSED(t));
   const weekStart=new Date(now);weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
   const weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+7);
@@ -1316,7 +1356,7 @@ function MarketingDashboard({tickets,session,onOpen,onNavigate,onFind,onRefreshT
   }refresh();const interval=setInterval(()=>{setNow(new Date());refresh();},60000);const channel=supabase.channel("hub-dashboard-activity");for(const table of ["hub_ticket_activity","ticket_comments","ticket_threads"])channel.on("postgres_changes",{event:"*",schema:"public",table},refresh);channel.subscribe();return()=>{live=false;clearInterval(interval);supabase.removeChannel(channel);};},[session?.user?.id]);
   const email=canonicalTeamEmail(session?.user?.email);
   const ownerScope=scope==="mine"?email:individual;
-  const ownerMatch=t=>scope==="team"||canonicalTeamEmail(getTicketOwnerEmail(t))===canonicalTeamEmail(ownerScope);
+  const ownerMatch=t=>scope==="team"||(scope==="mine"?isTicketOwnedByUser(t,session?.user):canonicalTeamEmail(getTicketOwnerEmail(t))===canonicalTeamEmail(ownerScope));
   const visible=tickets.filter(t=>(brand==="all"||t.source===brand)&&ownerMatch(t));
   const active=visible.filter(t=>!HUB_CLOSED(t)),overdue=active.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now),today=active.filter(t=>hubSameDay(t.due_date,now)),unassigned=active.filter(isTicketUnassigned);
   const attention=active.filter(t=>hubAttention(t,now)||isTicketUnassigned(t)).sort((a,b)=>{const score=t=>(hubDate(t.due_date)&&hubDate(t.due_date)<now?4:0)+(String(t.priority).toLowerCase()==="high"?2:0)+(isTicketUnassigned(t)?1:0);return score(b)-score(a)||(hubDate(a.due_date)?.getTime()||Infinity)-(hubDate(b.due_date)?.getTime()||Infinity);});
@@ -5082,7 +5122,17 @@ function App() {
     if (error || !data?.success || !data?.suggestion) {
       setClassificationNotice(data?.error || error?.message || "ChatGPT could not classify this ticket.");
     } else {
-      setClassificationSuggestion(data.suggestion);
+      const fallbackTier = (() => {
+        if (selected.source === "Qualicare") return null;
+        const text = `${selected.subject || ""} ${selected.description || ""}`.toLowerCase();
+        if (String(selected.status || "").toLowerCase() === "escalated" || /escalat|executive|legal|critical/.test(text)) return "Tier 3";
+        if (String(selected.priority || "").toLowerCase() === "high" || /campaign|redesign|integration|automation|migration|multi[- ]step/.test(text)) return "Tier 2";
+        return "Tier 1";
+      })();
+      setClassificationSuggestion({
+        ...data.suggestion,
+        tier: data.suggestion.tier || fallbackTier,
+      });
     }
     setClassificationBusy(false);
   }
@@ -5329,11 +5379,9 @@ function App() {
         filter ===
         "mine"
       ) {
-        const ownerEmail = currentUserEmail;
-
         rows = rows.filter(
           (ticket) =>
-            ownerEmail && getTicketOwnerEmail(ticket) === ownerEmail &&
+            isTicketOwnedByUser(ticket, session?.user) &&
             ticket.status !== "Closed"
         );
       }
@@ -5635,8 +5683,8 @@ function App() {
                 brandFilter
             );
 
-      const myTickets = countTickets.filter(ticket => userEmail &&
-        getTicketOwnerEmail(ticket) === userEmail && ticket.status !== "Closed" &&
+      const myTickets = countTickets.filter(ticket =>
+        isTicketOwnedByUser(ticket, session?.user) && ticket.status !== "Closed" &&
         (brandFilter !== "Tutor Doctor" || departmentFilter === "all" ||
           String(ticket.department || "").trim() === departmentFilter));
 
@@ -8774,11 +8822,11 @@ function App() {
 
             <div className="details-content">
 
-              {(tags.length === 0 || (selected.source !== "Qualicare" && !selected.tier_level)) && !loadingTags && (
+              {(!tags.some((tag) => String(tag.name || "").trim()) || (selected.source !== "Qualicare" && !selected.tier_level)) && !loadingTags && (
                 <div className="classification-alert">
                   <div className="classification-alert-title"><span>⚠</span> Classification needed</div>
                   <div className="classification-alert-text">
-                    {tags.length === 0 && <span>Tags are missing.</span>}
+                    {!tags.some((tag) => String(tag.name || "").trim()) && <span>Tags are missing.</span>}
                     {selected.source !== "Qualicare" && !selected.tier_level && <span>Tier is missing.</span>}
                   </div>
                   <button type="button" className="classification-ai-button" disabled={classificationBusy} onClick={suggestTicketClassification}>
@@ -9149,8 +9197,8 @@ function App() {
                 </Detail>
               )}
 
-              <div className={tags.length === 0 && !loadingTags ? "classification-field-missing" : ""}>
-              <Detail label={tags.length === 0 && !loadingTags ? "Tags ⚠" : "Tags"}>
+              <div className={!tags.some((tag) => String(tag.name || "").trim()) && !loadingTags ? "classification-field-missing" : ""}>
+              <Detail label={!tags.some((tag) => String(tag.name || "").trim()) && !loadingTags ? "Tags ⚠" : "Tags"}>
 
                 {loadingTags ? (
                   <div className="tag-loading">
