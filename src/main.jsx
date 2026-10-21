@@ -6,6 +6,9 @@ import React, {
   useState,
 } from "react";
 
+// CSG Ticket Hub v28: ChatGPT classification, personal unread replies,
+// and Code Wiz owner aliases for Eduarda and Brandy.
+
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import "./styles.css";
@@ -90,26 +93,32 @@ const CODEWIZ_TICKET_OWNERS = [
   {
     name: "Manuela Cruz",
     email: "mcruz@clearsummitgroup.com",
+    aliases: ["Manuela", "Manuela Cruz"],
   },
   {
     name: "Daniela Alvarez",
     email: "dalvarez@clearsummitgroup.com",
+    aliases: ["Daniela", "Daniela Alvarez"],
   },
   {
     name: "Brandy Blackburn",
     email: "bblackburn@tutordoctor.org",
+    aliases: ["Brandy", "Brandy Blackburn"],
   },
   {
     name: "Fauziyah Salaudeen",
     email: "fsalaudeen@qualicare.com",
+    aliases: ["Fauziyah", "Fauziyah Salaudeen"],
   },
   {
     name: "Eduarda Servat",
     email: "eservat@clearsummitgroup.com",
+    aliases: ["Eduarda", "Eduarda Servat", "Eduarda Zamin", "Eduarda Zamin Servat"],
   },
   {
     name: "Michelle Morris",
     email: "mmorris@clearsummitgroup.com",
+    aliases: ["Michelle", "Michelle Morris"],
   },
 ];
 
@@ -332,14 +341,44 @@ function getTicketOwnerEmail(ticket) {
   const email = String(ticket.source === "Code Wiz"
     ? ticket.codewiz_agent_email || ""
     : ticket.assignee_email || "").trim().toLowerCase();
-  if (email) return email;
-  // Some synced tickets only contain the owner's display name. Resolve only
-  // an exact, unique full-name match in our configured team directory.
-  const normalizeName = value => String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+  // For Tutor Doctor and Qualicare, Zoho's owner email is authoritative.
+  // For Code Wiz, only trust the stored email immediately when it belongs to
+  // a configured marketing teammate. Generic Code Wiz mailboxes must not
+  // override the separate marketing-assignee name.
+  if (email && (ticket.source !== "Code Wiz" || CODEWIZ_TICKET_OWNERS.some(person => String(person.email).trim().toLowerCase() === email))) {
+    return email;
+  }
+  // Some synced Code Wiz tickets only contain the marketing owner's display
+  // name. Zoho may include middle names that are not present in our team
+  // directory, so accept either an exact name or the same first + last name.
+  // A match is used only when it resolves to exactly one team member.
+  const normalizeName = value => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
   const name = normalizeName(getTicketOwnerName(ticket));
   if (!name) return "";
-  const matches = CODEWIZ_TICKET_OWNERS.filter(person => normalizeName(person.name) === name);
-  return matches.length === 1 ? String(matches[0].email).trim().toLowerCase() : "";
+  const parts = name.split(" ").filter(Boolean);
+  const first = parts[0] || "";
+  const last = parts[parts.length - 1] || "";
+  const matches = CODEWIZ_TICKET_OWNERS.filter(person => {
+    const configured = normalizeName(person.name);
+    const aliases = [person.name, ...(person.aliases || [])].map(normalizeName);
+    if (aliases.includes(name)) return true;
+    const configuredParts = configured.split(" ").filter(Boolean);
+    const sameFirstAndLast = parts.length >= 2 && configuredParts.length >= 2 &&
+      configuredParts[0] === first &&
+      configuredParts[configuredParts.length - 1] === last;
+    // Zoho sometimes stores only the first name or first name plus an initial.
+    // Every configured marketing teammate has a unique first name, so this is
+    // still deterministic and avoids assigning a ticket to the wrong person.
+    const uniqueFirstName = configuredParts[0] === first &&
+      CODEWIZ_TICKET_OWNERS.filter(owner => normalizeName(owner.name).split(" ")[0] === first).length === 1;
+    return sameFirstAndLast || uniqueFirstName;
+  });
+  return matches.length === 1 ? String(matches[0].email).trim().toLowerCase() : email;
 }
 
 function isTicketUnassigned(ticket) {
@@ -1156,12 +1195,21 @@ function HubSyncHealth({session}) {
   const [rows,setRows]=useState([]),[error,setError]=useState(""),[busy,setBusy]=useState(false),[open,setOpen]=useState(false),[now,setNow]=useState(Date.now());
   const refresh=useCallback(async()=>{setBusy(true);const {data,error:failure}=await supabase.from("hub_sync_health").select("*");setRows(data||[]);setError(failure?"Sync monitoring unavailable. Run the sync-health SQL first.":"");setBusy(false);},[session?.user?.id]);
   useEffect(()=>{refresh();const timer=setInterval(()=>{setNow(Date.now());refresh();},30000);return()=>clearInterval(timer);},[refresh]);
-  const state=r=>!r?.status?"Not recorded":r.status==="running"?(now-new Date(r.started_at).getTime()>10*60000?"Check needed":"Syncing"):r.status==="failed"?"Failed":"Healthy";
+  // Active-ticket jobs run every 15 minutes. After 45 minutes without a
+  // recorded attempt, the brand is stale even when its last run succeeded.
+  const state=r=>{
+    if(!r?.status)return "Not recorded";
+    const attemptedAt=new Date(r.started_at||r.last_success_at||0).getTime();
+    const age=Number.isFinite(attemptedAt)?now-attemptedAt:Number.POSITIVE_INFINITY;
+    if(r.status==="running")return age>10*60000?"Check needed":"Syncing";
+    if(r.status==="failed")return "Failed";
+    return age>45*60000?"Stale":"Healthy";
+  };
   const brands=["Qualicare","Tutor Doctor","Code Wiz"];
   const states=brands.map(b=>state(rows.find(r=>r.source===b)));
-  const label=error?"Unavailable":busy&&!rows.length?"Checking…":states.includes("Failed")?"Needs attention":states.includes("Check needed")?"Check needed":states.includes("Syncing")?"Syncing":states.every(s=>s==="Healthy")?"Healthy":"Not fully recorded";
-  const tone=label==="Healthy"?"healthy":label==="Syncing"?"syncing":["Needs attention","Check needed"].includes(label)?"failed":"unknown";
-  return <div className="hub-sync"><button className="hub-sync-toggle" type="button" aria-expanded={open} onClick={()=>setOpen(v=>!v)}><span className={`hub-sync-dot ${tone}`}/><span><strong>Ticket sync</strong><small>{label}</small></span><span aria-hidden="true">{open?"⌃":"⌄"}</span></button>{open&&<div className="hub-sync-details">{error&&<p role="status">{error}</p>}{brands.map(b=>{const r=rows.find(r=>r.source===b);return <div key={b}><strong>{b}</strong><span>{state(r)}</span><small>Last success: {r?.last_success_at?formatDateTime(r.last_success_at):"Not recorded"}</small>{r?.started_at&&<small>Latest attempt: {formatDateTime(r.started_at)}</small>}</div>;})}<p>Tracks individual ticket refreshes. Healthy means the latest recorded attempt succeeded; it does not verify a complete brand sync.</p><button type="button" disabled={busy} onClick={refresh}>{busy?"Checking…":"Refresh status"}</button></div>}</div>;
+  const label=error?"Unavailable":busy&&!rows.length?"Checking…":states.includes("Failed")?"Needs attention":states.includes("Check needed")?"Check needed":states.includes("Stale")?"Stale":states.includes("Syncing")?"Syncing":states.every(s=>s==="Healthy")?"Healthy":"Not fully recorded";
+  const tone=label==="Healthy"?"healthy":label==="Syncing"?"syncing":["Needs attention","Check needed","Stale"].includes(label)?"failed":"unknown";
+  return <div className="hub-sync"><button className="hub-sync-toggle" type="button" aria-expanded={open} onClick={()=>setOpen(v=>!v)}><span className={`hub-sync-dot ${tone}`}/><span><strong>Ticket sync</strong><small>{label}</small></span><span aria-hidden="true">{open?"⌃":"⌄"}</span></button>{open&&<div className="hub-sync-details">{error&&<p role="status">{error}</p>}{brands.map(b=>{const r=rows.find(r=>r.source===b);return <div key={b}><strong>{b}</strong><span>{state(r)}</span><small>Last success: {r?.last_success_at?formatDateTime(r.last_success_at):"Not recorded"}</small>{r?.started_at&&<small>Latest attempt: {formatDateTime(r.started_at)}</small>}</div>;})}<p>Healthy means a successful ticket refresh was recorded within the last 45 minutes. Stale means no recent attempt was recorded.</p><button type="button" disabled={busy} onClick={refresh}>{busy?"Checking…":"Refresh status"}</button></div>}</div>;
 }
 
 function TicketPerformance({tickets,onRefreshTickets}) {
@@ -1417,6 +1465,11 @@ function App() {
   ] =
     useState([]);
 
+  const [replyState, setReplyState] = useState({});
+  const [classificationSuggestion, setClassificationSuggestion] = useState(null);
+  const [classificationBusy, setClassificationBusy] = useState(false);
+  const [classificationNotice, setClassificationNotice] = useState("");
+
   const [
     selectedKey,
     setSelectedKeyState,
@@ -1449,6 +1502,11 @@ function App() {
   }
 
   useEffect(() => { setDeleteNotice(""); }, [selectedKey]);
+
+  useEffect(() => {
+    setClassificationSuggestion(null);
+    setClassificationNotice("");
+  }, [selectedKey]);
 
   const [
     loadingThreads,
@@ -2867,6 +2925,59 @@ function App() {
   ]);
 
   // ====================================================
+  // PERSONAL READ / UNREAD STATE
+  // ====================================================
+
+  const loadReplyState = useCallback(async () => {
+    if (!session?.user?.id) {
+      setReplyState({});
+      return;
+    }
+
+    const [latestResult, readResult] = await Promise.all([
+      supabase.from("hub_ticket_reply_state").select("ticket_key, latest_customer_reply_at"),
+      supabase.from("ticket_user_read_state").select("ticket_key, last_read_at").eq("user_id", session.user.id),
+    ]);
+
+    // Keep the Hub usable if the new migration has not been run yet.
+    if (latestResult.error || readResult.error) {
+      console.warn("Reply state unavailable:", latestResult.error || readResult.error);
+      return;
+    }
+
+    const readByTicket = new Map((readResult.data || []).map((row) => [row.ticket_key, row.last_read_at]));
+    const next = {};
+    for (const row of latestResult.data || []) {
+      const lastReadAt = readByTicket.get(row.ticket_key) || null;
+      next[row.ticket_key] = {
+        latestCustomerReplyAt: row.latest_customer_reply_at,
+        lastReadAt,
+        unread: Boolean(row.latest_customer_reply_at) && (!lastReadAt || new Date(row.latest_customer_reply_at) > new Date(lastReadAt)),
+      };
+    }
+    setReplyState(next);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    loadReplyState();
+  }, [loadReplyState]);
+
+  useEffect(() => {
+    if (!selectedKey || !session?.user?.id) return;
+    const readAt = new Date().toISOString();
+    setReplyState((current) => ({
+      ...current,
+      [selectedKey]: { ...(current[selectedKey] || {}), lastReadAt: readAt, unread: false },
+    }));
+    supabase
+      .from("ticket_user_read_state")
+      .upsert({ user_id: session.user.id, ticket_key: selectedKey, last_read_at: readAt }, { onConflict: "user_id,ticket_key" })
+      .then(({ error }) => {
+        if (error) console.warn("Could not save read state:", error);
+      });
+  }, [selectedKey, session?.user?.id]);
+
+  // ====================================================
   // REALTIME
   // ====================================================
 
@@ -2916,6 +3027,8 @@ function App() {
                 selectedKey
               );
             }
+
+            loadReplyState();
           }
         )
         .on(
@@ -3001,6 +3114,7 @@ function App() {
     loadComments,
     loadTags,
     loadNotifications,
+    loadReplyState,
   ]);
 
   // ====================================================
@@ -4901,6 +5015,40 @@ function App() {
       zohoTierOptions,
       selected?.tier_level,
     ]);
+
+  async function suggestTicketClassification() {
+    if (!selected || classificationBusy) return;
+    setClassificationBusy(true);
+    setClassificationNotice("");
+    setClassificationSuggestion(null);
+
+    const { data, error } = await supabase.functions.invoke("hub-ticket-classify", {
+      body: {
+        ticket_key: selected.ticket_key,
+        tier_options: selected.source === "Qualicare" ? [] : tierOptions,
+      },
+    });
+
+    if (error || !data?.success || !data?.suggestion) {
+      setClassificationNotice(data?.error || error?.message || "ChatGPT could not classify this ticket.");
+    } else {
+      setClassificationSuggestion(data.suggestion);
+    }
+    setClassificationBusy(false);
+  }
+
+  function acceptSuggestedTag(name) {
+    addTagByName(name);
+    setClassificationSuggestion((current) => current ? {
+      ...current,
+      tags: (current.tags || []).filter((tag) => tag !== name),
+    } : current);
+  }
+
+  function acceptSuggestedTier(tier) {
+    updateTicketField("tierLevel", tier);
+    setClassificationSuggestion((current) => current ? { ...current, tier: null } : current);
+  }
 
   // ====================================================
   // FILTERING
@@ -6859,7 +7007,7 @@ function App() {
                         return (
                           <article
                             key={ticket.ticket_key}
-                            className={`ticket-board-card ${brandClass(ticket.source)}`}
+                            className={`ticket-board-card ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""}`}
                             onClick={() => {
                               // Board is full-width until a ticket is intentionally opened.
                               setTicketViewMode("compact");
@@ -6867,7 +7015,10 @@ function App() {
                             }}
                           >
                             <div className="ticket-board-card-top">
-                              <div className="ticket-board-card-subject">{ticket.subject || "Untitled ticket"}</div>
+                              <div className="ticket-board-card-subject">
+                                {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New customer reply" />}
+                                {ticket.subject || "Untitled ticket"}
+                              </div>
                               <button
                                 type="button"
                                 className={`ticket-board-owner ${classicAssignmentKey === ticket.ticket_key ? "active" : ""}`}
@@ -6985,7 +7136,7 @@ function App() {
               return (
                 <div
                   key={ticket.ticket_key}
-                  className={`ticket-row-classic ${brandClass(ticket.source)}`}
+                  className={`ticket-row-classic ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""}`}
                   onClick={() => {
                     // Classic is list-first, but clicking a ticket should still
                     // open the normal ticket workspace.
@@ -7007,7 +7158,10 @@ function App() {
                   </div>
                   <div className="classic-ticket-icon">✉</div>
                   <div className="classic-ticket-main">
-                    <div className="classic-ticket-subject">{ticket.subject || "Untitled ticket"}</div>
+                    <div className="classic-ticket-subject">
+                      {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New customer reply" />}
+                      {ticket.subject || "Untitled ticket"}
+                    </div>
                     <div className="classic-ticket-meta">
                       <span>#{ticket.ticket_number || "—"}</span>
                       <span>·</span>
@@ -7133,14 +7287,17 @@ function App() {
             return (
               <button
                 key={ticket.ticket_key}
-                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""}`}
+                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""}`}
                 onClick={() => setSelectedKey(ticket.ticket_key)}
               >
                 <div className="ticket-row-top">
                   <BrandBadge source={ticket.source} />
                   <span className="ticket-number">#{ticket.ticket_number}</span>
                 </div>
-                <div className="ticket-subject">{ticket.subject || "Untitled ticket"}</div>
+                <div className="ticket-subject">
+                  {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New customer reply" />}
+                  {ticket.subject || "Untitled ticket"}
+                </div>
                 <div className="ticket-summary">{getTicketSummary(ticket) || "No preview available"}</div>
                 <div className="ticket-requester">{ticket.contact_name || ticket.contact_email || "Unknown requester"}</div>
                 <div className="ticket-row-bottom">
@@ -8530,6 +8687,46 @@ function App() {
 
             <div className="details-content">
 
+              {(tags.length === 0 || (selected.source !== "Qualicare" && !selected.tier_level)) && !loadingTags && (
+                <div className="classification-alert">
+                  <div className="classification-alert-title"><span>⚠</span> Classification needed</div>
+                  <div className="classification-alert-text">
+                    {tags.length === 0 && <span>Tags are missing.</span>}
+                    {selected.source !== "Qualicare" && !selected.tier_level && <span>Tier is missing.</span>}
+                  </div>
+                  <button type="button" className="classification-ai-button" disabled={classificationBusy} onClick={suggestTicketClassification}>
+                    {classificationBusy ? "ChatGPT is reviewing…" : "✨ Suggest tags & tier"}
+                  </button>
+                </div>
+              )}
+
+              {classificationSuggestion && (
+                <div className="classification-suggestion">
+                  <div className="classification-suggestion-head">
+                    <strong>ChatGPT suggestion</strong>
+                    <span>{classificationSuggestion.confidence || "low"} confidence</span>
+                  </div>
+                  <p>{classificationSuggestion.reason || "Review these suggestions before applying them."}</p>
+                  {(classificationSuggestion.tags || []).length > 0 && (
+                    <div className="classification-suggestion-row">
+                      <span>Tags</span>
+                      <div>{classificationSuggestion.tags.map((tag) => (
+                        <button type="button" key={tag} disabled={tagBusy} onClick={() => acceptSuggestedTag(tag)}>+ {tag}</button>
+                      ))}</div>
+                    </div>
+                  )}
+                  {classificationSuggestion.tier && selected.source !== "Qualicare" && (
+                    <div className="classification-suggestion-row">
+                      <span>Tier</span>
+                      <div><button type="button" disabled={updateBusy} onClick={() => acceptSuggestedTier(classificationSuggestion.tier)}>Use {classificationSuggestion.tier}</button></div>
+                    </div>
+                  )}
+                  <button type="button" className="classification-dismiss" onClick={() => setClassificationSuggestion(null)}>Dismiss</button>
+                </div>
+              )}
+
+              {classificationNotice && <div className="classification-error">{classificationNotice}</div>}
+
               <Detail label="Brand">
                 <BrandBadge
                   source={
@@ -8858,7 +9055,8 @@ function App() {
                 </Detail>
               )}
 
-              <Detail label="Tags">
+              <div className={tags.length === 0 && !loadingTags ? "classification-field-missing" : ""}>
+              <Detail label={tags.length === 0 && !loadingTags ? "Tags ⚠" : "Tags"}>
 
                 {loadingTags ? (
                   <div className="tag-loading">
@@ -9035,8 +9233,10 @@ function App() {
                   </>
                 )}
               </Detail>
+              </div>
 
-              <Detail label="Tier">
+              {selected.source !== "Qualicare" && <div className={!selected.tier_level && !loadingTierOptions ? "classification-field-missing" : ""}>
+              <Detail label={!selected.tier_level && !loadingTierOptions ? "Tier ⚠" : "Tier"}>
                 {loadingTierOptions ? (
                   <div className="agent-loading">
                     Loading tiers…
@@ -9086,6 +9286,7 @@ function App() {
                   </>
                 )}
               </Detail>
+              </div>}
 
               <Detail label="Priority">
 
