@@ -2867,10 +2867,11 @@ button:hover {
 
 .classification-field-missing {
   margin: 4px -7px;
-  padding: 0 7px;
-  border-left: 3px solid #ef4444;
-  border-radius: 5px;
-  background: linear-gradient(90deg, #fff1f2 0, rgba(255,255,255,0) 88%);
+  padding: 0 7px 7px;
+  border: 1px solid #ef4444;
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #fff1f2;
 }
 
 .classification-field-missing .detail-label { color: #b42318; }
