@@ -6,8 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v28: ChatGPT classification, personal unread replies,
-// and Code Wiz owner aliases for Eduarda and Brandy.
+// CSG Ticket Hub v29: shared unread state, fast optimistic syncing,
+// complete AI tag/tier suggestions, and Code Wiz email aliases.
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
@@ -89,6 +89,8 @@ const BRAND_STATUSES = {
   ],
 };
 
+const DEFAULT_MARKETING_TIERS = ["Tier 1", "Tier 2", "Tier 3"];
+
 const CODEWIZ_TICKET_OWNERS = [
   {
     name: "Manuela Cruz",
@@ -103,6 +105,12 @@ const CODEWIZ_TICKET_OWNERS = [
   {
     name: "Brandy Blackburn",
     email: "bblackburn@tutordoctor.org",
+    emailAliases: [
+      "bblackburn@tutordoctor.org",
+      "bblackburn@clearsummitgroup.com",
+      "brandy.blackburn@tutordoctor.org",
+      "brandy.blackburn@clearsummitgroup.com",
+    ],
     aliases: ["Brandy", "Brandy Blackburn"],
   },
   {
@@ -121,6 +129,17 @@ const CODEWIZ_TICKET_OWNERS = [
     aliases: ["Michelle", "Michelle Morris"],
   },
 ];
+
+function canonicalTeamEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email) return "";
+  const teammate = CODEWIZ_TICKET_OWNERS.find((person) =>
+    [person.email, ...(person.emailAliases || [])]
+      .map((candidate) => String(candidate || "").trim().toLowerCase())
+      .includes(email)
+  );
+  return teammate ? String(teammate.email).trim().toLowerCase() : email;
+}
 
 const CODEWIZ_DEFAULT_DEPARTMENT = {
   zoho_agent_id: "598256000022663005",
@@ -338,9 +357,9 @@ function getTicketOwnerName(ticket) {
 function getTicketOwnerEmail(ticket) {
   if (!ticket) return "";
   // Code Wiz's marketing assignment is separate from the Zoho owner.
-  const email = String(ticket.source === "Code Wiz"
+  const email = canonicalTeamEmail(ticket.source === "Code Wiz"
     ? ticket.codewiz_agent_email || ""
-    : ticket.assignee_email || "").trim().toLowerCase();
+    : ticket.assignee_email || "");
   // For Tutor Doctor and Qualicare, Zoho's owner email is authoritative.
   // For Code Wiz, only trust the stored email immediately when it belongs to
   // a configured marketing teammate. Generic Code Wiz mailboxes must not
@@ -1118,8 +1137,8 @@ function HubOperations({page,tickets,session,onOpen,onDue}) {
 }
 function MyWeekWorkspace({tickets,session,now,onOpen}) {
   const [brand,setBrand]=useState("all"),[focus,setFocus]=useState("all");
-  const email=String(session?.user?.email||"").toLowerCase();
-  const mine=tickets.filter(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===email && (brand==="all"||t.source===brand));
+  const email=canonicalTeamEmail(session?.user?.email);
+  const mine=tickets.filter(t=>canonicalTeamEmail(getTicketOwnerEmail(t))===email && (brand==="all"||t.source===brand));
   const open=mine.filter(t=>!HUB_CLOSED(t));
   const weekStart=new Date(now);weekStart.setHours(0,0,0,0);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
   const weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+7);
@@ -1295,14 +1314,14 @@ function MarketingDashboard({tickets,session,onOpen,onNavigate,onFind,onRefreshT
     for(const t of results[2].data||[])merged.push({id:`email-${t.thread_key||t.id}`,ticket_key:t.ticket_key,date:t.created_at_zoho,label:isOutboundThread(t)?"Reply sent":"Email received",actor:t.author_name||t.from_email||"Email",detail:stripHtml(t.summary||t.content_text||"").slice(0,140),kind:"email"});
     setEvents(merged.sort((a,b)=>(hubDate(b.date)?.getTime()||0)-(hubDate(a.date)?.getTime()||0)));setNotice(results.some(r=>r.error)?"Some activity sources could not be loaded. Showing the available history.":"");setLoading(false);
   }refresh();const interval=setInterval(()=>{setNow(new Date());refresh();},60000);const channel=supabase.channel("hub-dashboard-activity");for(const table of ["hub_ticket_activity","ticket_comments","ticket_threads"])channel.on("postgres_changes",{event:"*",schema:"public",table},refresh);channel.subscribe();return()=>{live=false;clearInterval(interval);supabase.removeChannel(channel);};},[session?.user?.id]);
-  const email=String(session?.user?.email||"").toLowerCase();
+  const email=canonicalTeamEmail(session?.user?.email);
   const ownerScope=scope==="mine"?email:individual;
-  const ownerMatch=t=>scope==="team"||String(getTicketOwnerEmail(t)||"").toLowerCase()===ownerScope;
+  const ownerMatch=t=>scope==="team"||canonicalTeamEmail(getTicketOwnerEmail(t))===canonicalTeamEmail(ownerScope);
   const visible=tickets.filter(t=>(brand==="all"||t.source===brand)&&ownerMatch(t));
   const active=visible.filter(t=>!HUB_CLOSED(t)),overdue=active.filter(t=>hubDate(t.due_date)&&hubDate(t.due_date)<now),today=active.filter(t=>hubSameDay(t.due_date,now)),unassigned=active.filter(isTicketUnassigned);
   const attention=active.filter(t=>hubAttention(t,now)||isTicketUnassigned(t)).sort((a,b)=>{const score=t=>(hubDate(t.due_date)&&hubDate(t.due_date)<now?4:0)+(String(t.priority).toLowerCase()==="high"?2:0)+(isTicketUnassigned(t)?1:0);return score(b)-score(a)||(hubDate(a.due_date)?.getTime()||Infinity)-(hubDate(b.due_date)?.getTime()||Infinity);});
   const map=new Map(visible.map(t=>[t.ticket_key,t]));const activity=events.filter(e=>map.has(e.ticket_key)).slice(0,12);
-  const name=(session?.user?.user_metadata?.full_name||getTicketOwnerName(tickets.find(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===email))||"").split(" ")[0];
+  const name=(session?.user?.user_metadata?.full_name||getTicketOwnerName(tickets.find(t=>canonicalTeamEmail(getTicketOwnerEmail(t))===email))||"").split(" ")[0];
   const greeting=now.getHours()<12?"Good morning":now.getHours()<18?"Good afternoon":"Good evening";
   const metrics=[{id:"active",label:"Active",rows:active,tone:"blue",icon:"tickets"},{id:"today",label:"Due today",rows:today,tone:"violet",icon:"calendar"},{id:"overdue",label:"Overdue",rows:overdue,tone:"rose",icon:"clock"},{id:"unassigned",label:"Unassigned",rows:unassigned,tone:"amber",icon:"unassigned"}];
   const list=rows=>rows.length?rows.map(t=><button type="button" className="hub-dashboard-ticket" key={t.ticket_key} onClick={()=>onOpen(t)}><div><BrandBadge source={t.source}/><span>#{t.ticket_number}</span></div><strong>{t.subject||"Untitled ticket"}</strong><footer><span>{getTicketOwnerName(t)||"Unassigned"}</span><span className={hubDate(t.due_date)&&hubDate(t.due_date)<now?"hub-danger":""}>{hubUrgency(t,now)}</span></footer></button>):<div className="hub-dashboard-empty">No tickets in this view.</div>;
@@ -1335,7 +1354,7 @@ function TeamMoments({session,tickets,onOpen}) {
   const weekKey=hubLocalInput(start).slice(0,10),goalKey=`hub-week-goal:${session.user.id}:${weekKey}`,prefKey=`hub-celebrations:${session.user.id}`;
   useEffect(()=>{setGoal(hubReadPreference(goalKey,5));setCelebrations(hubReadPreference(prefKey,true));},[goalKey,prefKey]);
   useEffect(()=>{let live=true;async function load(){const r=await Promise.all([supabase.rpc("hub_weekly_wins",{p_start:start.toISOString(),p_end:end.toISOString()}),supabase.from("hub_team_moods").select("*").order("updated_at",{ascending:false}),supabase.from("hub_kudos").select("*").order("created_at",{ascending:false}).limit(12)]);if(!live)return;setWins(r[0].data||[]);setMoods(r[1].data||[]);setKudos(r[2].data||[]);setNotice(r.some(x=>x.error)?"Team moments are unavailable until the community SQL is installed.":"");setLoading(false);}load();const id=setInterval(()=>{setNow(new Date());load();},60000);const channel=supabase.channel("hub-team-moments");for(const table of ["hub_team_moods","hub_kudos","hub_ticket_activity"])channel.on("postgres_changes",{event:"*",schema:"public",table},load);channel.subscribe();return()=>{live=false;clearInterval(id);supabase.removeChannel(channel);};},[session.user.id,weekKey]);
-  const email=String(session.user.email||"").toLowerCase(),mine=wins.filter(w=>String(w.owner_email||"").toLowerCase()===email),percent=Math.min(100,Math.round(mine.length/Math.max(goal,1)*100));
+  const email=canonicalTeamEmail(session.user.email),mine=wins.filter(w=>canonicalTeamEmail(w.owner_email)===email),percent=Math.min(100,Math.round(mine.length/Math.max(goal,1)*100));
   const mineMood=moods.find(m=>m.user_id===session.user.id)?.mood||"";
   const recentMoods=moods.filter(m=>new Date(m.updated_at)>=new Date(now.getFullYear(),now.getMonth(),now.getDate()));
   async function mood(value){if(busy)return;setBusy(true);setNotice("");let error;if(value){const r=await supabase.from("hub_team_moods").upsert({user_id:session.user.id,user_email:email,user_name:session.user.user_metadata?.full_name||getTicketOwnerName(tickets.find(t=>String(getTicketOwnerEmail(t)||"").toLowerCase()===email))||email,mood:value,updated_at:new Date().toISOString()},{onConflict:"user_id"}).select().single();error=r.error;if(!error)setMoods(v=>[r.data,...v.filter(m=>m.user_id!==session.user.id)]);}else{const r=await supabase.from("hub_team_moods").delete().eq("user_id",session.user.id);error=r.error;if(!error)setMoods(v=>v.filter(m=>m.user_id!==session.user.id));}if(error)setNotice(error.message);setBusy(false);}
@@ -2934,25 +2953,30 @@ function App() {
       return;
     }
 
-    const [latestResult, readResult] = await Promise.all([
+    const [latestResult, readResult, baselineResult] = await Promise.all([
       supabase.from("hub_ticket_reply_state").select("ticket_key, latest_customer_reply_at"),
-      supabase.from("ticket_user_read_state").select("ticket_key, last_read_at").eq("user_id", session.user.id),
+      supabase.from("ticket_team_read_state").select("ticket_key, last_read_at"),
+      supabase.from("hub_inbox_baseline").select("baseline_at").eq("id", true).maybeSingle(),
     ]);
 
     // Keep the Hub usable if the new migration has not been run yet.
-    if (latestResult.error || readResult.error) {
-      console.warn("Reply state unavailable:", latestResult.error || readResult.error);
+    if (latestResult.error || readResult.error || baselineResult.error) {
+      console.warn("Reply state unavailable:", latestResult.error || readResult.error || baselineResult.error);
       return;
     }
 
     const readByTicket = new Map((readResult.data || []).map((row) => [row.ticket_key, row.last_read_at]));
+    const baselineAt = baselineResult.data?.baseline_at || new Date().toISOString();
     const next = {};
     for (const row of latestResult.data || []) {
       const lastReadAt = readByTicket.get(row.ticket_key) || null;
+      const effectiveReadAt = lastReadAt && new Date(lastReadAt) > new Date(baselineAt)
+        ? lastReadAt
+        : baselineAt;
       next[row.ticket_key] = {
         latestCustomerReplyAt: row.latest_customer_reply_at,
         lastReadAt,
-        unread: Boolean(row.latest_customer_reply_at) && (!lastReadAt || new Date(row.latest_customer_reply_at) > new Date(lastReadAt)),
+        unread: Boolean(row.latest_customer_reply_at) && new Date(row.latest_customer_reply_at) > new Date(effectiveReadAt),
       };
     }
     setReplyState(next);
@@ -2970,8 +2994,8 @@ function App() {
       [selectedKey]: { ...(current[selectedKey] || {}), lastReadAt: readAt, unread: false },
     }));
     supabase
-      .from("ticket_user_read_state")
-      .upsert({ user_id: session.user.id, ticket_key: selectedKey, last_read_at: readAt }, { onConflict: "user_id,ticket_key" })
+      .from("ticket_team_read_state")
+      .upsert({ ticket_key: selectedKey, last_read_at: readAt, last_read_by: session.user.id }, { onConflict: "ticket_key" })
       .then(({ error }) => {
         if (error) console.warn("Could not save read state:", error);
       });
@@ -4631,6 +4655,29 @@ function App() {
           : null;
     }
 
+    const optimisticFields = {
+      status: "status",
+      priority: "priority",
+      dueDate: "due_date",
+      tierLevel: "tier_level",
+      codewizAgentName: "codewiz_agent_name",
+    };
+    const optimisticField = optimisticFields[field];
+    const ticketKey = selected.ticket_key;
+    const previousValue = optimisticField ? selected[optimisticField] : undefined;
+    if (optimisticField) {
+      setTickets((current) => current.map((ticket) => {
+        if (ticket.ticket_key !== ticketKey) return ticket;
+        const updated = { ...ticket, [optimisticField]: finalValue };
+        if (field === "codewizAgentName") {
+          const owner = CODEWIZ_TICKET_OWNERS.find((person) => person.name === finalValue);
+          updated.codewiz_agent_email = owner?.email || null;
+        }
+        return updated;
+      }));
+      setUpdateNotice("Syncing with Zoho…");
+    }
+
     const {
       data,
       error,
@@ -4656,6 +4703,13 @@ function App() {
       error ||
       !data?.success
     ) {
+      if (optimisticField) {
+        setTickets((current) => current.map((ticket) =>
+          ticket.ticket_key === ticketKey
+            ? { ...ticket, [optimisticField]: previousValue }
+            : ticket
+        ));
+      }
       setUpdateNotice(
         `Could not update: ${
           data?.error ||
@@ -4677,9 +4731,9 @@ function App() {
       "Saved"
     );
 
-    await loadTickets(
-      selected.ticket_key
-    );
+    // The UI is already updated. Reconcile in the background instead of
+    // freezing the ticket controls while every Zoho field is reloaded.
+    loadTickets(ticketKey);
 
     setTimeout(
       () => {
@@ -4790,7 +4844,6 @@ function App() {
   ) {
     if (
       !selected ||
-      tagBusy ||
       !name.trim()
     ) {
       return;
@@ -4819,11 +4872,17 @@ function App() {
       return;
     }
 
-    setTagBusy(
-      true
-    );
-
-    setTagNotice("");
+    const ticketKey = selected.ticket_key;
+    const source = selected.source;
+    const optimisticId = `pending-${cleanName.toLowerCase()}-${Date.now()}`;
+    setTags((current) => [...current, {
+      id: optimisticId,
+      ticket_key: ticketKey,
+      zoho_tag_id: optimisticId,
+      name: cleanName,
+      tag_type: "pending",
+    }]);
+    setTagNotice("Syncing tag with Zoho…");
     setShowTagSuggestions(
       false
     );
@@ -4839,7 +4898,7 @@ function App() {
           {
             body: {
               ticket_key:
-                selected.ticket_key,
+                ticketKey,
 
               action:
                 "add",
@@ -4861,10 +4920,7 @@ function App() {
           "Unknown error"
         }`
       );
-
-      setTagBusy(
-        false
-      );
+      setTags((current) => current.filter((tag) => tag.zoho_tag_id !== optimisticId));
 
       return;
     }
@@ -4877,17 +4933,7 @@ function App() {
         : "Tag created and added"
     );
 
-    await loadTags(
-      selected.ticket_key
-    );
-
-    await loadTagCatalog(
-      selected.source
-    );
-
-    setTagBusy(
-      false
-    );
+    Promise.all([loadTags(ticketKey), loadTagCatalog(source)]);
   }
 
   async function addTag(
@@ -4993,6 +5039,10 @@ function App() {
             .filter(Boolean)
         );
 
+      if (selected?.source && selected.source !== "Qualicare") {
+        DEFAULT_MARKETING_TIERS.forEach((tier) => values.add(tier));
+      }
+
       /*
         Keep the ticket's current value visible even if
         it is a legacy value that is no longer in Zoho's
@@ -5048,6 +5098,46 @@ function App() {
   function acceptSuggestedTier(tier) {
     updateTicketField("tierLevel", tier);
     setClassificationSuggestion((current) => current ? { ...current, tier: null } : current);
+  }
+
+  async function applyAllSuggestedTags() {
+    if (!selected || classificationBusy) return;
+    const proposed = (classificationSuggestion?.tags || []).filter((name) =>
+      !tags.some((tag) => String(tag.name || "").trim().toLowerCase() === String(name).trim().toLowerCase())
+    );
+    if (!proposed.length) return;
+
+    const ticketKey = selected.ticket_key;
+    const source = selected.source;
+    setClassificationBusy(true);
+    setClassificationNotice("");
+    setTags((current) => [
+      ...current,
+      ...proposed.map((name, index) => ({
+        id: `pending-ai-${index}-${Date.now()}`,
+        ticket_key: ticketKey,
+        zoho_tag_id: `pending-ai-${index}-${Date.now()}`,
+        name,
+        tag_type: "pending",
+      })),
+    ]);
+
+    const results = await Promise.all(proposed.map((name) =>
+      supabase.functions.invoke("manage-zoho-ticket-tags", {
+        body: { ticket_key: ticketKey, action: "add", tag_name: name },
+      })
+    ));
+    const failed = results.filter(({ data, error }) => error || !data?.success);
+    setClassificationSuggestion((current) => current ? {
+      ...current,
+      tags: failed.length ? proposed : [],
+    } : current);
+    setClassificationNotice(failed.length
+      ? `${failed.length} suggested tag${failed.length === 1 ? "" : "s"} could not be added. Please retry.`
+      : "All suggested tags were added.");
+    await loadTags(ticketKey);
+    loadTagCatalog(source);
+    setClassificationBusy(false);
   }
 
   // ====================================================
@@ -5160,13 +5250,7 @@ function App() {
           );
       }
 
-      const currentUserEmail =
-        String(
-          session?.user?.email ||
-          ""
-        )
-          .trim()
-          .toLowerCase();
+      const currentUserEmail = canonicalTeamEmail(session?.user?.email);
 
       if (
         filter ===
@@ -5347,7 +5431,7 @@ function App() {
   // team. Do not populate it from every Zoho agent, because that would expose
   // support, operations, sales, and other non-marketing users in the Hub.
   const teamMemberOptions = useMemo(() => {
-    const currentUserEmail = String(session?.user?.email || "").trim().toLowerCase();
+    const currentUserEmail = canonicalTeamEmail(session?.user?.email);
 
     return CODEWIZ_TICKET_OWNERS
       .map((person) => ({
@@ -5408,6 +5492,10 @@ function App() {
     }
 
     setStatusEditBusy(true);
+    const previousStatus = ticket.status;
+    setTickets((current) => current.map((row) =>
+      row.ticket_key === ticket.ticket_key ? { ...row, status } : row
+    ));
 
     try {
       const { data, error } = await supabase
@@ -5428,7 +5516,7 @@ function App() {
       }
 
       hubCompletionEvent(ticket, status);
-      await loadTickets(ticket.ticket_key);
+      loadTickets(ticket.ticket_key);
       setStatusEditKey(null);
 
       // Classic and Board are list-first views. Do not leave a hidden
@@ -5437,6 +5525,9 @@ function App() {
         setSelectedKey(null);
       }
     } catch (error) {
+      setTickets((current) => current.map((row) =>
+        row.ticket_key === ticket.ticket_key ? { ...row, status: previousStatus } : row
+      ));
       console.error("Ticket status update error:", error);
       const message =
         error?.message ||
@@ -5525,11 +5616,7 @@ function App() {
 
   const counts =
     useMemo(() => {
-      const userEmail =
-        session
-          ?.user
-          ?.email
-          ?.toLowerCase();
+      const userEmail = canonicalTeamEmail(session?.user?.email);
 
       const visibleTickets =
         tickets.filter(
@@ -5683,7 +5770,7 @@ function App() {
       assigneeFilter === "all"
         ? ""
         : assigneeFilter === "mine"
-          ? String(session?.user?.email || "").trim().toLowerCase()
+          ? canonicalTeamEmail(session?.user?.email)
           : String(assigneeFilter || "").trim().toLowerCase();
 
     return ownerEmail
@@ -8709,9 +8796,16 @@ function App() {
                   <p>{classificationSuggestion.reason || "Review these suggestions before applying them."}</p>
                   {(classificationSuggestion.tags || []).length > 0 && (
                     <div className="classification-suggestion-row">
-                      <span>Tags</span>
+                      <span className="classification-tags-heading">
+                        Tags
+                        {(classificationSuggestion.tags || []).length > 1 && (
+                          <button type="button" className="classification-apply-all" disabled={classificationBusy} onClick={applyAllSuggestedTags}>
+                            {classificationBusy ? "Applying…" : "Apply all tags"}
+                          </button>
+                        )}
+                      </span>
                       <div>{classificationSuggestion.tags.map((tag) => (
-                        <button type="button" key={tag} disabled={tagBusy} onClick={() => acceptSuggestedTag(tag)}>+ {tag}</button>
+                        <button type="button" key={tag} onClick={() => acceptSuggestedTag(tag)}>+ {tag}</button>
                       ))}</div>
                     </div>
                   )}
