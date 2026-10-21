@@ -2897,6 +2897,8 @@ button:hover {
 .classification-suggestion-row { margin-top: 9px; }
 .classification-suggestion-row > span { display: block; margin-bottom: 5px; color: #64748b; font-size: 7px; font-weight: 800; text-transform: uppercase; }
 .classification-suggestion-row > div { display: flex; flex-wrap: wrap; gap: 5px; }
+.classification-suggestion-row > .classification-tags-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.classification-apply-all { border: 0 !important; padding: 2px 0 !important; background: transparent !important; color: #174ea6 !important; font-size: 8px !important; text-transform: none; text-decoration: underline; }
 .classification-dismiss { margin-top: 10px; border: 0; padding: 0; background: transparent; color: #64748b; font-size: 8px; text-decoration: underline; cursor: pointer; }
 .classification-error { margin: 8px 0 12px; padding: 9px; border-radius: 8px; background: #fff1f2; color: #b42318; font-size: 8px; }
 
