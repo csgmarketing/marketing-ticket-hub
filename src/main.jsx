@@ -6,8 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v33: clear requester/team reply timing, reliable unread
-// state, automatic Zoho metric backfill, and unified in-app notifications.
+// CSG Ticket Hub v34: prominent last-activity and reply-needed indicators,
+// reliable unread state, automatic metrics, and unified notifications.
 
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
@@ -3054,12 +3054,14 @@ function App() {
     const state = replyState[ticket.ticket_key] || {};
     const requesterAt = state.latestInboundReplyAt || state.ticketCreatedAt;
     const teamAt = state.latestTeamReplyAt;
-    const isMe = canonicalTeamEmail(state.latestTeamReplyEmail) === canonicalTeamEmail(session?.user?.email);
-    const teamLabel = isMe ? "You replied" : `${state.latestTeamReplyName || "Team"} replied`;
-    if (!requesterAt && !teamAt) return null;
-    return <div className="ticket-response-timing">
-      {requesterAt && <span className="requester-time"><strong>{state.latestInboundReplyAt ? "Requester replied" : "Requester submitted"}</strong><time>{formatDateTime(requesterAt)}</time></span>}
-      {teamAt && <span className="team-time"><strong>{teamLabel}</strong><time>{formatDateTime(teamAt)}</time></span>}
+    const requesterTime = requesterAt ? new Date(requesterAt).getTime() : 0;
+    const teamTime = teamAt ? new Date(teamAt).getTime() : 0;
+    const needsReply = requesterTime > teamTime;
+    const lastActivityAt = requesterTime >= teamTime ? requesterAt : teamAt;
+    if (!lastActivityAt) return null;
+    return <div className={`ticket-activity-status ${needsReply ? "needs-reply" : ""}`}>
+      <span><strong>Last activity</strong><time>{formatDateTime(lastActivityAt)}</time></span>
+      {needsReply && <b className="reply-needed-badge">Reply needed</b>}
     </div>;
   }
 
@@ -3247,8 +3249,12 @@ function App() {
 
   const latestRequesterThread = newestThreads.find((thread) => !isOutboundThread(thread)) || null;
   const latestTeamThread = newestThreads.find((thread) => isOutboundThread(thread)) || null;
-  const latestTeamThreadIsMine = latestTeamThread &&
-    canonicalTeamEmail(latestTeamThread.author_email) === canonicalTeamEmail(session?.user?.email);
+  const selectedRequesterActivityAt = latestRequesterThread?.created_at_zoho || selected?.created_at_zoho || null;
+  const selectedTeamActivityAt = latestTeamThread?.created_at_zoho || null;
+  const selectedRequesterActivityTime = selectedRequesterActivityAt ? new Date(selectedRequesterActivityAt).getTime() : 0;
+  const selectedTeamActivityTime = selectedTeamActivityAt ? new Date(selectedTeamActivityAt).getTime() : 0;
+  const selectedNeedsReply = selectedRequesterActivityTime > selectedTeamActivityTime;
+  const selectedLastActivityAt = selectedRequesterActivityTime >= selectedTeamActivityTime ? selectedRequesterActivityAt : selectedTeamActivityAt;
 
   const timelineItems =
     useMemo(() => {
@@ -7652,15 +7658,11 @@ function App() {
                   )}
                 </div>
 
-                <div className="conversation-response-timing">
-                  <div className="requester">
-                    <span>{latestRequesterThread ? "Latest requester reply" : "Ticket submitted"}</span>
-                    <strong>{formatDateTime(latestRequesterThread?.created_at_zoho || selected.created_at_zoho) || "Not recorded"}</strong>
-                  </div>
-                  <div className="team">
-                    <span>{latestTeamThreadIsMine ? "Your latest reply" : latestTeamThread ? `${latestTeamThread.author_name || "Team"}'s latest reply` : "Latest team reply"}</span>
-                    <strong>{latestTeamThread ? formatDateTime(latestTeamThread.created_at_zoho) : "No reply sent yet"}</strong>
-                  </div>
+                <div className={`conversation-activity-status ${selectedNeedsReply ? "needs-reply" : "up-to-date"}`}>
+                  <div><span>Last activity</span><strong>{formatDateTime(selectedLastActivityAt) || "Not recorded"}</strong></div>
+                  {selectedNeedsReply
+                    ? <b className="reply-needed-badge">Reply needed</b>
+                    : <span className="reply-up-to-date">✓ Team replied</span>}
                 </div>
               </div>
 
