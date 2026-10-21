@@ -4651,3 +4651,103 @@ button:hover {
 @media (max-width: 760px) {
   .conversation-response-timing { grid-template-columns: 1fr; }
 }
+.ticket-activity-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #edf1f5;
+}
+
+.ticket-activity-status > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  color: #7b8798;
+  font-size: 10px;
+}
+
+.ticket-activity-status strong {
+  color: #536174;
+  font-weight: 750;
+}
+
+.ticket-activity-status time { white-space: nowrap; }
+
+.reply-needed-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 23px;
+  padding: 0 8px;
+  border: 1px solid #f7b955;
+  border-radius: 999px;
+  background: #fff4df;
+  color: #9a5200;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .015em;
+  white-space: nowrap;
+}
+
+.ticket-row.has-unread-reply .reply-needed-badge,
+.ticket-row-classic.has-unread-reply .reply-needed-badge,
+.ticket-board-card.has-unread-reply .reply-needed-badge {
+  border-color: #f08a72;
+  background: #fff0ed;
+  color: #b63720;
+}
+
+.conversation-activity-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  max-width: 500px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #dfe6ef;
+  border-left: 4px solid #3b82f6;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.conversation-activity-status.needs-reply {
+  border-color: #f4c274;
+  border-left-color: #ef8b17;
+  background: #fffaf1;
+}
+
+.conversation-activity-status > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conversation-activity-status > div span {
+  color: #718096;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.conversation-activity-status > div strong {
+  color: #263348;
+  font-size: 13px;
+}
+
+.reply-up-to-date {
+  color: #16834a;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .conversation-activity-status { align-items: flex-start; flex-direction: column; }
+}
