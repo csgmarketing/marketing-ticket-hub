@@ -4751,3 +4751,111 @@ button:hover {
 @media (max-width: 760px) {
   .conversation-activity-status { align-items: flex-start; flex-direction: column; }
 }
+
+/* v35: compact activity treatment for narrow ticket cards */
+.ticket-row {
+  border-color: #edf1f5;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(32, 42, 68, .025);
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.ticket-row:hover {
+  border-color: #dbe4ed;
+  background: #fff;
+  box-shadow: 0 5px 14px rgba(32, 42, 68, .07);
+  transform: translateY(-1px);
+}
+
+.ticket-row.needs-reply:not(.selected) {
+  border-color: #f2dfbd;
+  box-shadow: inset 3px 0 0 #efa534, 0 1px 2px rgba(32, 42, 68, .025);
+}
+
+.ticket-activity-status {
+  min-height: 36px;
+  margin: 10px 0 9px;
+  padding: 7px 9px;
+  border: 1px solid #e8edf3;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.ticket-activity-status.needs-reply {
+  border-color: #f4dfbd;
+  background: #fffaf2;
+}
+
+.ticket-activity-copy {
+  display: flex !important;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 1px !important;
+}
+
+.ticket-activity-copy small {
+  color: #8a96a5;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.ticket-activity-copy time {
+  overflow: hidden;
+  max-width: 145px;
+  color: #38475b;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-needed-badge {
+  min-height: 25px;
+  gap: 6px;
+  padding: 0 9px;
+  border: 0;
+  background: #f39a24;
+  color: #fff;
+  box-shadow: 0 2px 5px rgba(201, 113, 9, .18);
+  font-size: 9px;
+}
+
+.reply-needed-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .92;
+}
+
+.ticket-row.has-unread-reply .reply-needed-badge,
+.ticket-row-classic.has-unread-reply .reply-needed-badge,
+.ticket-board-card.has-unread-reply .reply-needed-badge {
+  border: 0;
+  background: #df573f;
+  color: #fff;
+}
+
+.ticket-board-card.needs-reply {
+  border-color: #f0d8ae;
+  box-shadow: inset 3px 0 0 #efa534;
+}
+
+.ticket-row-classic.needs-reply {
+  box-shadow: inset 3px 0 0 #efa534;
+}
+.inline-zoho-mention {
+  display: inline;
+  padding: 1px 5px 2px;
+  border-radius: 5px;
+  background: #eaf2ff;
+  color: #245da7;
+  font-weight: 750;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
