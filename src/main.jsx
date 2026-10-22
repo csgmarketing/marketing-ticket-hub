@@ -6,7 +6,8 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v36: readable Zoho mentions, durable mention notifications,
+// CSG Ticket Hub v38: working incoming and outgoing email attachments,
+// readable Zoho mentions, durable notifications, and refined activity state.
 // reliable unread state, automatic metrics, and unified notifications.
 
 import ReactDOM from "react-dom/client";
@@ -1925,6 +1926,9 @@ function App() {
     setUploadProgress,
   ] =
     useState("");
+
+  const [attachmentDownloadKey,setAttachmentDownloadKey]=useState("");
+  const [attachmentDownloadError,setAttachmentDownloadError]=useState("");
 
   // ====================================================
   // COMMENTS
@@ -3979,6 +3983,42 @@ function App() {
 
     return data
       .attachment;
+  }
+
+  async function downloadThreadAttachment(thread,attachment) {
+    const key=`${thread.thread_id}-${attachment.id}`;
+    if(attachmentDownloadKey)return;
+    setAttachmentDownloadKey(key);
+    setAttachmentDownloadError("");
+    try {
+      const {data:sessionData}=await supabase.auth.getSession();
+      const token=sessionData.session?.access_token;
+      if(!token)throw new Error("Your session expired. Please sign in again.");
+      const response=await fetch(`${SUPABASE_URL}/functions/v1/download-zoho-thread-attachment`,{
+        method:"POST",
+        headers:{Authorization:`Bearer ${token}`,apikey:SUPABASE_ANON_KEY,"Content-Type":"application/json"},
+        body:JSON.stringify({ticket_key:thread.ticket_key,thread_id:thread.thread_id,attachment_id:attachment.id,name:attachment.name||"attachment"}),
+      });
+      if(!response.ok){
+        const detail=await response.json().catch(()=>({}));
+        throw new Error(detail.error||`Could not open ${attachment.name||"attachment"}.`);
+      }
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob);
+      const link=document.createElement("a");
+      link.href=url;
+      link.target="_blank";
+      link.rel="noopener";
+      link.download=attachment.name||"attachment";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    } catch(error) {
+      setAttachmentDownloadError(error instanceof Error?error.message:"Attachment download failed.");
+    } finally {
+      setAttachmentDownloadKey("");
+    }
   }
 
   // ====================================================
@@ -6184,18 +6224,21 @@ function App() {
                 attachment,
                 index
               ) => (
-                <div
+                <button
+                  type="button"
                   className="existing-attachment"
                   key={
                     attachment.id ||
                     `${attachment.name}-${index}`
                   }
+                  disabled={Boolean(attachmentDownloadKey)||!attachment.id||!thread.thread_id}
+                  onClick={()=>downloadThreadAttachment(thread,attachment)}
                 >
                   <span>
                     📎
                   </span>
 
-                  <span>
+                  <span className="existing-attachment-name">
                     {attachment.name ||
                       "Attachment"}
                   </span>
@@ -6207,9 +6250,11 @@ function App() {
                       )}
                     </small>
                   )}
-                </div>
+                  <span className="existing-attachment-action">{attachmentDownloadKey===`${thread.thread_id}-${attachment.id}`?"Opening…":"Open ↗"}</span>
+                </button>
               )
             )}
+            {attachmentDownloadError&&<p className="attachment-download-error" role="alert">{attachmentDownloadError}</p>}
           </div>
         )}
       </article>
