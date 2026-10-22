@@ -4941,3 +4941,20 @@ button.existing-attachment:disabled { cursor: default; opacity: .65; }
 .hub-ai-priorities{position:relative;z-index:1;display:grid;gap:7px}.hub-ai-priorities button{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:10px 11px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(8,17,36,.26);color:#fff;text-align:left;cursor:pointer}.hub-ai-priorities button:hover{border-color:rgba(142,240,220,.48);background:rgba(8,17,36,.42);transform:translateY(-1px)}.hub-ai-priorities button>b{display:grid;width:25px;height:25px;place-items:center;border-radius:8px;background:#2e4d70;color:#a8f5e6;font-size:10px}.hub-ai-priorities button>span{display:flex;min-width:0;flex-direction:column;gap:2px}.hub-ai-priorities button strong{overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.hub-ai-priorities button small{overflow:hidden;color:#b8c5d8;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.hub-ai-priorities em{padding:4px 7px;border-radius:999px;background:#fff3d8;color:#9a6613;font-size:9px;font-style:normal;font-weight:850}
 .hub-ai-briefing>footer{position:relative;z-index:1;display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-top:15px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}.hub-ai-briefing>footer span{color:#dbe5f3;font-size:11px}.hub-ai-briefing>footer small{flex:none;color:#9aabc3;font-size:9px}.hub-ai-briefing-error{display:flex;align-items:center;gap:10px;margin-top:17px;padding:12px;border-radius:12px;background:rgba(167,45,45,.25);font-size:11px}.hub-ai-briefing-error span{flex:1;color:#ffdede}.hub-ai-briefing-loading{display:grid;gap:8px;margin-top:20px}.hub-ai-briefing-loading i{display:block;height:13px;border-radius:7px;background:linear-gradient(90deg,rgba(255,255,255,.06),rgba(255,255,255,.17),rgba(255,255,255,.06));background-size:220% 100%;animation:hubBriefingPulse 1.3s infinite}.hub-ai-briefing-loading i:nth-child(2){width:76%}.hub-ai-briefing-loading i:nth-child(3){width:52%}@keyframes hubBriefingPulse{to{background-position:-220% 0}}
 @media(max-width:720px){.hub-ai-briefing{padding:17px;border-radius:17px}.hub-ai-briefing>header{align-items:flex-start}.hub-ai-briefing-mark{display:none}.hub-ai-briefing>footer{align-items:flex-start;flex-direction:column;gap:5px}.hub-ai-priorities button{grid-template-columns:25px minmax(0,1fr)}.hub-ai-priorities em{display:none}.hub-ai-briefing-stats span{padding:6px 8px}}
+
+/* v41 — lighter daily briefing */
+.hub-ai-briefing{border-color:#dce7e5;background:linear-gradient(135deg,#f8fcfb 0%,#f3f8ff 58%,#f8f5ff 100%);color:#1e2c3d;box-shadow:0 10px 28px rgba(42,69,91,.09)}
+.hub-ai-briefing:after{background:radial-gradient(circle,rgba(87,203,177,.17),transparent 68%)}
+.hub-ai-briefing-mark{border-color:#cde8e1;background:#e6f7f2;color:#178a74}
+.hub-ai-briefing header p{color:#278d7a}.hub-ai-briefing header h2{color:#1c2c40}
+.hub-ai-briefing>header button,.hub-ai-briefing-error button{border-color:#d7e2e7;background:#fff;color:#41536a;box-shadow:0 2px 8px rgba(50,74,95,.06)}
+.hub-ai-briefing>header button:hover{border-color:#b8d7d0;background:#f3fbf8}
+.hub-ai-briefing-summary{color:#526176}
+.hub-ai-briefing-stats span{border-color:#dce8e8;background:rgba(255,255,255,.78);color:#607087;box-shadow:0 1px 3px rgba(45,69,88,.04)}
+.hub-ai-briefing-stats strong{color:#1f344a}
+.hub-ai-priorities button{border-color:#e1e8ee;background:rgba(255,255,255,.82);color:#26384e;box-shadow:0 2px 7px rgba(45,66,85,.04)}
+.hub-ai-priorities button:hover{border-color:#9ed8cb;background:#fff;box-shadow:0 6px 16px rgba(45,98,88,.1)}
+.hub-ai-priorities button>b{background:#e5f5f1;color:#177a68}.hub-ai-priorities button small{color:#718096}
+.hub-ai-briefing>footer{border-top-color:#dfe8eb}.hub-ai-briefing>footer span{color:#53647a}.hub-ai-briefing>footer small{color:#8491a2}
+.hub-ai-briefing-error{background:#fff0ef;color:#8d372f}.hub-ai-briefing-error span{color:#9d4a43}
+.hub-ai-briefing-loading i{background:linear-gradient(90deg,#eaf0f2,#f8fbfb,#eaf0f2);background-size:220% 100%}
