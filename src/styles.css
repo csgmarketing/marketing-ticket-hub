@@ -2469,6 +2469,24 @@ button:hover {
     var(--text-muted);
 }
 
+button.existing-attachment {
+  cursor: pointer;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+
+button.existing-attachment:hover:not(:disabled) {
+  border-color: #a8bdd1;
+  background: #f1f7fc;
+  box-shadow: 0 2px 7px rgba(32,42,68,.08);
+}
+
+button.existing-attachment:disabled { cursor: default; opacity: .65; }
+.existing-attachment-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 700; }
+.existing-attachment-action { margin-left: 3px; color: var(--csg-blue); font-size: 8px; font-weight: 800; }
+.attachment-download-error { flex-basis: 100%; margin: 3px 0 0; color: #b42318; font-size: 9px; }
+
 /* ======================================================
    COMMENT TIMELINE CARD
    ====================================================== */
