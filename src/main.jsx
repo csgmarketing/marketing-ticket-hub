@@ -1929,6 +1929,7 @@ function App() {
 
   const [attachmentDownloadKey,setAttachmentDownloadKey]=useState("");
   const [attachmentDownloadError,setAttachmentDownloadError]=useState("");
+  const [attachmentPreview,setAttachmentPreview]=useState(null);
 
   // ====================================================
   // COMMENTS
@@ -4005,19 +4006,31 @@ function App() {
       }
       const blob=await response.blob();
       const url=URL.createObjectURL(blob);
-      const link=document.createElement("a");
-      link.href=url;
-      link.target="_blank";
-      link.rel="noopener";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setAttachmentPreview(current=>{
+        if(current?.url)URL.revokeObjectURL(current.url);
+        const name=attachment.name||"Attachment";
+        const lowerName=name.toLowerCase();
+        const type=String(blob.type||attachment.contentType||attachment.content_type||"").toLowerCase();
+        return {
+          url,
+          name,
+          type,
+          isImage:type.startsWith("image/")||/\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(lowerName),
+          isPdf:type.includes("pdf")||lowerName.endsWith(".pdf"),
+        };
+      });
     } catch(error) {
       setAttachmentDownloadError(error instanceof Error?error.message:"Attachment download failed.");
     } finally {
       setAttachmentDownloadKey("");
     }
+  }
+
+  function closeAttachmentPreview(){
+    setAttachmentPreview(current=>{
+      if(current?.url)URL.revokeObjectURL(current.url);
+      return null;
+    });
   }
 
   // ====================================================
@@ -9764,6 +9777,41 @@ function App() {
           </>
         )}
       </aside>
+
+      {attachmentPreview&&(
+        <div className="hub-attachment-preview-backdrop" role="presentation" onMouseDown={event=>{
+          if(event.target===event.currentTarget)closeAttachmentPreview();
+        }}>
+          <section className="hub-attachment-preview" role="dialog" aria-modal="true" aria-labelledby="attachment-preview-title">
+            <header>
+              <div>
+                <span className="hub-attachment-preview-label">Attachment preview</span>
+                <h2 id="attachment-preview-title">{attachmentPreview.name}</h2>
+              </div>
+              <button type="button" className="hub-attachment-preview-close" onClick={closeAttachmentPreview} aria-label="Close attachment preview">×</button>
+            </header>
+
+            <div className="hub-attachment-preview-content">
+              {attachmentPreview.isImage?(
+                <img src={attachmentPreview.url} alt={attachmentPreview.name}/>
+              ):attachmentPreview.isPdf?(
+                <iframe src={attachmentPreview.url} title={attachmentPreview.name}/>
+              ):(
+                <div className="hub-attachment-preview-unsupported">
+                  <span>📎</span>
+                  <strong>This file cannot be previewed in the browser.</strong>
+                  <p>You can still download and open it on your computer.</p>
+                </div>
+              )}
+            </div>
+
+            <footer>
+              <a href={attachmentPreview.url} download={attachmentPreview.name} className="secondary-button">Download</a>
+              <button type="button" className="primary-button" onClick={closeAttachmentPreview}>Close</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
