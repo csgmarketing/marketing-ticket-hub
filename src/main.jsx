@@ -5166,7 +5166,17 @@ function App() {
     );
 
     setTagNotice(
-      ""
+      "Removing tag…"
+    );
+
+    // Remove it immediately in the Hub. Restore it if Zoho rejects the
+    // change, so the user is not left waiting for a full ticket reload.
+    setTags((current) =>
+      current.filter(
+        (item) =>
+          item.zoho_tag_id !==
+          tag.zoho_tag_id
+      )
     );
 
     const {
@@ -5198,12 +5208,44 @@ function App() {
       error ||
       !data?.success
     ) {
+      let detailedError =
+        data?.error ||
+        "";
+
+      if (
+        !detailedError &&
+        error?.context
+      ) {
+        try {
+          const responseBody =
+            await error.context
+              .clone()
+              .json();
+
+          detailedError =
+            responseBody?.error ||
+            "";
+        } catch {
+          // Keep the normal Supabase error message as the fallback.
+        }
+      }
+
       setTagNotice(
         `Could not remove tag: ${
-          data?.error ||
+          detailedError ||
           error?.message ||
           "Unknown error"
         }`
+      );
+
+      setTags((current) =>
+        current.some(
+          (item) =>
+            item.zoho_tag_id ===
+            tag.zoho_tag_id
+        )
+          ? current
+          : [...current, tag]
       );
 
       setTagBusy(
