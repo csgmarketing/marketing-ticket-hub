@@ -4009,7 +4009,6 @@ function App() {
       link.href=url;
       link.target="_blank";
       link.rel="noopener";
-      link.download=attachment.name||"attachment";
       document.body.appendChild(link);
       link.click();
       link.remove();
