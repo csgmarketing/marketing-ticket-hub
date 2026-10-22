@@ -1927,6 +1927,14 @@ function App() {
   ] =
     useState("");
 
+  const [aiPlannerOpen,setAiPlannerOpen]=useState(false);
+  const [aiPlannerMessages,setAiPlannerMessages]=useState([]);
+  const [aiPlannerInput,setAiPlannerInput]=useState("");
+  const [aiPlannerDraft,setAiPlannerDraft]=useState("");
+  const [aiPlannerBusy,setAiPlannerBusy]=useState(false);
+  const [aiPlannerNotice,setAiPlannerNotice]=useState("");
+  const [replyQuality,setReplyQuality]=useState(null);
+
   const [attachmentDownloadKey,setAttachmentDownloadKey]=useState("");
   const [attachmentDownloadError,setAttachmentDownloadError]=useState("");
   const [attachmentPreview,setAttachmentPreview]=useState(null);
@@ -3552,6 +3560,12 @@ function App() {
 
       setComposerNotice("");
       setUploadProgress("");
+      setAiPlannerOpen(false);
+      setAiPlannerMessages([]);
+      setAiPlannerInput("");
+      setAiPlannerDraft("");
+      setAiPlannerNotice("");
+      setReplyQuality(null);
 
       if (
         editorRef.current
@@ -4031,6 +4045,57 @@ function App() {
       if(current?.url)URL.revokeObjectURL(current.url);
       return null;
     });
+  }
+
+  async function invokeEmailAssistant(body){
+    const {data,error}=await supabase.functions.invoke("hub-email-assistant",{body:{ticket_key:selected.ticket_key,...body}});
+    if(error||!data?.success)throw new Error(data?.error||error?.message||"The AI writing assistant could not respond.");
+    return data;
+  }
+
+  async function sendAiPlannerMessage(){
+    const message=aiPlannerInput.trim();
+    if(!selected||!message||aiPlannerBusy)return;
+    const nextMessages=[...aiPlannerMessages,{role:"user",content:message}];
+    setAiPlannerMessages(nextMessages);
+    setAiPlannerInput("");
+    setAiPlannerBusy(true);
+    setAiPlannerNotice("");
+    try{
+      const data=await invokeEmailAssistant({action:"chat",messages:nextMessages,draft_html:editorRef.current?.innerHTML||editorHtml});
+      const result=data.result||{};
+      setAiPlannerMessages(current=>[...current,{role:"assistant",content:result.message||"I prepared an updated draft."}]);
+      if(result.draft_html)setAiPlannerDraft(sanitizeSignatureHtml(result.draft_html));
+    }catch(error){setAiPlannerNotice(error instanceof Error?error.message:"AI planning failed.");}
+    finally{setAiPlannerBusy(false);}
+  }
+
+  function insertAiPlannerDraft(){
+    if(!editorRef.current||!aiPlannerDraft)return;
+    const signature=editorRef.current.querySelector("[data-hub-signature]")?.outerHTML||"";
+    const html=`${sanitizeSignatureHtml(aiPlannerDraft)}${signature?`<p><br></p>${signature}`:""}`;
+    editorRef.current.innerHTML=html;
+    setEditorHtml(html);
+    setAiPlannerNotice("Draft inserted. Review it before sending.");
+    setReplyQuality(null);
+    editorRef.current.focus();
+  }
+
+  async function checkReplyQuality(){
+    if(!selected||aiPlannerBusy)return;
+    setAiPlannerBusy(true);
+    setAiPlannerNotice("");
+    setReplyQuality(null);
+    try{
+      const data=await invokeEmailAssistant({
+        action:"quality_check",
+        draft_html:editorRef.current?.innerHTML||editorHtml,
+        attachments:pendingFiles.map(file=>({name:file.name,size:file.size})),
+      });
+      setReplyQuality(data.result||null);
+      setAiPlannerOpen(true);
+    }catch(error){setAiPlannerNotice(error instanceof Error?error.message:"Quality check failed.");setAiPlannerOpen(true);}
+    finally{setAiPlannerBusy(false);}
   }
 
   // ====================================================
@@ -8116,6 +8181,12 @@ function App() {
                 </div>
 
                 <div className="rich-toolbar">
+                  <button type="button" className={`ai-planner-toggle ${aiPlannerOpen?"active":""}`} disabled={composerBusy} onMouseDown={event=>{event.preventDefault();setAiPlannerOpen(current=>!current);}}>✨ Plan with AI</button>
+
+                  <button type="button" className="ai-quality-button" disabled={composerBusy||aiPlannerBusy} onMouseDown={event=>{event.preventDefault();checkReplyQuality();}}>✓ Check reply</button>
+
+                  <div className="toolbar-divider" />
+
                   <button type="button" disabled={composerBusy || !signatureReady} onMouseDown={event=>{event.preventDefault();insertBrandSignature();}}>✍️ Insert signature</button>
 
                   <button
@@ -8306,6 +8377,54 @@ function App() {
                   </button>
                 </div>
 
+                {aiPlannerOpen&&(
+                  <section className="ai-email-planner" aria-label="AI email planning assistant">
+                    <header>
+                      <div><span>Private workspace</span><h3>Plan this email with ChatGPT</h3></div>
+                      <button type="button" onClick={()=>setAiPlannerOpen(false)} aria-label="Close AI email planner">×</button>
+                    </header>
+
+                    <div className="ai-email-planner-body">
+                      {!aiPlannerMessages.length&&!replyQuality&&(
+                        <div className="ai-planner-welcome">
+                          <span>✨</span>
+                          <div><strong>Tell me what you want to communicate.</strong><p>You can include rough notes, context, the tone you want, or what needs to happen next. Nothing is sent automatically.</p></div>
+                        </div>
+                      )}
+
+                      {aiPlannerMessages.map((message,index)=>(
+                        <article key={`${message.role}-${index}`} className={`ai-planner-message ${message.role}`}>
+                          <strong>{message.role==="user"?"You":"ChatGPT"}</strong>
+                          <p>{message.content}</p>
+                        </article>
+                      ))}
+
+                      {replyQuality&&(
+                        <div className={`ai-quality-result ${replyQuality.verdict||"review"}`}>
+                          <div className="ai-quality-heading"><span>{replyQuality.verdict==="ready"?"✓":"⚠"}</span><div><strong>{replyQuality.verdict==="ready"?"Ready to send":"Review before sending"}</strong><p>{replyQuality.summary}</p></div></div>
+                          {Array.isArray(replyQuality.issues)&&replyQuality.issues.length>0&&<ul>{replyQuality.issues.map((issue,index)=><li key={`${issue.type}-${index}`} className={issue.severity}><span>{issue.severity==="warning"?"!":"i"}</span><p>{issue.message}</p></li>)}</ul>}
+                          {replyQuality.suggested_status&&<p className="ai-quality-status">Suggested ticket status after sending: <strong>{replyQuality.suggested_status}</strong></p>}
+                        </div>
+                      )}
+
+                      {aiPlannerDraft&&(
+                        <div className="ai-planner-draft">
+                          <div><strong>Suggested email draft</strong><button type="button" onClick={insertAiPlannerDraft}>Insert into reply</button></div>
+                          <div dangerouslySetInnerHTML={{__html:aiPlannerDraft}}/>
+                        </div>
+                      )}
+
+                      {aiPlannerBusy&&<div className="ai-planner-thinking"><span/><span/><span/> Thinking…</div>}
+                      {aiPlannerNotice&&<p className="ai-planner-notice" role="status">{aiPlannerNotice}</p>}
+                    </div>
+
+                    <footer>
+                      <textarea rows="2" value={aiPlannerInput} onChange={event=>setAiPlannerInput(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendAiPlannerMessage();}}} placeholder="Example: Thank them, explain the update will be completed Friday, and ask them to approve the attached proof." disabled={aiPlannerBusy}/>
+                      <button type="button" onClick={sendAiPlannerMessage} disabled={aiPlannerBusy||!aiPlannerInput.trim()}>Send</button>
+                    </footer>
+                  </section>
+                )}
+
                 <div
                   ref={
                     editorRef
@@ -8449,6 +8568,8 @@ function App() {
                     >
                       🖼 Image
                     </button>
+
+                    <button type="button" className="composer-icon-button ai-footer-check" onClick={checkReplyQuality} disabled={composerBusy||aiPlannerBusy}>✨ Check reply</button>
 
                     <button
                       type="button"
