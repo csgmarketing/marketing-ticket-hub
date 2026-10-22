@@ -7527,7 +7527,6 @@ function App() {
                       <span>·</span>
                       <span>{formatDateTime(ticket.updated_at || ticket.created_at)}</span>
                     </div>
-                    {renderTicketResponseTiming(ticket)}
                   </div>
                   <div className="classic-ticket-status">
                     <div className="list-status-control">
@@ -7564,8 +7563,9 @@ function App() {
                     </div>
                   </div>
                   <div className="classic-ticket-activity">
-                    <span title="Comments">☰</span>
-                    <span>{ticket.comment_count || ticket.thread_count || ""}</span>
+                    {renderTicketResponseTiming(ticket) || (
+                      <span className="classic-no-activity">No activity recorded</span>
+                    )}
                   </div>
                   <div className="classic-ticket-comment">💬</div>
                   <button
