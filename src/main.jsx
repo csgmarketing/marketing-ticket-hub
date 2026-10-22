@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 
-// CSG Ticket Hub v34: prominent last-activity and reply-needed indicators,
+// CSG Ticket Hub v36: readable Zoho mentions, durable mention notifications,
 // reliable unread state, automatic metrics, and unified notifications.
 
 import ReactDOM from "react-dom/client";
@@ -250,6 +250,20 @@ function formatDateTime(value) {
       minute: "2-digit",
     }
   ).format(date);
+}
+
+function formatActivityTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (sameDay(date, today)) return `Today at ${time}`;
+  if (sameDay(date, yesterday)) return `Yesterday at ${time}`;
+  return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" })} at ${time}`;
 }
 
 function dateInputValue(value) {
@@ -672,6 +686,22 @@ function normalizeMentionList(value) {
       return [item];
     }
   );
+}
+
+function formatZohoMentions(value, agentList = [], asHtml = false) {
+  const source = String(value || "");
+  const replaceMention = (_match, id) => {
+    const agent = agentList.find((person) =>
+      String(person.zuid || "") === String(id) ||
+      String(person.zoho_agent_id || "") === String(id)
+    );
+    const name = agent?.name || agent?.email || "Teammate";
+    const label = `@${name}`;
+    return asHtml ? `<span class="inline-zoho-mention">${escapeHtml(label)}</span>` : label;
+  };
+  return source
+    .replace(/zsu\s*\[@user:(\d+)\]\s*zsu/gi, replaceMention)
+    .replace(/\[@user:(\d+)\]/gi, replaceMention);
 }
 
 // ======================================================
@@ -3050,7 +3080,7 @@ function App() {
       });
   }, [selectedKey, session?.user?.id]);
 
-  function renderTicketResponseTiming(ticket) {
+  function getTicketActivityStatus(ticket) {
     const state = replyState[ticket.ticket_key] || {};
     const requesterAt = state.latestInboundReplyAt || state.ticketCreatedAt;
     const teamAt = state.latestTeamReplyAt;
@@ -3058,10 +3088,15 @@ function App() {
     const teamTime = teamAt ? new Date(teamAt).getTime() : 0;
     const needsReply = requesterTime > teamTime;
     const lastActivityAt = requesterTime >= teamTime ? requesterAt : teamAt;
+    return { needsReply, lastActivityAt };
+  }
+
+  function renderTicketResponseTiming(ticket) {
+    const { needsReply, lastActivityAt } = getTicketActivityStatus(ticket);
     if (!lastActivityAt) return null;
     return <div className={`ticket-activity-status ${needsReply ? "needs-reply" : ""}`}>
-      <span><strong>Last activity</strong><time>{formatDateTime(lastActivityAt)}</time></span>
-      {needsReply && <b className="reply-needed-badge">Reply needed</b>}
+      <span className="ticket-activity-copy"><small>Last activity</small><time>{formatActivityTime(lastActivityAt)}</time></span>
+      {needsReply && <b className="reply-needed-badge"><i aria-hidden="true" />Needs reply</b>}
     </div>;
   }
 
@@ -4662,7 +4697,7 @@ function App() {
 
       // Zoho stores the comment, while the Hub owns teammate notifications.
       const hubMentions = commentMentions.filter((mention) => mention.email);
-      await Promise.allSettled(hubMentions.map((mention) =>
+      const mentionNotificationResults = await Promise.allSettled(hubMentions.map((mention) =>
         supabase.rpc("hub_notify_ticket_event", {
           p_ticket_key: selected.ticket_key,
           p_recipient: mention.email,
@@ -4670,6 +4705,10 @@ function App() {
           p_comment_text: commentText.trim(),
         })
       ));
+      mentionNotificationResults.forEach((result) => {
+        const rpcError = result.status === "rejected" ? result.reason : result.value?.error;
+        if (rpcError) console.error("Hub mention notification failed:", rpcError.message || rpcError);
+      });
 
       const ownerEmail = String(getTicketOwnerEmail(selected) || "").trim().toLowerCase();
       const authorEmail = String(session?.user?.email || "").trim().toLowerCase();
@@ -6262,13 +6301,12 @@ function App() {
             className="comment-body"
             dangerouslySetInnerHTML={{
               __html:
-                comment.content_html,
+                formatZohoMentions(comment.content_html, agents, true),
             }}
           />
         ) : (
           <div className="comment-body">
-            {comment.content_text ||
-              ""}
+            {formatZohoMentions(comment.content_text || "", agents, false)}
           </div>
         )}
 
@@ -7225,7 +7263,7 @@ function App() {
                         return (
                           <article
                             key={ticket.ticket_key}
-                            className={`ticket-board-card ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""}`}
+                            className={`ticket-board-card ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
                             onClick={() => {
                               // Board is full-width until a ticket is intentionally opened.
                               setTicketViewMode("compact");
@@ -7355,7 +7393,7 @@ function App() {
               return (
                 <div
                   key={ticket.ticket_key}
-                  className={`ticket-row-classic ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""}`}
+                  className={`ticket-row-classic ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
                   onClick={() => {
                     // Classic is list-first, but clicking a ticket should still
                     // open the normal ticket workspace.
@@ -7507,7 +7545,7 @@ function App() {
             return (
               <button
                 key={ticket.ticket_key}
-                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""}`}
+                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
                 onClick={() => setSelectedKey(ticket.ticket_key)}
               >
                 <div className="ticket-row-top">
