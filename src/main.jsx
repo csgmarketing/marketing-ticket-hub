@@ -1303,11 +1303,11 @@ function HubSyncHealth({session}) {
 }
 
 function TicketPerformance({tickets,onRefreshTickets}) {
-  const [period,setPeriod]=useState("week"),[start,setStart]=useState(""),[end,setEnd]=useState("");
-  const [rows,setRows]=useState([]),[error,setError]=useState(""),[loading,setLoading]=useState(true),[syncing,setSyncing]=useState(false),[progress,setProgress]=useState(""),[hover,setHover]=useState(null);
+  const [period,setPeriod]=useState("30days"),[start,setStart]=useState(""),[end,setEnd]=useState("");
+  const [rows,setRows]=useState([]),[threads,setThreads]=useState([]),[error,setError]=useState(""),[loading,setLoading]=useState(true),[syncing,setSyncing]=useState(false),[progress,setProgress]=useState(""),[hover,setHover]=useState(null);
   const alive=useRef(true),stop=useRef(false),attempted=useRef(new Set()),autoTimer=useRef(null);
   const refresh=useCallback(async()=>{
-    const all=[];for(let offset=0;;offset+=1000){const r=await supabase.from("hub_ticket_metrics").select("ticket_key,first_response_seconds,total_response_seconds,response_count,resolution_seconds,closed_at_zoho,synced_at,raw_metrics").order("ticket_key").range(offset,offset+999);if(r.error)throw r.error;all.push(...(r.data||[]));if((r.data||[]).length<1000)break;}
+    const all=[];for(let offset=0;;offset+=1000){const r=await supabase.from("hub_ticket_metrics").select("ticket_key,first_response_seconds,total_response_seconds,response_count,resolution_seconds,closed_at_zoho,synced_at,raw_metrics,backfill_checked_at,backfill_status").order("ticket_key").range(offset,offset+999);if(r.error)throw r.error;all.push(...(r.data||[]));if((r.data||[]).length<1000)break;}
     if(alive.current){setRows(all);setError("");}return all;
   },[]);
   useEffect(()=>{alive.current=true;async function load(){try{await refresh();}catch(e){if(alive.current)setError(e.message||"Unable to load performance data");}finally{if(alive.current)setLoading(false);}}load();const timer=setInterval(load,60000);return()=>{alive.current=false;stop.current=true;clearInterval(timer);};},[refresh]);
@@ -1320,6 +1320,8 @@ function TicketPerformance({tickets,onRefreshTickets}) {
   if(period==="custom"){from.setTime(new Date(`${start}T00:00:00`).getTime());until=new Date(`${end}T00:00:00`);until.setDate(until.getDate()+1);}
   const valid=Number.isFinite(from.getTime())&&Number.isFinite(until.getTime())&&until>from;
   const inRange=value=>{const d=hubDate(value);return valid&&d&&d>=from&&d<until;};
+  const rangeKey=valid?`${from.toISOString()}|${until.toISOString()}|${tickets.map(t=>t.ticket_key).sort().join(",")}`:"invalid";
+  useEffect(()=>{let live=true;if(!valid){setThreads([]);return()=>{live=false;};}(async()=>{const contextFrom=new Date(from.getTime()-30*86400000);const all=[];for(let offset=0;offset<5000;offset+=1000){const result=await supabase.from("ticket_threads").select("ticket_key,direction,author_email,from_email,created_at_zoho").gte("created_at_zoho",contextFrom.toISOString()).lt("created_at_zoho",until.toISOString()).order("created_at_zoho",{ascending:true}).range(offset,offset+999);if(result.error){if(live)setError(result.error.message);break;}all.push(...(result.data||[]));if((result.data||[]).length<1000)break;}if(live){const allowed=new Set(tickets.map(t=>t.ticket_key));setThreads(all.filter(row=>allowed.has(row.ticket_key)));}})();return()=>{live=false;};},[rangeKey]);
   const lookup=new Map(rows.map(r=>[r.ticket_key,r]));
   const closure=t=>lookup.get(t.ticket_key)?.closed_at_zoho||t.closed_at_zoho;
   const cohort=tickets.filter(t=>inRange(t.created_at_zoho));
@@ -1328,24 +1330,21 @@ function TicketPerformance({tickets,onRefreshTickets}) {
   const seconds=v=>v!==null&&v!==undefined&&Number.isFinite(Number(v))&&Number(v)>=0;
   const firstRows=measured.filter(r=>seconds(r.first_response_seconds));
   const first=average(firstRows.map(r=>Number(r.first_response_seconds)));
-  const responses=measured.filter(r=>seconds(r.total_response_seconds)&&r.response_count>0);
-  const responseCount=responses.reduce((n,r)=>n+Number(r.response_count),0);
-  const response=responseCount?responses.reduce((n,r)=>n+Number(r.total_response_seconds),0)/responseCount:null;
+  const responseSamples=[];const byTicket=new Map();for(const thread of threads){if(!byTicket.has(thread.ticket_key))byTicket.set(thread.ticket_key,[]);byTicket.get(thread.ticket_key).push(thread);}for(const ticketThreads of byTicket.values()){let waitingSince=null;for(const thread of ticketThreads){const at=hubDate(thread.created_at_zoho);if(!at)continue;if(isOutboundThread(thread)){if(waitingSince&&inRange(at)&&at>=waitingSince)responseSamples.push((at-waitingSince)/1000);waitingSince=null;}else waitingSince=at;}}
+  const responseCount=responseSamples.length;
+  const response=average(responseSamples);
   const closed=tickets.filter(t=>HUB_CLOSED(t)&&inRange(closure(t)));
   const unknownClosed=tickets.filter(t=>HUB_CLOSED(t)&&!hubDate(closure(t))).length;
   const resolved=closed.map(t=>lookup.get(t.ticket_key)).filter(r=>r&&seconds(r.resolution_seconds));
   const resolution=average(resolved.map(r=>Number(r.resolution_seconds)));
   const format=v=>v===null?"—":`${Math.floor(Math.round(v/60)/60)}:${String(Math.round(v/60)%60).padStart(2,"0")}`;
   const hasMetrics=t=>Object.keys(lookup.get(t.ticket_key)?.raw_metrics||{}).length>0;
-  const pending=tickets.filter(t=>(!hasMetrics(t)||(HUB_CLOSED(t)&&!hubDate(closure(t))))&&!attempted.current.has(t.ticket_key));
+  const retryBefore=Date.now()-7*86400000;
+  const pending=tickets.filter(t=>{const row=lookup.get(t.ticket_key);const recentlyChecked=hubDate(row?.backfill_checked_at)?.getTime()>retryBefore;return(!hasMetrics(t)||(HUB_CLOSED(t)&&!hubDate(closure(t))))&&!recentlyChecked&&!attempted.current.has(t.ticket_key);});
   async function populate(){
-    if(syncing)return;stop.current=false;setSyncing(true);setError("");const batch=pending.slice(0,20);let failed=0,done=0;
-    try{for(const t of batch){if(stop.current||!alive.current)break;setProgress(`Automatically syncing ${done+1} of ${batch.length}: #${t.ticket_number||t.zoho_ticket_id}`);
-      try{const r=await supabase.functions.invoke("sync-zoho-ticket",{body:{source:t.source,zoho_ticket_id:t.zoho_ticket_id}});if(r.error||r.data?.success===false)throw new Error(r.data?.error||r.error?.message||"Ticket sync failed");}catch(e){failed++;if(alive.current)setError(`${t.source}: ${e.message}`);}done++;}
-      const latest=await refresh();if(onRefreshTickets)await onRefreshTickets();const map=new Map(latest.map(r=>[r.ticket_key,r]));const populated=batch.slice(0,done).filter(t=>Object.keys(map.get(t.ticket_key)?.raw_metrics||{}).length>0).length;
-      batch.slice(0,done).forEach(t=>attempted.current.add(t.ticket_key));
-      if(alive.current){setProgress(`${done} tickets processed · ${populated} have Zoho timings${failed?` · ${failed} failed`:""}. Automatic backfill will continue.`);if(done>0&&populated===0)setError("No Zoho timings were returned for this batch. The remaining tickets will continue automatically; check sync-zoho-ticket logs for failed Zoho requests.");}
-    }catch(e){if(alive.current)setError(e.message);}finally{if(alive.current)setSyncing(false);}
+    if(syncing)return;stop.current=false;setSyncing(true);setError("");setProgress("Updating missing Zoho performance data in the background…");
+    try{const result=await supabase.functions.invoke("backfill-ticket-metrics",{body:{limit:30}});if(result.error||result.data?.success===false)throw new Error(result.data?.error||result.error?.message||"Metric backfill failed");const data=result.data||{};const latest=await refresh();if(onRefreshTickets)await onRefreshTickets();if(alive.current)setProgress(`${data.completed||0} tickets updated${data.failed?` · ${data.failed} need attention`:""}. The next batch will run automatically.`);}
+    catch(e){if(alive.current)setError(e.message||"Metric backfill failed");}finally{if(alive.current)setSyncing(false);}
   }
   useEffect(()=>{if(loading||syncing||stop.current||!pending.length)return;autoTimer.current=setTimeout(()=>populate(),900);return()=>clearTimeout(autoTimer.current);},[loading,syncing,pending.length,rows.length,tickets.length]);
   const buckets=[];
@@ -1357,19 +1356,19 @@ function TicketPerformance({tickets,onRefreshTickets}) {
   const x=i=>left+(i+.5)*(width-left-right)/Math.max(1,buckets.length),y=n=>base-n/top*chartHeight;
   const line=buckets.map((b,i)=>`${i?"L":"M"}${x(i)},${y(b.created)}`).join(" ");
   const timingMax=Math.max(1,first||0,response||0,resolution||0);
-  const metricCards=[{label:"First response",seconds:first,value:format(first),note:`${firstRows.length} measured tickets`},{label:"Response time",seconds:response,value:format(response),note:`${responseCount} measured responses`},{label:"Resolution time",seconds:resolution,value:format(resolution),note:`${resolved.length} measured closures`}];
+  const metricCards=[{label:"First response",seconds:first,value:format(first),note:firstRows.length?`${firstRows.length} tickets created in this period`:"No measured first responses in this period"},{label:"Response time",seconds:response,value:format(response),note:responseCount?`${responseCount} team replies sent in this period`:"No measured team replies in this period"},{label:"Resolution time",seconds:resolution,value:format(resolution),note:resolved.length?`${resolved.length} tickets closed in this period`:"No measured closures in this period"}];
   const stats=[{label:"New tickets",value:valid?cohort.length:"—",tone:"blue"},{label:"Closed tickets",value:!valid?"—":unknownClosed?(closed.length?`${closed.length}+`:"Pending"):closed.length,tone:"green"},{label:"On hold now",value:tickets.filter(t=>/on\s*hold/i.test(t.status||"")).length,tone:"orange"},{label:"Current backlog",value:tickets.filter(t=>!HUB_CLOSED(t)).length,tone:"slate"}];
   return <section className="hub-dashboard-panel hub-performance">
     <header><div><span className="hub-perf-eyebrow">MARKETING OPERATIONS</span><h2>Ticket performance</h2><p>Your selected brand and My / Team overview</p></div><div className="hub-perf-controls"><select aria-label="Performance date range" value={period} disabled={syncing} onChange={e=>{setPeriod(e.target.value);setHover(null);}}>{[["24hours","Last 24 hours"],["day","Today"],["yesterday","Yesterday"],["7days","Last 7 days"],["30days","Last 30 days"],["week","Current week"],["lastweek","Last week"],["month","Current month"],["lastmonth","Last month"],["custom","Custom range"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div></header>
     {period==="custom"&&<div className="hub-performance-dates"><label>From <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Through <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>}
     <div className="hub-perf-body"><div className="hub-perf-range">{valid?`${from.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})} – ${new Date(until.getTime()-1).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}`:"Choose your date range"}{loading&&<span>Updating…</span>}</div>
     <section className="hub-perf-handling"><div className="hub-perf-chart-head"><h3>Average handling time</h3><span>Hours : minutes</span></div>{metricCards.map(c=><div className="hub-perf-timing" key={c.label}><div><span>{c.label}</span><strong>{c.value}</strong></div><div className="hub-perf-track"><i style={{width:`${c.seconds===null?0:c.seconds/timingMax*100}%`}}/></div><small>{c.note}</small></div>)}</section>
-    <div className="hub-perf-sync"><div><strong>{tickets.filter(hasMetrics).length} / {tickets.length} tickets have Zoho metrics</strong><p>{progress||(pending.length?"Automatically populating response and resolution times in the background.":"Zoho metrics are up to date.")}</p></div>{syncing?<button onClick={()=>{stop.current=true;setProgress("Automatic backfill paused after the current ticket.");}}>Pause automatic sync</button>:pending.length&&stop.current?<button onClick={()=>{stop.current=false;setProgress("Automatic backfill resumed.");populate();}}>Resume automatic sync</button>:<span className="hub-perf-auto-state">{pending.length?"Automatic":"Complete"}</span>}</div>
+    <div className="hub-perf-sync"><div><strong>{tickets.filter(hasMetrics).length} / {tickets.length} tickets have Zoho metrics</strong><p>{progress||(pending.length?`${pending.length} tickets are queued for background metric checks.`:"Metric coverage is up to date.")}</p></div>{syncing?<span className="hub-perf-auto-state">Updating…</span>:pending.length?<button onClick={populate}>Update next batch</button>:<span className="hub-perf-auto-state">Complete</span>}</div>
     {error&&<p className="hub-perf-notice" role="alert">{error}</p>}{unknownClosed>0&&<p className="hub-perf-notice">{unknownClosed} closed tickets still need their closure date from Zoho. The chart shows confirmed dates; closed totals are incomplete until these tickets sync.</p>}
     <div className="hub-perf-chart-head"><h3>Created vs closed</h3><div><span className="hub-perf-dot blue"/>Created <span className="hub-perf-dot green"/>Closed</div></div>
     <div className="hub-perf-stats">{stats.map(c=><div className={c.tone} key={c.label}><strong>{c.value}</strong><span>{c.label}</span></div>)}</div>
     {valid&&<div className="hub-perf-plot" onMouseLeave={()=>setHover(null)}>{hover!==null&&buckets[hover]&&<div className="hub-perf-tooltip"><strong>{buckets[hover].label}</strong><span>🔵 Created: {buckets[hover].created}</span><span>🟢 Closed: {buckets[hover].closed}</span></div>}<svg viewBox={`0 0 ${width} ${height}`} style={{minWidth:width}} role="img" aria-label="Created tickets as a blue line; closed tickets as green bars"><title>Created and closed tickets for the selected period</title>{[0,1,2,3,4].map(i=><g key={i}><line x1={left} x2={width-right} y1={y(top*i/4)} y2={y(top*i/4)} stroke="#e8edf4"/><text x={left-10} y={y(top*i/4)+4} textAnchor="end" fill="#748297" fontSize="11">{top*i/4}</text></g>)}{buckets.map((b,i)=><g key={i} onMouseEnter={()=>setHover(i)}><rect x={x(i)-(width-left-right)/buckets.length/2} y={30} width={(width-left-right)/buckets.length} height={base-30} fill="transparent"/><rect x={x(i)-9} y={y(b.closed)} width="18" height={base-y(b.closed)} rx="3" fill="#25ad61"><title>{b.label}: {b.closed} closed</title></rect>{b.closed>0&&<text x={x(i)} y={y(b.closed)-7} textAnchor="middle" fill="#258449" fontSize="11">{b.closed}</text>}{(buckets.length<=31||i%Math.ceil(buckets.length/16)===0)&&<text x={x(i)} y={base+25} textAnchor="middle" fill="#748297" fontSize="10">{b.label}</text>}</g>)}<path d={line} fill="none" stroke="#1677ff" strokeWidth="2.5" strokeLinejoin="round"/>{buckets.map((b,i)=><circle key={i} onMouseEnter={()=>setHover(i)} cx={x(i)} cy={y(b.created)} r="4" fill="#1677ff" stroke="white" strokeWidth="2"><title>{b.label}: {b.created} created, {b.closed} closed</title></circle>)}</svg></div>}
-    <details className="hub-perf-details"><summary>How these metrics are calculated</summary><p>First response and response averages use Zoho’s latest lifetime timings for tickets created in the selected period. Resolution uses measured tickets closed in the period. Missing timings are excluded. Created and closed counts use their actual dates. Backlog and on-hold counts are current. Dates use your browser’s timezone. Counts cover tickets loaded in the Hub; previous closures of reopened tickets are not retained. Ranges over 62 days use grouped date buckets. Populating tickets also refreshes their Zoho conversations and uses API credits.</p></details>
+    <details className="hub-perf-details"><summary>How these metrics are calculated</summary><p>First response uses Zoho timing data for tickets created in the selected period. Response time uses customer-to-team reply intervals for replies sent during the selected period, including replies on older tickets. Resolution uses tickets closed during the period. Missing values are excluded instead of counted as zero. Created and closed counts use their actual dates; backlog and on-hold counts are current.</p></details>
     </div></section>;
 }
 
@@ -8413,7 +8412,7 @@ function App() {
                       {!aiPlannerMessages.length&&!replyQuality&&(
                         <div className="ai-planner-welcome">
                           <span>✨</span>
-                          <div><strong>Tell me what you want to communicate.</strong><p>You can include rough notes, context, the tone you want, or what needs to happen next. Nothing is sent automatically.</p></div>
+                          <div><strong>I already have this ticket’s context.</strong><p>I’ll review the full email conversation, ticket details, internal comments, tags, owner, status and deadline. Tell me what outcome or tone you want. Nothing is sent automatically.</p></div>
                         </div>
                       )}
 
