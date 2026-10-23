@@ -2610,6 +2610,22 @@ function App() {
       ]
     );
 
+  const qualicareDepartments = useMemo(() => {
+    const options = new Map();
+    for (const ticket of tickets) {
+      if (ticket?.source !== "Qualicare") continue;
+      const id = String(ticket.department_id || "").trim();
+      const name = String(ticket.department || "").trim();
+      if (id && name) options.set(id, name);
+    }
+    if (selected?.source === "Qualicare" && selected.department_id) {
+      options.set(String(selected.department_id), String(selected.department || "Current department"));
+    }
+    return [...options.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [tickets, selected?.source, selected?.department_id, selected?.department]);
+
   // ====================================================
   // THREADS
   // ====================================================
@@ -4949,10 +4965,12 @@ function App() {
       dueDate: "due_date",
       tierLevel: "tier_level",
       codewizAgentName: "codewiz_agent_name",
+      departmentId: "department_id",
     };
     const optimisticField = optimisticFields[field];
     const ticketKey = selected.ticket_key;
     const previousValue = optimisticField ? selected[optimisticField] : undefined;
+    const previousDepartment = selected.department;
     if (optimisticField) {
       setTickets((current) => current.map((ticket) => {
         if (ticket.ticket_key !== ticketKey) return ticket;
@@ -4960,6 +4978,9 @@ function App() {
         if (field === "codewizAgentName") {
           const owner = CODEWIZ_TICKET_OWNERS.find((person) => person.name === finalValue);
           updated.codewiz_agent_email = owner?.email || null;
+        }
+        if (field === "departmentId") {
+          updated.department = qualicareDepartments.find((department) => department.id === String(finalValue))?.name || updated.department;
         }
         return updated;
       }));
@@ -4994,7 +5015,7 @@ function App() {
       if (optimisticField) {
         setTickets((current) => current.map((ticket) =>
           ticket.ticket_key === ticketKey
-            ? { ...ticket, [optimisticField]: previousValue }
+            ? { ...ticket, [optimisticField]: previousValue, ...(field === "departmentId" ? { department: previousDepartment } : {}) }
             : ticket
         ));
       }
@@ -9526,6 +9547,26 @@ function App() {
                   </Detail>
                 </>
               ) : (
+                <>
+                {selected.source === "Qualicare" && (
+                  <Detail label="Department">
+                    <select
+                      className="detail-control owner-select"
+                      value={String(selected.department_id || "")}
+                      disabled={updateBusy || !qualicareDepartments.length}
+                      onChange={(event) => updateTicketField("departmentId", event.target.value)}
+                    >
+                      {!selected.department_id && <option value="">Select department</option>}
+                      {selected.department_id && !qualicareDepartments.some((department) => department.id === String(selected.department_id)) && (
+                        <option value={String(selected.department_id)}>{selected.department || "Current department"}</option>
+                      )}
+                      {qualicareDepartments.map((department) => (
+                        <option key={department.id} value={department.id}>{department.name}</option>
+                      ))}
+                    </select>
+                    {!qualicareDepartments.length && <div className="owner-current-email">No Qualicare departments have been synchronized yet.</div>}
+                  </Detail>
+                )}
                 <Detail label="Ticket Owner">
 
                   {loadingAgents ? (
@@ -9610,6 +9651,7 @@ function App() {
                     </div>
                   )}
                 </Detail>
+                </>
               )}
 
               <div className={!tags.some((tag) => String(tag.name || "").trim()) && !loadingTags ? "classification-field-missing" : ""}>
