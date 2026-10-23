@@ -1570,6 +1570,21 @@ function App() {
     useState([]);
 
   const [
+    zohoDepartments,
+    setZohoDepartments,
+  ] = useState([]);
+
+  const [
+    loadingDepartments,
+    setLoadingDepartments,
+  ] = useState(false);
+
+  const [
+    departmentLoadNotice,
+    setDepartmentLoadNotice,
+  ] = useState("");
+
+  const [
     tags,
     setTags,
   ] =
@@ -2612,6 +2627,11 @@ function App() {
 
   const qualicareDepartments = useMemo(() => {
     const options = new Map();
+    for (const department of zohoDepartments) {
+      const id = String(department?.id || "").trim();
+      const name = String(department?.name || "").trim();
+      if (id && name) options.set(id, name);
+    }
     for (const ticket of tickets) {
       if (ticket?.source !== "Qualicare") continue;
       const id = String(ticket.department_id || "").trim();
@@ -2624,7 +2644,7 @@ function App() {
     return [...options.entries()]
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [tickets, selected?.source, selected?.department_id, selected?.department]);
+  }, [zohoDepartments, tickets, selected?.source, selected?.department_id, selected?.department]);
 
   // ====================================================
   // THREADS
@@ -2895,6 +2915,41 @@ function App() {
       ]
     );
 
+  const loadDepartments =
+    useCallback(
+      async (source) => {
+        if (!session || source !== "Qualicare") {
+          setZohoDepartments([]);
+          setDepartmentLoadNotice("");
+          return;
+        }
+
+        setLoadingDepartments(true);
+        setDepartmentLoadNotice("");
+
+        const { data, error } = await supabase.functions.invoke(
+          "get-zoho-departments",
+          { body: { source } }
+        );
+
+        if (error || !data?.success) {
+          console.error("Department load error:", data?.error || error);
+          setZohoDepartments([]);
+          setDepartmentLoadNotice(
+            data?.error || error?.message || "Could not load Qualicare departments."
+          );
+        } else {
+          setZohoDepartments(Array.isArray(data.departments) ? data.departments : []);
+          if (!data.departments?.length) {
+            setDepartmentLoadNotice("Zoho returned no active Qualicare departments.");
+          }
+        }
+
+        setLoadingDepartments(false);
+      },
+      [session]
+    );
+
   // ====================================================
   // TAGS
   // ====================================================
@@ -3027,6 +3082,10 @@ function App() {
         selected.source
       );
 
+      loadDepartments(
+        selected.source
+      );
+
       loadTagCatalog(
         selected.source
       );
@@ -3036,6 +3095,7 @@ function App() {
       );
     } else {
       setAgents([]);
+      setZohoDepartments([]);
       setTagCatalog([]);
       setZohoTierOptions([]);
       setTierMetadataNotice("");
@@ -3043,6 +3103,7 @@ function App() {
   }, [
     selected?.source,
     loadAgents,
+    loadDepartments,
     loadTagCatalog,
     loadTierMetadata,
   ]);
@@ -9553,9 +9614,10 @@ function App() {
                     <select
                       className="detail-control owner-select"
                       value={String(selected.department_id || "")}
-                      disabled={updateBusy || !qualicareDepartments.length}
+                      disabled={updateBusy || loadingDepartments || !qualicareDepartments.length}
                       onChange={(event) => updateTicketField("departmentId", event.target.value)}
                     >
+                      {loadingDepartments && <option value="">Loading departments…</option>}
                       {!selected.department_id && <option value="">Select department</option>}
                       {selected.department_id && !qualicareDepartments.some((department) => department.id === String(selected.department_id)) && (
                         <option value={String(selected.department_id)}>{selected.department || "Current department"}</option>
@@ -9564,7 +9626,17 @@ function App() {
                         <option key={department.id} value={department.id}>{department.name}</option>
                       ))}
                     </select>
-                    {!qualicareDepartments.length && <div className="owner-current-email">No Qualicare departments have been synchronized yet.</div>}
+                    {!loadingDepartments && departmentLoadNotice && (
+                      <div className="owner-current-email">
+                        {departmentLoadNotice}{" "}
+                        <button type="button" className="link-button" onClick={() => loadDepartments("Qualicare")}>
+                          Try again
+                        </button>
+                      </div>
+                    )}
+                    {!loadingDepartments && !departmentLoadNotice && !qualicareDepartments.length && (
+                      <div className="owner-current-email">No active Qualicare departments were returned by Zoho.</div>
+                    )}
                   </Detail>
                 )}
                 <Detail label="Ticket Owner">
