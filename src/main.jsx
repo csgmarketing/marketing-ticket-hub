@@ -5444,6 +5444,46 @@ function App() {
     setClassificationBusy(false);
   }
 
+  useEffect(() => {
+    if (!selected?.ticket_key || HUB_CLOSED(selected) || !session?.user?.id) return;
+    const activityVersion = selected.updated_at_zoho || selected.created_at_zoho || "unknown";
+    const storageKey = `hub-promise-check:${session.user.id}:${selected.ticket_key}:${activityVersion}`;
+    try { if (localStorage.getItem(storageKey) === "done") return; } catch { /* storage can be unavailable */ }
+    let live = true;
+    const timer = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("hub-ticket-classify", {
+          body: {
+            ticket_key: selected.ticket_key,
+            tier_options: selected.source === "Qualicare" ? [] : tierOptions,
+          },
+        });
+        if (!live) return;
+        if (error || !data?.success) throw new Error(data?.error || error?.message || "Promise check failed");
+        const commitment = data?.suggestion?.commitment;
+        if (commitment?.auto_apply && commitment?.recommended_due_date) {
+          const proposed = new Date(commitment.recommended_due_date);
+          const existing = hubDate(selected.due_date);
+          if (Number.isFinite(proposed.getTime()) && (!existing || proposed < existing)) {
+            const update = await supabase.functions.invoke("update-zoho-ticket", {
+              body: { ticket_key: selected.ticket_key, changes: { dueDate: proposed.toISOString() } },
+            });
+            if (update.error || !update.data?.success) throw new Error(update.data?.error || update.error?.message || "The promised deadline could not be saved");
+            if (!live) return;
+            setTickets((current) => current.map((ticket) => ticket.ticket_key === selected.ticket_key ? { ...ticket, due_date: proposed.toISOString() } : ticket));
+            setClassificationNotice(`Promise detected. The Zoho due date was automatically set to ${proposed.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}, one business day before the promised delivery date.${commitment.quote ? ` “${commitment.quote}”` : ""}`);
+          }
+        } else if (commitment?.preserved_earlier_due_date) {
+          setClassificationNotice("A delivery promise was detected, but the existing earlier due date was preserved.");
+        }
+        try { localStorage.setItem(storageKey, "done"); } catch { /* storage can be unavailable */ }
+      } catch (error) {
+        console.warn("Automatic promise deadline check failed", error);
+      }
+    }, 1200);
+    return () => { live = false; clearTimeout(timer); };
+  }, [selected?.ticket_key, selected?.updated_at_zoho, selected?.due_date, session?.user?.id]);
+
   function acceptSuggestedTag(name) {
     addTagByName(name);
     setClassificationSuggestion((current) => current ? {
