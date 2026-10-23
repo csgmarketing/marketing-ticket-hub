@@ -2646,6 +2646,20 @@ function App() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [zohoDepartments, tickets, selected?.source, selected?.department_id, selected?.department]);
 
+  const qualicareDepartmentFilters = useMemo(() => {
+    const names = new Set();
+    for (const department of qualicareDepartments) {
+      const name = String(department?.name || "").trim();
+      if (name) names.add(name);
+    }
+    for (const ticket of tickets) {
+      if (ticket?.source !== "Qualicare") continue;
+      const name = String(ticket?.department || "").trim();
+      if (name) names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [qualicareDepartments, tickets]);
+
   // ====================================================
   // THREADS
   // ====================================================
@@ -3107,6 +3121,12 @@ function App() {
     loadTagCatalog,
     loadTierMetadata,
   ]);
+
+  useEffect(() => {
+    if (brandFilter === "Qualicare") {
+      loadDepartments("Qualicare");
+    }
+  }, [brandFilter, loadDepartments]);
 
   useEffect(() => {
     if (
@@ -5683,8 +5703,7 @@ function App() {
       }
 
       if (
-        brandFilter ===
-          "Tutor Doctor" &&
+        (brandFilter === "Tutor Doctor" || brandFilter === "Qualicare") &&
         departmentFilter !==
           "all"
       ) {
@@ -6114,7 +6133,7 @@ function App() {
 
       const myTickets = countTickets.filter(ticket =>
         isTicketOwnedByUser(ticket, session?.user) && ticket.status !== "Closed" &&
-        (brandFilter !== "Tutor Doctor" || departmentFilter === "all" ||
+        ((brandFilter !== "Tutor Doctor" && brandFilter !== "Qualicare") || departmentFilter === "all" ||
           String(ticket.department || "").trim() === departmentFilter));
 
       // The Team Member selector scopes every sidebar count, not just the
@@ -6135,8 +6154,7 @@ function App() {
       }
 
       if (
-        brandFilter ===
-          "Tutor Doctor" &&
+        (brandFilter === "Tutor Doctor" || brandFilter === "Qualicare") &&
         departmentFilter !==
           "all"
       ) {
@@ -6932,10 +6950,7 @@ function App() {
                     value
                   );
 
-                  if (
-                    value !==
-                    "Tutor Doctor"
-                  ) {
+                  if (value !== brandFilter) {
                     setDepartmentFilter(
                       "all"
                     );
@@ -6960,12 +6975,11 @@ function App() {
           )}
         </div>
 
-        {brandFilter ===
-          "Tutor Doctor" && (
+        {(brandFilter === "Tutor Doctor" || brandFilter === "Qualicare") && (
           <div className="sidebar-section">
 
             <div className="sidebar-label">
-              TUTOR DOCTOR DEPARTMENT
+              {brandFilter.toUpperCase()} DEPARTMENT
             </div>
 
             {[
@@ -6973,14 +6987,9 @@ function App() {
                 "all",
                 "All Departments",
               ],
-              ...TUTOR_DOCTOR_DEPARTMENTS.map(
-                (
-                  department
-                ) => [
-                  department.value,
-                  department.label,
-                ]
-              ),
+              ...(brandFilter === "Tutor Doctor"
+                ? TUTOR_DOCTOR_DEPARTMENTS.map((department) => [department.value, department.label])
+                : qualicareDepartmentFilters.map((department) => [department, department])),
             ].map(
               (
                 [
@@ -7451,19 +7460,15 @@ function App() {
               {brandFilter ===
               "all"
                 ? "Tickets"
-                : brandFilter ===
-                    "Tutor Doctor" &&
+                : (brandFilter === "Tutor Doctor" || brandFilter === "Qualicare") &&
                   departmentFilter !==
                     "all"
-                  ? `Tutor Doctor · ${
-                      TUTOR_DOCTOR_DEPARTMENTS.find(
-                        (
-                          department
-                        ) =>
-                          department.value ===
-                          departmentFilter
-                      )?.label ||
-                      departmentFilter
+                  ? `${brandFilter} · ${
+                      brandFilter === "Tutor Doctor"
+                        ? TUTOR_DOCTOR_DEPARTMENTS.find(
+                            (department) => department.value === departmentFilter
+                          )?.label || departmentFilter
+                        : departmentFilter
                     }`
                   : brandFilter}
             </h1>
