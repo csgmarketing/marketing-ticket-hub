@@ -199,6 +199,17 @@ const TUTOR_DOCTOR_DEPARTMENTS = [
   },
 ];
 
+const QUALICARE_DEPARTMENTS = [
+  {
+    value: "Marketing",
+    label: "Marketing",
+  },
+  {
+    value: "Support",
+    label: "Support",
+  },
+];
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -6989,7 +7000,7 @@ function App() {
               ],
               ...(brandFilter === "Tutor Doctor"
                 ? TUTOR_DOCTOR_DEPARTMENTS.map((department) => [department.value, department.label])
-                : qualicareDepartmentFilters.map((department) => [department, department])),
+                : QUALICARE_DEPARTMENTS.map((department) => [department.value, department.label])),
             ].map(
               (
                 [
