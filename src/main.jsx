@@ -1417,26 +1417,8 @@ function MarketingDashboard({tickets,session,onOpen,onNavigate,onFind,onRefreshT
     supabase.from("ticket_threads").select("*").order("created_at_zoho",{ascending:false}).limit(40),
   ]);if(!live)return;const merged=[];
     for(const a of results[0].data||[]){const labels={status:"Status changed",priority:"Priority changed",due_date:"Deadline changed",assignee_name:"Owner changed",assignee_email:"Owner email changed",codewiz_agent_name:"Owner changed",codewiz_agent_email:"Owner email changed",created:"Ticket created"};merged.push({id:`audit-${a.id}`,ticket_key:a.ticket_key,date:a.created_at,label:labels[a.activity_type]||a.activity_type,actor:a.actor||"Zoho sync",detail:a.activity_type==="created"?a.new_value:`${a.old_value||"None"} → ${a.new_value||"None"}`,kind:"audit"});}
-for(const c of results[1].data||[])merged.push({
-  id:`comment-${c.comment_key||c.id}`,
-  ticket_key:c.ticket_key,
-  date:c.commented_at_zoho,
-  label:"Comment added",
-  actor:
-    c.hub_commenter_name||
-    c.hub_commenter_email||
-    c.commenter_name||
-    c.author_name||
-    c.commented_by_name||
-    "Team member",
-  detail:stripHtml(
-    c.content_html||
-    c.content||
-    c.content_text||
-    ""
-  ).slice(0,140),
-  kind:"comment"
-});    for(const t of results[2].data||[])merged.push({id:`email-${t.thread_key||t.id}`,ticket_key:t.ticket_key,date:t.created_at_zoho,label:isOutboundThread(t)?"Reply sent":"Email received",actor:t.author_name||t.from_email||"Email",detail:stripHtml(t.summary||t.content_text||"").slice(0,140),kind:"email"});
+    for(const c of results[1].data||[])merged.push({id:`comment-${c.comment_key||c.id}`,ticket_key:c.ticket_key,date:c.commented_at_zoho,label:"Comment added",actor:c.hub_commenter_name||c.hub_commenter_email||c.commenter_name||c.author_name||c.commented_by_name||"Team member",detail:stripHtml(c.content_html||c.content||c.content_text||"").slice(0,140),kind:"comment"});
+    for(const t of results[2].data||[])merged.push({id:`email-${t.thread_key||t.id}`,ticket_key:t.ticket_key,date:t.created_at_zoho,label:isOutboundThread(t)?"Reply sent":"Email received",actor:t.author_name||t.from_email||"Email",detail:stripHtml(t.summary||t.content_text||"").slice(0,140),kind:"email"});
     setEvents(merged.sort((a,b)=>(hubDate(b.date)?.getTime()||0)-(hubDate(a.date)?.getTime()||0)));setNotice(results.some(r=>r.error)?"Some activity sources could not be loaded. Showing the available history.":"");setLoading(false);
   }refresh();const interval=setInterval(()=>{setNow(new Date());refresh();},60000);const channel=supabase.channel("hub-dashboard-activity");for(const table of ["hub_ticket_activity","ticket_comments","ticket_threads"])channel.on("postgres_changes",{event:"*",schema:"public",table},refresh);channel.subscribe();return()=>{live=false;clearInterval(interval);supabase.removeChannel(channel);};},[session?.user?.id]);
   const email=canonicalTeamEmail(session?.user?.email);
@@ -6670,27 +6652,27 @@ function App() {
     );
   }
 
-function renderCommentItem(
-  comment
-) {
-  const displayedCommenterName =
-    comment.hub_commenter_name ||
-    comment.hub_commenter_email ||
-    comment.commenter_name ||
-    comment.commenter_email ||
-    "Zoho user";
-
-  const usesSharedCodeWizIdentity =
-    comment.source === "Code Wiz" &&
-    Boolean(
+  function renderCommentItem(
+    comment
+  ) {
+    const displayedCommenterName =
       comment.hub_commenter_name ||
-      comment.hub_commenter_email
-    );
+      comment.hub_commenter_email ||
+      comment.commenter_name ||
+      comment.commenter_email ||
+      "Zoho user";
 
-  const mentions =
-    normalizeMentionList(
-      comment.mentions
-    );
+    const usesSharedCodeWizIdentity =
+      comment.source === "Code Wiz" &&
+      Boolean(
+        comment.hub_commenter_name ||
+        comment.hub_commenter_email
+      );
+
+    const mentions =
+      normalizeMentionList(
+        comment.mentions
+      );
 
     const attachments =
       Array.isArray(
@@ -6724,20 +6706,23 @@ function renderCommentItem(
           <div className="comment-author-area">
 
             <div className="comment-avatar">
-  {displayedCommenterName
-    .charAt(0)
-    .toUpperCase()}
-</div>
+              {(
+                displayedCommenterName || "?"
+              )
+                .charAt(0)
+                .toUpperCase()}
+            </div>
 
-<div className="comment-author">
-  {displayedCommenterName}
-</div>
+            <div>
+              <div className="comment-author">
+                {displayedCommenterName}
+              </div>
 
-{usesSharedCodeWizIdentity ? (
-  <div className="comment-shared-identity">
-    via Code Wiz Marketing
-  </div>
-) : null}
+              {usesSharedCodeWizIdentity ? (
+                <div className="comment-shared-identity">
+                  via Code Wiz Marketing
+                </div>
+              ) : null}
 
               <div className="comment-meta">
 
