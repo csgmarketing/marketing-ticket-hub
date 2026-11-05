@@ -4958,3 +4958,11 @@ button.existing-attachment:disabled { cursor: default; opacity: .65; }
 .hub-ai-briefing>footer{border-top-color:#dfe8eb}.hub-ai-briefing>footer span{color:#53647a}.hub-ai-briefing>footer small{color:#8491a2}
 .hub-ai-briefing-error{background:#fff0ef;color:#8d372f}.hub-ai-briefing-error span{color:#9d4a43}
 .hub-ai-briefing-loading i{background:linear-gradient(90deg,#eaf0f2,#f8fbfb,#eaf0f2);background-size:220% 100%}
+
+.comment-shared-identity {
+  margin-top: 2px;
+  color: #77859a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+}
