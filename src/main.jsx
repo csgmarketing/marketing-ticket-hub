@@ -2856,17 +2856,47 @@ function App() {
       setComments([]);
     }
 
-    setCommentText("");
-    setCommentPublic(false);
+    let restoredCommentDraft = null;
+
+    if (
+      selectedKey &&
+      session?.user?.id
+    ) {
+      try {
+        const savedDraft =
+          window.localStorage.getItem(
+            `hub-comment-draft:${session.user.id}:${selectedKey}`
+          );
+
+        restoredCommentDraft =
+          savedDraft
+            ? JSON.parse(savedDraft)
+            : null;
+      } catch {
+        restoredCommentDraft = null;
+      }
+    }
+
+    setCommentText(
+      String(restoredCommentDraft?.text || "")
+    );
+    setCommentPublic(
+      Boolean(restoredCommentDraft?.isPublic)
+    );
     setCommentMentions([]);
     setCommentFiles([]);
-    setCommentNotice("");
+    setCommentNotice(
+      restoredCommentDraft?.text
+        ? "Draft restored"
+        : ""
+    );
     setMentionQuery("");
     setShowMentionSuggestions(
       false
     );
   }, [
     selectedKey,
+    session?.user?.id,
     loadThreads,
     loadComments,
   ]);
@@ -4658,6 +4688,33 @@ function App() {
       value
     );
 
+    if (
+      selectedKey &&
+      session?.user?.id
+    ) {
+      try {
+        const draftKey =
+          `hub-comment-draft:${session.user.id}:${selectedKey}`;
+
+        if (value) {
+          window.localStorage.setItem(
+            draftKey,
+            JSON.stringify({
+              text: value,
+              isPublic: commentPublic,
+              savedAt: new Date().toISOString(),
+            })
+          );
+        } else {
+          window.localStorage.removeItem(
+            draftKey
+          );
+        }
+      } catch {
+        // Draft autosave must never interrupt typing.
+      }
+    }
+
     const match =
       value.match(
         /@([^@\n]*)$/
@@ -4676,6 +4733,33 @@ function App() {
       setShowMentionSuggestions(
         false
       );
+    }
+  }
+
+  function updateCommentVisibility(
+    isPublic
+  ) {
+    setCommentPublic(
+      isPublic
+    );
+
+    if (
+      selectedKey &&
+      session?.user?.id &&
+      commentText
+    ) {
+      try {
+        window.localStorage.setItem(
+          `hub-comment-draft:${session.user.id}:${selectedKey}`,
+          JSON.stringify({
+            text: commentText,
+            isPublic,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      } catch {
+        // Draft autosave must never block the editor.
+      }
     }
   }
 
@@ -4723,7 +4807,7 @@ function App() {
         atIndex
       );
 
-    setCommentText(
+    handleCommentChange(
       `${before}@${display} `
     );
 
@@ -4974,6 +5058,19 @@ function App() {
       setCommentText("");
       setCommentMentions([]);
       setCommentFiles([]);
+
+      if (
+        selectedKey &&
+        session?.user?.id
+      ) {
+        try {
+          window.localStorage.removeItem(
+            `hub-comment-draft:${session.user.id}:${selectedKey}`
+          );
+        } catch {
+          // The comment was sent successfully; storage cleanup is best effort.
+        }
+      }
 
       setCommentNotice(
         commentPublic
@@ -8894,7 +8991,7 @@ function App() {
                           : ""
                       }
                       onClick={() =>
-                        setCommentPublic(
+                        updateCommentVisibility(
                           false
                         )
                       }
@@ -8910,7 +9007,7 @@ function App() {
                           : ""
                       }
                       onClick={() =>
-                        setCommentPublic(
+                        updateCommentVisibility(
                           true
                         )
                       }
