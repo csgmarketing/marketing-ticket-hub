@@ -8189,10 +8189,18 @@ function App() {
             }
 
             return (
-              <button
+              <div
                 key={ticket.ticket_key}
                 className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
                 onClick={() => setSelectedKey(ticket.ticket_key)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedKey(ticket.ticket_key);
+                  }
+                }}
               >
                 <label
                   className="ticket-bulk-checkbox compact-bulk-checkbox"
@@ -8253,7 +8261,7 @@ function App() {
                   </div>
                   <span className="ticket-assignee">{ownerName}</span>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
