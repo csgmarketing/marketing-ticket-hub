@@ -516,8 +516,6 @@ textarea {
 .ticket-row {
   display: block;
 
-  position: relative;
-
   width: 100%;
 
   margin-bottom: 6px;
@@ -3766,23 +3764,6 @@ button:hover {
 .ticket-list-toolbar{display:flex;align-items:center;gap:10px;padding:0 0 10px}
 .ticket-list-toolbar .search-wrap{flex:1;min-width:0}
 .ticket-list-toolbar .ticket-view-switcher{flex:0 0 auto}
-.bulk-ticket-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 8px 10px;padding:9px 11px;border:1px solid #dbe3ee;border-radius:9px;background:#f8fafc;color:#64748b;font-size:11px;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
-.bulk-ticket-bar.active{border-color:#b7cdf7;background:#f1f6ff;box-shadow:0 1px 3px rgba(37,99,235,.08);color:#334155}
-.bulk-ticket-select-all{display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer}
-.bulk-ticket-select-all input,.classic-header-check input,.ticket-bulk-checkbox input{width:16px;height:16px;margin:0;accent-color:#2563eb;cursor:pointer}
-.bulk-ticket-actions{display:flex;align-items:center;gap:8px}
-.bulk-ticket-actions strong{color:#1e3a5f;font-size:11px}
-.bulk-ticket-actions button{border-radius:7px;padding:7px 10px;font-size:10px;font-weight:800;cursor:pointer}
-.bulk-ticket-actions button:disabled{cursor:not-allowed;opacity:.6}
-.bulk-ticket-clear{border:1px solid #cfd8e5;background:#fff;color:#475569}
-.bulk-ticket-close{border:1px solid #b42318;background:#c93228;color:#fff}
-.bulk-ticket-close:hover:not(:disabled){background:#a9251d}
-.bulk-ticket-notice{margin:-3px 8px 10px;padding:8px 10px;border-radius:7px;background:#eef5ff;color:#31517e;font-size:10px;font-weight:650;line-height:1.4}
-.ticket-bulk-checkbox{display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
-.compact-bulk-checkbox{position:absolute;top:12px;right:11px}
-.ticket-row:has(.compact-bulk-checkbox) .ticket-row-top{padding-right:25px}
-.board-bulk-checkbox{flex:0 0 auto;margin-top:1px}
-.classic-header-check{display:flex;align-items:center;justify-content:center}
 .ticket-list-classic{border-top:1px solid #e5eaf0;background:#fff}
 .ticket-row-classic{display:grid;grid-template-columns:30px 38px minmax(300px,1fr) 112px 46px 38px 38px 42px;align-items:center;gap:10px;min-height:72px;padding:8px 12px;border-bottom:1px solid #e9edf2;background:#fff;cursor:pointer;transition:background .12s ease,box-shadow .12s ease}
 .ticket-row-classic:hover{background:#f8fbff}
@@ -3817,8 +3798,6 @@ button:hover {
 }
 @media (max-width: 760px){
   .ticket-list-toolbar{align-items:stretch;flex-direction:column}
-  .bulk-ticket-bar{align-items:flex-start;flex-direction:column}
-  .bulk-ticket-actions{width:100%;justify-content:flex-end}
   .ticket-view-switcher{width:max-content}
   .ticket-row-classic{grid-template-columns:28px 34px minmax(0,1fr) 34px 34px 34px;gap:7px}
   .classic-ticket-status,.classic-ticket-activity{display:none}
@@ -4463,4 +4442,30 @@ button:hover {
   .app-shell.ticket-reading-mode{grid-template-columns:200px minmax(0,1fr) 300px}
   .app-shell.ticket-reading-mode .details-column{display:block;position:relative;inset:auto;width:auto;height:auto;min-width:0;z-index:auto;box-shadow:none;overflow-y:auto;background:#fff}
   .ticket-reading-mode .hub-details-toggle,.ticket-reading-mode .hub-close-details,.ticket-reading-mode .hub-details-overlay{display:none}
+}
+
+/* ======================================================
+   BULK TICKET SELECTION — isolated additions only
+   ====================================================== */
+.bulk-ticket-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 8px 10px;padding:9px 11px;border:1px solid #dbe3ee;border-radius:9px;background:#f8fafc;color:#64748b;font-size:11px;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.bulk-ticket-bar.active{border-color:#b7cdf7;background:#f1f6ff;box-shadow:0 1px 3px rgba(37,99,235,.08);color:#334155}
+.bulk-ticket-select-all{display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer}
+.bulk-ticket-select-all input,.classic-header-check input,.ticket-bulk-checkbox input{width:16px;height:16px;margin:0;accent-color:#2563eb;cursor:pointer}
+.bulk-ticket-actions{display:flex;align-items:center;gap:8px}
+.bulk-ticket-actions strong{color:#1e3a5f;font-size:11px}
+.bulk-ticket-actions button{border-radius:7px;padding:7px 10px;font-size:10px;font-weight:800;cursor:pointer}
+.bulk-ticket-actions button:disabled{cursor:not-allowed;opacity:.6}
+.bulk-ticket-clear{border:1px solid #cfd8e5;background:#fff;color:#475569}
+.bulk-ticket-close{border:1px solid #b42318;background:#c93228;color:#fff}
+.bulk-ticket-close:hover:not(:disabled){background:#a9251d}
+.bulk-ticket-notice{margin:-3px 8px 10px;padding:8px 10px;border-radius:7px;background:#eef5ff;color:#31517e;font-size:10px;font-weight:650;line-height:1.4}
+.ticket-bulk-checkbox{display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
+.ticket-row{position:relative}
+.compact-bulk-checkbox{position:absolute;top:12px;right:11px}
+.board-bulk-checkbox{flex:0 0 auto;margin-top:1px}
+.classic-header-check{display:flex;align-items:center;justify-content:center}
+
+@media(max-width:760px){
+  .bulk-ticket-bar{align-items:flex-start;flex-direction:column}
+  .bulk-ticket-actions{width:100%;justify-content:flex-end}
 }
