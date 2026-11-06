@@ -1753,6 +1753,21 @@ function App() {
     useState(false);
 
   const [
+    bulkSelectedKeys,
+    setBulkSelectedKeys,
+  ] = useState([]);
+
+  const [
+    bulkCloseBusy,
+    setBulkCloseBusy,
+  ] = useState(false);
+
+  const [
+    bulkCloseNotice,
+    setBulkCloseNotice,
+  ] = useState("");
+
+  const [
     notificationFilter,
     setNotificationFilter,
   ] =
@@ -6030,6 +6045,22 @@ function App() {
       ticket.ticket_key === current) ? current : null);
   }, [filteredTickets]);
 
+  useEffect(() => {
+    const availableKeys = new Set(
+      tickets.filter((ticket) => !HUB_CLOSED(ticket)).map((ticket) => ticket.ticket_key)
+    );
+    setBulkSelectedKeys((current) => current.filter((key) => availableKeys.has(key)));
+  }, [tickets]);
+
+  const visibleBulkKeys = filteredTickets
+    .filter((ticket) => !HUB_CLOSED(ticket))
+    .map((ticket) => ticket.ticket_key);
+  const visibleBulkSelectedCount = visibleBulkKeys.filter((key) =>
+    bulkSelectedKeys.includes(key)
+  ).length;
+  const allVisibleBulkSelected =
+    visibleBulkKeys.length > 0 && visibleBulkSelectedCount === visibleBulkKeys.length;
+
   // ====================================================
   // The Team Member filter is intentionally limited to the CSG marketing
   // team. Do not populate it from every Zoho agent, because that would expose
@@ -6151,6 +6182,105 @@ function App() {
     } finally {
       setStatusEditBusy(false);
     }
+  }
+
+  function toggleBulkTicket(ticketKey) {
+    setBulkSelectedKeys((current) =>
+      current.includes(ticketKey)
+        ? current.filter((key) => key !== ticketKey)
+        : [...current, ticketKey]
+    );
+    setBulkCloseNotice("");
+  }
+
+  function setAllVisibleBulkTickets(checked) {
+    const visibleKeys = filteredTickets
+      .filter((ticket) => !HUB_CLOSED(ticket))
+      .map((ticket) => ticket.ticket_key);
+
+    setBulkSelectedKeys((current) => {
+      if (checked) return Array.from(new Set([...current, ...visibleKeys]));
+      const visibleSet = new Set(visibleKeys);
+      return current.filter((key) => !visibleSet.has(key));
+    });
+    setBulkCloseNotice("");
+  }
+
+  async function bulkCloseSelectedTickets() {
+    if (bulkCloseBusy || bulkSelectedKeys.length === 0) return;
+
+    const selectedTickets = tickets.filter(
+      (ticket) => bulkSelectedKeys.includes(ticket.ticket_key) && !HUB_CLOSED(ticket)
+    );
+
+    if (selectedTickets.length === 0) {
+      setBulkSelectedKeys([]);
+      setBulkCloseNotice("The selected tickets are already closed.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Close ${selectedTickets.length} selected ticket${selectedTickets.length === 1 ? "" : "s"}?\n\nThis will update the tickets in Zoho.`
+    );
+    if (!confirmed) return;
+
+    setBulkCloseBusy(true);
+    setBulkCloseNotice(`Closing 0 of ${selectedTickets.length}…`);
+
+    const succeeded = [];
+    const failed = [];
+    let nextIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (nextIndex < selectedTickets.length) {
+        const ticket = selectedTickets[nextIndex++];
+        try {
+          const { data, error } = await supabase.functions.invoke("update-zoho-ticket", {
+            body: { ticket_key: ticket.ticket_key, changes: { status: "Closed" } },
+          });
+          if (error || !data?.success) {
+            throw new Error(data?.error || error?.message || "Zoho did not confirm the update.");
+          }
+          succeeded.push(ticket);
+          hubCompletionEvent(ticket, "Closed");
+          setTickets((current) => current.map((row) =>
+            row.ticket_key === ticket.ticket_key ? { ...row, status: "Closed" } : row
+          ));
+        } catch (error) {
+          failed.push({ ticket, message: error?.message || "Unknown error" });
+        } finally {
+          completed += 1;
+          setBulkCloseNotice(`Closing ${completed} of ${selectedTickets.length}…`);
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(4, selectedTickets.length) }, () => worker())
+    );
+
+    setBulkSelectedKeys(failed.map(({ ticket }) => ticket.ticket_key));
+    setSelectedKeyState((current) =>
+      current && succeeded.some((ticket) => ticket.ticket_key === current) ? null : current
+    );
+
+    if (failed.length === 0) {
+      setBulkCloseNotice(
+        `${succeeded.length} ticket${succeeded.length === 1 ? "" : "s"} closed successfully.`
+      );
+    } else {
+      const failedLabels = failed.slice(0, 4).map(({ ticket }) =>
+        `#${ticket.ticket_number || ticket.ticket_key}`
+      ).join(", ");
+      setBulkCloseNotice(
+        `${succeeded.length} closed. ${failed.length} failed: ${failedLabels}${failed.length > 4 ? "…" : ""}. Failed tickets remain selected.`
+      );
+      console.error("Bulk close failures:", failed);
+    }
+
+    await loadTickets();
+    setBulkCloseBusy(false);
   }
 
   async function assignClassicTicket(ticket, owner) {
@@ -7654,6 +7784,55 @@ function App() {
           </div>
         </div>
 
+        <div className={`bulk-ticket-bar ${bulkSelectedKeys.length > 0 ? "active" : ""}`}>
+          <label className="bulk-ticket-select-all">
+            <input
+              type="checkbox"
+              checked={allVisibleBulkSelected}
+              disabled={bulkCloseBusy || visibleBulkKeys.length === 0}
+              onChange={(event) => setAllVisibleBulkTickets(event.target.checked)}
+            />
+            <span>
+              {allVisibleBulkSelected ? "All visible selected" : "Select all visible"}
+            </span>
+          </label>
+
+          <div className="bulk-ticket-actions">
+            <strong>
+              {bulkSelectedKeys.length} selected
+            </strong>
+            {bulkSelectedKeys.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="bulk-ticket-clear"
+                  disabled={bulkCloseBusy}
+                  onClick={() => {
+                    setBulkSelectedKeys([]);
+                    setBulkCloseNotice("");
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="bulk-ticket-close"
+                  disabled={bulkCloseBusy}
+                  onClick={bulkCloseSelectedTickets}
+                >
+                  {bulkCloseBusy ? "Closing…" : "Close selected"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {bulkCloseNotice && (
+          <div className="bulk-ticket-notice" role="status">
+            {bulkCloseNotice}
+          </div>
+        )}
+
         <div className={`ticket-list ${ticketViewMode === "classic" ? "ticket-list-classic" : ""}`}>
 
           {loadingTickets &&
@@ -7710,6 +7889,19 @@ function App() {
                             }}
                           >
                             <div className="ticket-board-card-top">
+                              <label
+                                className="ticket-bulk-checkbox board-bulk-checkbox"
+                                title="Select ticket"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={bulkSelectedKeys.includes(ticket.ticket_key)}
+                                  disabled={bulkCloseBusy || HUB_CLOSED(ticket)}
+                                  onChange={() => toggleBulkTicket(ticket.ticket_key)}
+                                  aria-label={`Select ticket ${ticket.ticket_number || ""}`}
+                                />
+                              </label>
                               <div className="ticket-board-card-subject">
                                 {replyState[ticket.ticket_key]?.unread && <span className="unread-reply-dot" title="New ticket or customer reply" />}
                                 {ticket.subject || "Untitled ticket"}
@@ -7806,8 +7998,16 @@ function App() {
           )}
 
           {ticketViewMode === "classic" && filteredTickets.length > 0 && (
-            <div className="classic-ticket-header" aria-hidden="true">
-              <span></span>
+            <div className="classic-ticket-header">
+              <span className="classic-header-check">
+                <input
+                  type="checkbox"
+                  checked={allVisibleBulkSelected}
+                  disabled={bulkCloseBusy || visibleBulkKeys.length === 0}
+                  onChange={(event) => setAllVisibleBulkTickets(event.target.checked)}
+                  aria-label="Select all visible tickets"
+                />
+              </span>
               <span></span>
               <span>SUBJECT / REQUESTER</span>
               <span>STATUS</span>
@@ -7850,7 +8050,14 @@ function App() {
                   }}
                 >
                   <div className="classic-ticket-check">
-                    <input type="checkbox" onClick={(event) => event.stopPropagation()} aria-label={`Select ticket ${ticket.ticket_number || ""}`} />
+                    <input
+                      type="checkbox"
+                      checked={bulkSelectedKeys.includes(ticket.ticket_key)}
+                      disabled={bulkCloseBusy || HUB_CLOSED(ticket)}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={() => toggleBulkTicket(ticket.ticket_key)}
+                      aria-label={`Select ticket ${ticket.ticket_number || ""}`}
+                    />
                   </div>
                   <div className="classic-ticket-icon">✉</div>
                   <div className="classic-ticket-main">
@@ -7987,6 +8194,19 @@ function App() {
                 className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
                 onClick={() => setSelectedKey(ticket.ticket_key)}
               >
+                <label
+                  className="ticket-bulk-checkbox compact-bulk-checkbox"
+                  title="Select ticket"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={bulkSelectedKeys.includes(ticket.ticket_key)}
+                    disabled={bulkCloseBusy || HUB_CLOSED(ticket)}
+                    onChange={() => toggleBulkTicket(ticket.ticket_key)}
+                    aria-label={`Select ticket ${ticket.ticket_number || ""}`}
+                  />
+                </label>
                 <div className="ticket-row-top">
                   <BrandBadge source={ticket.source} />
                   <span className="ticket-number">#{ticket.ticket_number}</span>
