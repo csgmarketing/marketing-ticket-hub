@@ -818,10 +818,199 @@ function emailDisplayDocument(html) {
   });
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">${doc.head.innerHTML}<style>html,body{margin:0!important;padding:0!important;min-width:0!important;width:100%!important;height:auto!important;min-height:0!important;overflow-wrap:anywhere;font:14px/1.6 Arial,sans-serif;color:#334155;box-sizing:border-box}body{padding:12px 4px!important}img{max-width:100%!important;height:auto!important}table{max-width:100%!important}pre{white-space:pre-wrap}*{box-sizing:border-box}a{color:#2563eb}</style></head><body>${doc.body.innerHTML}</body></html>`;
 }
-function TicketEmailBody({html}) {
+
+function getThreadAttachmentId(attachment) {
+  return String(
+    attachment?.id ||
+    attachment?.attachmentId ||
+    attachment?.attachment_id ||
+    ""
+  ).trim();
+}
+
+function getThreadAttachmentName(attachment) {
+  return String(
+    attachment?.name ||
+    attachment?.fileName ||
+    attachment?.file_name ||
+    "Attachment"
+  ).trim();
+}
+
+function attachmentLooksLikeImage(attachment) {
+  const type = String(
+    attachment?.contentType ||
+    attachment?.content_type ||
+    attachment?.mimeType ||
+    attachment?.mime_type ||
+    ""
+  ).toLowerCase();
+  const name = getThreadAttachmentName(attachment).toLowerCase();
+  return type.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(name);
+}
+
+function normalizeInlineImageReference(value) {
+  let result = String(value || "").trim();
+  try { result = decodeURIComponent(result); } catch { /* Keep the original value. */ }
+  return result
+    .replace(/^cid:/i, "")
+    .replace(/[<>"']/g, "")
+    .split(/[?#]/)[0]
+    .split(/[\\/]/)
+    .pop()
+    .trim()
+    .toLowerCase();
+}
+
+function findInlineImageAttachment(image, attachments) {
+  const source = normalizeInlineImageReference(image.getAttribute("src"));
+  const alt = normalizeInlineImageReference(image.getAttribute("alt"));
+  const imageAttachments = attachments.filter(attachmentLooksLikeImage);
+
+  const matched = imageAttachments.find((attachment) => {
+    const references = [
+      getThreadAttachmentId(attachment),
+      getThreadAttachmentName(attachment),
+      attachment?.contentId,
+      attachment?.content_id,
+      attachment?.contentID,
+      attachment?.cid,
+    ]
+      .map(normalizeInlineImageReference)
+      .filter(Boolean);
+
+    return references.some((reference) =>
+      reference === source ||
+      reference === alt ||
+      (source && (reference.endsWith(source) || source.endsWith(reference)))
+    );
+  });
+
+  if (matched) return matched;
+
+  // Some Zoho messages expose only a relative filename or omit the CID.
+  // A single image attachment is therefore a safe fallback for one broken
+  // inline image, while multiple images still require an exact match.
+  if (imageAttachments.length === 1 && (source || alt)) {
+    return imageAttachments[0];
+  }
+
+  return null;
+}
+
+async function fetchThreadAttachmentBlob(thread, attachment) {
+  const attachmentId = getThreadAttachmentId(attachment);
+  const threadId = String(thread?.thread_id || thread?.id || "").trim();
+
+  if (!attachmentId || !threadId || !thread?.ticket_key) {
+    throw new Error("This attachment is missing the Zoho information needed to open it.");
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error("Your session expired. Please sign in again.");
+
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/download-zoho-thread-attachment`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ticket_key: thread.ticket_key,
+        thread_id: threadId,
+        attachment_id: attachmentId,
+        name: getThreadAttachmentName(attachment),
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(
+      detail.error || `Could not open ${getThreadAttachmentName(attachment)}.`
+    );
+  }
+
+  return response.blob();
+}
+
+async function resolveInlineEmailImages(html, thread, attachments) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const objectUrls = [];
+  const attachmentUrlCache = new Map();
+  const images = [...doc.body.querySelectorAll("img")];
+
+  for (const image of images) {
+    const source = String(image.getAttribute("src") || "").trim();
+    if (/^(https?:|data:|blob:)/i.test(source)) continue;
+
+    const attachment = findInlineImageAttachment(image, attachments);
+    if (!attachment) continue;
+
+    const attachmentId = getThreadAttachmentId(attachment);
+    try {
+      let objectUrl = attachmentUrlCache.get(attachmentId);
+      if (!objectUrl) {
+        const blob = await fetchThreadAttachmentBlob(thread, attachment);
+        objectUrl = URL.createObjectURL(blob);
+        attachmentUrlCache.set(attachmentId, objectUrl);
+        objectUrls.push(objectUrl);
+      }
+      image.setAttribute("src", objectUrl);
+      image.setAttribute("data-hub-inline-attachment", "true");
+      if (!image.getAttribute("alt")) {
+        image.setAttribute("alt", getThreadAttachmentName(attachment));
+      }
+    } catch (error) {
+      console.error("Inline email image error:", error);
+    }
+  }
+
+  return { html: doc.body.innerHTML, objectUrls };
+}
+
+function TicketEmailBody({html, thread, attachments = []}) {
   const frame = useRef(null);
   const [height, setHeight] = useState(180);
-  const source = useMemo(()=>emailDisplayDocument(html),[html]);
+  const [resolvedHtml, setResolvedHtml] = useState("");
+  const [resolvingImages, setResolvingImages] = useState(true);
+  const attachmentSignature = attachments
+    .map((attachment) => `${getThreadAttachmentId(attachment)}:${getThreadAttachmentName(attachment)}`)
+    .join("|");
+
+  useEffect(() => {
+    let active = true;
+    let objectUrls = [];
+    setResolvingImages(true);
+
+    resolveInlineEmailImages(html, thread, attachments)
+      .then((result) => {
+        objectUrls = result.objectUrls;
+        if (active) setResolvedHtml(result.html || html || "");
+        else objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      })
+      .catch((error) => {
+        console.error("Email image resolution error:", error);
+        if (active) setResolvedHtml(html || "");
+      })
+      .finally(() => {
+        if (active) setResolvingImages(false);
+      });
+
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [html, thread?.ticket_key, thread?.thread_id, attachmentSignature]);
+
+  const source = useMemo(
+    () => emailDisplayDocument(resolvedHtml || html),
+    [resolvedHtml, html]
+  );
   useEffect(()=>{
     const iframe=frame.current;let observer;let active=true;
     function measure() {
@@ -839,7 +1028,14 @@ function TicketEmailBody({html}) {
     loaded();
     return ()=>{active=false;observer?.disconnect();iframe?.removeEventListener("load",loaded);};
   },[source]);
-  return <iframe ref={frame} className="hub-email-frame" title="Ticket email content" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" srcDoc={source} style={{height}} />;
+  return (
+    <div className="hub-email-body-wrap">
+      {resolvingImages && attachments.some(attachmentLooksLikeImage) && (
+        <div className="hub-inline-image-loading">Loading email images…</div>
+      )}
+      <iframe ref={frame} className="hub-email-frame" title="Ticket email content" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" srcDoc={source} style={{height}} />
+    </div>
+  );
 }
 
 const SIGNATURE_BRANDS = ["Tutor Doctor", "Qualicare", "Code Wiz"];
@@ -1751,6 +1947,13 @@ function App() {
     setStatusEditBusy,
   ] =
     useState(false);
+
+  // Bulk selection is an optional interaction mode. It deliberately leaves
+  // the existing Compact, Classic and Board markup/layout intact.
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedKeys, setBulkSelectedKeys] = useState([]);
+  const [bulkCloseBusy, setBulkCloseBusy] = useState(false);
+  const [bulkCloseNotice, setBulkCloseNotice] = useState("");
 
   const [
     notificationFilter,
@@ -4163,24 +4366,13 @@ function App() {
   }
 
   async function downloadThreadAttachment(thread,attachment) {
-    const key=`${thread.thread_id}-${attachment.id}`;
+    const attachmentId=getThreadAttachmentId(attachment);
+    const key=`${thread.thread_id}-${attachmentId}`;
     if(attachmentDownloadKey)return;
     setAttachmentDownloadKey(key);
     setAttachmentDownloadError("");
     try {
-      const {data:sessionData}=await supabase.auth.getSession();
-      const token=sessionData.session?.access_token;
-      if(!token)throw new Error("Your session expired. Please sign in again.");
-      const response=await fetch(`${SUPABASE_URL}/functions/v1/download-zoho-thread-attachment`,{
-        method:"POST",
-        headers:{Authorization:`Bearer ${token}`,apikey:SUPABASE_ANON_KEY,"Content-Type":"application/json"},
-        body:JSON.stringify({ticket_key:thread.ticket_key,thread_id:thread.thread_id,attachment_id:attachment.id,name:attachment.name||"attachment"}),
-      });
-      if(!response.ok){
-        const detail=await response.json().catch(()=>({}));
-        throw new Error(detail.error||`Could not open ${attachment.name||"attachment"}.`);
-      }
-      const blob=await response.blob();
+      const blob=await fetchThreadAttachmentBlob(thread,attachment);
       const url=URL.createObjectURL(blob);
       setAttachmentPreview(current=>{
         if(current?.url)URL.revokeObjectURL(current.url);
@@ -6023,6 +6215,144 @@ function App() {
       session,
     ]);
 
+  const bulkSelectableKeys = useMemo(
+    () => filteredTickets
+      .filter((ticket) => ticket.status !== "Closed")
+      .map((ticket) => ticket.ticket_key),
+    [filteredTickets]
+  );
+
+  const allVisibleBulkSelected =
+    bulkSelectableKeys.length > 0 &&
+    bulkSelectableKeys.every((key) => bulkSelectedKeys.includes(key));
+
+  function toggleBulkTicket(ticketKey) {
+    if (!ticketKey || bulkCloseBusy) return;
+    setBulkSelectedKeys((current) =>
+      current.includes(ticketKey)
+        ? current.filter((key) => key !== ticketKey)
+        : [...current, ticketKey]
+    );
+  }
+
+  function toggleAllVisibleBulkTickets() {
+    if (bulkCloseBusy || bulkSelectableKeys.length === 0) return;
+    setBulkSelectedKeys((current) => {
+      if (bulkSelectableKeys.every((key) => current.includes(key))) {
+        return current.filter((key) => !bulkSelectableKeys.includes(key));
+      }
+      return Array.from(new Set([...current, ...bulkSelectableKeys]));
+    });
+  }
+
+  function leaveBulkMode() {
+    if (bulkCloseBusy) return;
+    setBulkMode(false);
+    setBulkSelectedKeys([]);
+    setBulkCloseNotice("");
+  }
+
+  async function bulkCloseSelectedTickets() {
+    if (bulkCloseBusy || bulkSelectedKeys.length === 0) return;
+
+    const selectedTickets = tickets.filter(
+      (ticket) =>
+        bulkSelectedKeys.includes(ticket.ticket_key) &&
+        ticket.status !== "Closed"
+    );
+
+    if (selectedTickets.length === 0) {
+      setBulkSelectedKeys([]);
+      setBulkCloseNotice("No open tickets are selected.");
+      return;
+    }
+
+    if (!window.confirm(
+      `Close ${selectedTickets.length} selected ticket${selectedTickets.length === 1 ? "" : "s"}?\n\nThis will update each ticket in Zoho.`
+    )) return;
+
+    setBulkCloseBusy(true);
+    setBulkCloseNotice(`Closing 0 of ${selectedTickets.length}…`);
+
+    const successfulKeys = [];
+    const failedTickets = [];
+    let completed = 0;
+    let nextIndex = 0;
+
+    async function worker() {
+      while (nextIndex < selectedTickets.length) {
+        const ticket = selectedTickets[nextIndex++];
+        try {
+          const { data, error } = await supabase.functions.invoke(
+            "update-zoho-ticket",
+            {
+              body: {
+                ticket_key: ticket.ticket_key,
+                changes: { status: "Closed" },
+              },
+            }
+          );
+
+          if (error || !data?.success) {
+            throw new Error(data?.error || error?.message || "Status update failed.");
+          }
+
+          successfulKeys.push(ticket.ticket_key);
+          hubCompletionEvent(ticket, "Closed");
+        } catch (error) {
+          failedTickets.push({
+            ticket,
+            message: error?.message || "Status update failed.",
+          });
+        } finally {
+          completed += 1;
+          setBulkCloseNotice(`Closing ${completed} of ${selectedTickets.length}…`);
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from(
+        { length: Math.min(4, selectedTickets.length) },
+        () => worker()
+      )
+    );
+
+    if (successfulKeys.length > 0) {
+      setTickets((current) => current.map((ticket) =>
+        successfulKeys.includes(ticket.ticket_key)
+          ? { ...ticket, status: "Closed" }
+          : ticket
+      ));
+    }
+
+    setBulkSelectedKeys(
+      failedTickets.map(({ ticket }) => ticket.ticket_key)
+    );
+
+    if (failedTickets.length > 0) {
+      setBulkCloseNotice(
+        `${successfulKeys.length} closed. ${failedTickets.length} failed and remain selected.`
+      );
+      console.error("Bulk close failures:", failedTickets);
+    } else {
+      setBulkCloseNotice(
+        `${successfulKeys.length} ticket${successfulKeys.length === 1 ? "" : "s"} closed successfully.`
+      );
+      setBulkMode(false);
+    }
+
+    setBulkCloseBusy(false);
+    loadTickets();
+  }
+
+  useEffect(() => {
+    const existingKeys = new Set(tickets.map((ticket) => ticket.ticket_key));
+    setBulkSelectedKeys((current) =>
+      current.filter((key) => existingKeys.has(key))
+    );
+  }, [tickets]);
+
   // Preserve a user's selection while visible; never open another ticket
   // automatically when a closure or filter change removes it from the list.
   useEffect(() => {
@@ -6597,7 +6927,7 @@ function App() {
         )}
 
         {thread.content_html ? (
-          <TicketEmailBody html={thread.content_html} />
+          <TicketEmailBody html={thread.content_html} thread={thread} attachments={attachments} />
         ) : (
           <div className="message-body text-message">
             {thread.content_text ||
@@ -6619,10 +6949,10 @@ function App() {
                   type="button"
                   className="existing-attachment"
                   key={
-                    attachment.id ||
+                    getThreadAttachmentId(attachment) ||
                     `${attachment.name}-${index}`
                   }
-                  disabled={Boolean(attachmentDownloadKey)||!attachment.id||!thread.thread_id}
+                  disabled={Boolean(attachmentDownloadKey)||!getThreadAttachmentId(attachment)||!thread.thread_id}
                   onClick={()=>downloadThreadAttachment(thread,attachment)}
                 >
                   <span>
@@ -6641,7 +6971,7 @@ function App() {
                       )}
                     </small>
                   )}
-                  <span className="existing-attachment-action">{attachmentDownloadKey===`${thread.thread_id}-${attachment.id}`?"Opening…":"Open ↗"}</span>
+                  <span className="existing-attachment-action">{attachmentDownloadKey===`${thread.thread_id}-${getThreadAttachmentId(attachment)}`?"Opening…":"Open ↗"}</span>
                 </button>
               )
             )}
@@ -7652,7 +7982,56 @@ function App() {
               Board
             </button>
           </div>
+
+          <div className={`bulk-mode-controls ${bulkMode ? "active" : ""}`}>
+            {!bulkMode ? (
+              <button
+                type="button"
+                className="bulk-mode-start"
+                onClick={() => {
+                  setBulkMode(true);
+                  setBulkCloseNotice("");
+                }}
+              >
+                Select tickets
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="bulk-mode-select-all"
+                  disabled={bulkCloseBusy || bulkSelectableKeys.length === 0}
+                  onClick={toggleAllVisibleBulkTickets}
+                >
+                  {allVisibleBulkSelected ? "Clear visible" : "Select all visible"}
+                </button>
+                <strong>{bulkSelectedKeys.length} selected</strong>
+                <button
+                  type="button"
+                  className="bulk-mode-close"
+                  disabled={bulkCloseBusy || bulkSelectedKeys.length === 0}
+                  onClick={bulkCloseSelectedTickets}
+                >
+                  {bulkCloseBusy ? "Closing…" : "Close selected"}
+                </button>
+                <button
+                  type="button"
+                  className="bulk-mode-cancel"
+                  disabled={bulkCloseBusy}
+                  onClick={leaveBulkMode}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
         </div>
+
+        {bulkCloseNotice && (
+          <div className="bulk-mode-notice" role="status">
+            {bulkCloseNotice}
+          </div>
+        )}
 
         <div className={`ticket-list ${ticketViewMode === "classic" ? "ticket-list-classic" : ""}`}>
 
@@ -7702,8 +8081,12 @@ function App() {
                         return (
                           <article
                             key={ticket.ticket_key}
-                            className={`ticket-board-card ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
+                            className={`ticket-board-card ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""} ${bulkSelectedKeys.includes(ticket.ticket_key) ? "bulk-selected" : ""}`}
                             onClick={() => {
+                              if (bulkMode) {
+                                if (ticket.status !== "Closed") toggleBulkTicket(ticket.ticket_key);
+                                return;
+                              }
                               // Board is full-width until a ticket is intentionally opened.
                               setTicketViewMode("compact");
                               setSelectedKey(ticket.ticket_key);
@@ -7806,8 +8189,18 @@ function App() {
           )}
 
           {ticketViewMode === "classic" && filteredTickets.length > 0 && (
-            <div className="classic-ticket-header" aria-hidden="true">
-              <span></span>
+            <div className="classic-ticket-header">
+              <span>
+                {bulkMode && (
+                  <input
+                    type="checkbox"
+                    checked={allVisibleBulkSelected}
+                    disabled={bulkCloseBusy || bulkSelectableKeys.length === 0}
+                    onChange={toggleAllVisibleBulkTickets}
+                    aria-label="Select all visible tickets"
+                  />
+                )}
+              </span>
               <span></span>
               <span>SUBJECT / REQUESTER</span>
               <span>STATUS</span>
@@ -7832,8 +8225,12 @@ function App() {
               return (
                 <div
                   key={ticket.ticket_key}
-                  className={`ticket-row-classic ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
+                  className={`ticket-row-classic ${brandClass(ticket.source)} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""} ${bulkSelectedKeys.includes(ticket.ticket_key) ? "bulk-selected" : ""}`}
                   onClick={() => {
+                    if (bulkMode) {
+                      if (ticket.status !== "Closed") toggleBulkTicket(ticket.ticket_key);
+                      return;
+                    }
                     // Classic is list-first, but clicking a ticket should still
                     // open the normal ticket workspace.
                     setTicketViewMode("compact");
@@ -7844,13 +8241,26 @@ function App() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
+                      if (bulkMode) {
+                        if (ticket.status !== "Closed") toggleBulkTicket(ticket.ticket_key);
+                        return;
+                      }
                       setTicketViewMode("compact");
                       setSelectedKey(ticket.ticket_key);
                     }
                   }}
                 >
                   <div className="classic-ticket-check">
-                    <input type="checkbox" onClick={(event) => event.stopPropagation()} aria-label={`Select ticket ${ticket.ticket_number || ""}`} />
+                    {bulkMode ? (
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedKeys.includes(ticket.ticket_key)}
+                        disabled={bulkCloseBusy || ticket.status === "Closed"}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => toggleBulkTicket(ticket.ticket_key)}
+                        aria-label={`Select ticket ${ticket.ticket_number || ""}`}
+                      />
+                    ) : null}
                   </div>
                   <div className="classic-ticket-icon">✉</div>
                   <div className="classic-ticket-main">
@@ -7984,9 +8394,20 @@ function App() {
             return (
               <button
                 key={ticket.ticket_key}
-                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""}`}
-                onClick={() => setSelectedKey(ticket.ticket_key)}
+                className={`ticket-row ${brandClass(ticket.source)} ${isSelected ? "selected" : ""} ${replyState[ticket.ticket_key]?.unread ? "has-unread-reply" : ""} ${getTicketActivityStatus(ticket).needsReply ? "needs-reply" : ""} ${bulkSelectedKeys.includes(ticket.ticket_key) ? "bulk-selected" : ""}`}
+                onClick={() => {
+                  if (bulkMode) {
+                    if (ticket.status !== "Closed") toggleBulkTicket(ticket.ticket_key);
+                    return;
+                  }
+                  setSelectedKey(ticket.ticket_key);
+                }}
               >
+                {bulkMode && ticket.status !== "Closed" && (
+                  <span className="bulk-card-check" aria-hidden="true">
+                    {bulkSelectedKeys.includes(ticket.ticket_key) ? "✓" : ""}
+                  </span>
+                )}
                 <div className="ticket-row-top">
                   <BrandBadge source={ticket.source} />
                   <span className="ticket-number">#{ticket.ticket_number}</span>
