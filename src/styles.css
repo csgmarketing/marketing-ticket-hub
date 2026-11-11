@@ -4582,6 +4582,8 @@ button.existing-attachment:disabled { cursor: default; opacity: .65; }
 .app-shell.ticket-reading-mode .message-author{font-size:14px}
 .app-shell.ticket-reading-mode .message-recipient-box{font-size:12px}
 .hub-email-frame{display:block;width:100%;max-width:100%;border:0;background:#fff;margin:14px 0 0;min-height:120px}
+.hub-email-body-wrap{position:relative;min-width:0}
+.hub-inline-image-loading{display:inline-flex;align-items:center;gap:7px;margin:12px 0 0;padding:6px 9px;border:1px solid #dce6f2;border-radius:7px;background:#f7faff;color:#71839a;font-size:10px;font-weight:650}
 .app-shell.ticket-reading-mode .details-column{display:none;position:fixed;inset:0 0 0 auto;width:min(380px,92vw);height:100dvh;z-index:100;background:white;overflow-y:auto;box-shadow:-12px 0 40px #0f172a20}
 .app-shell.ticket-reading-mode.ticket-details-open .details-column{display:block}
 .hub-details-overlay{position:fixed;inset:0;z-index:90;border:0;background:#0f172a30;cursor:pointer}
@@ -4620,6 +4622,28 @@ button.existing-attachment:disabled { cursor: default; opacity: .65; }
 .hub-close-details{display:none}.ticket-reading-mode .hub-close-details{display:block;margin:16px 20px 0 auto;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
 @media(max-width:1050px){.app-shell.ticket-reading-mode{grid-template-columns:180px minmax(0,1fr)}}
 @media(max-width:700px){.app-shell.ticket-reading-mode{grid-template-columns:minmax(0,1fr)}.app-shell.ticket-reading-mode .conversation-column{padding:0 14px 32px}.hub-ticket-reading-bar{margin:0 -14px;padding:12px 14px;position:relative}.app-shell.ticket-reading-mode .conversation-heading{min-width:0;flex-basis:100%}.app-shell.ticket-reading-mode .conversation-heading h2{font-size:19px}.app-shell.ticket-reading-mode .email-timeline-item{padding:12px}.hub-ticket-reading-bar>div{flex-wrap:wrap}}
+
+/* =====================================================
+   BULK SELECTION MODE
+   These rules are intentionally isolated and do not
+   change the existing ticket grids, dimensions or layout.
+   ===================================================== */
+.bulk-mode-controls{display:flex;align-items:center;gap:8px;margin-left:auto}
+.bulk-mode-controls button{border:1px solid #dbe3ec;background:#fff;color:#475569;border-radius:7px;padding:7px 10px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}
+.bulk-mode-controls button:disabled{opacity:.55;cursor:not-allowed}
+.bulk-mode-controls.active{padding-left:8px;border-left:1px solid #e3e9f1}
+.bulk-mode-controls strong{font-size:10px;color:#31517e;white-space:nowrap}
+.bulk-mode-controls .bulk-mode-close{background:#b42318;border-color:#b42318;color:#fff}
+.bulk-mode-controls .bulk-mode-close:hover:not(:disabled){background:#961c13;border-color:#961c13}
+.bulk-mode-controls .bulk-mode-cancel{color:#64748b}
+.bulk-mode-notice{margin:8px 14px 0;padding:8px 10px;border:1px solid #d9e6f7;border-radius:7px;background:#f3f7fd;color:#31517e;font-size:10px;font-weight:650;line-height:1.4}
+.ticket-row.bulk-selected,.ticket-row-classic.bulk-selected,.ticket-board-card.bulk-selected{outline:2px solid #3f6f91!important;outline-offset:-2px;background:#f3f8fd!important}
+.ticket-row{position:relative}
+.bulk-card-check{position:absolute;top:9px;right:9px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border:1.5px solid #9eb2c8;border-radius:5px;background:#fff;color:#fff;font-size:11px;font-weight:900;line-height:1;z-index:2}
+.ticket-row.bulk-selected .bulk-card-check{background:#3f6f91;border-color:#3f6f91}
+.classic-ticket-header input,.classic-ticket-check input{width:15px;height:15px;margin:0;accent-color:#3f6f91;cursor:pointer}
+@media(max-width:900px){.ticket-list-toolbar{flex-wrap:wrap}.bulk-mode-controls{width:100%;margin-left:0;justify-content:flex-end}.bulk-mode-controls.active{padding-left:0;border-left:0}}
+@media(max-width:600px){.bulk-mode-controls{justify-content:flex-start;flex-wrap:wrap}.bulk-mode-controls button{padding:7px 9px}}
 
 /* Keep ticket details beside the conversation on desktop. */
 @media(min-width:1051px){
