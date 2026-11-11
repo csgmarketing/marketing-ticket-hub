@@ -862,9 +862,29 @@ function normalizeInlineImageReference(value) {
     .toLowerCase();
 }
 
+function getZohoInlineAttachmentId(value) {
+  const source = String(value || "").trim();
+  const match = source.match(/\/attachments\/([^/?#]+)\/content(?:[?#]|$)/i);
+  return match ? String(match[1] || "").trim() : "";
+}
+
+function isProtectedZohoImageSource(value) {
+  const source = String(value || "").trim();
+  if (!/^https?:\/\//i.test(source)) return false;
+  try {
+    const url = new URL(source);
+    return /(^|\.)zoho(?:desk)?\.(?:com|eu|in|com\.au|jp|ca|sa)$/i.test(url.hostname) &&
+      /\/attachments\/[^/?#]+\/content(?:[?#]|$)/i.test(url.pathname + url.search);
+  } catch {
+    return /zoho/i.test(source) && /\/attachments\/[^/?#]+\/content/i.test(source);
+  }
+}
+
 function findInlineImageAttachment(image, attachments) {
-  const source = normalizeInlineImageReference(image.getAttribute("src"));
+  const rawSource = String(image.getAttribute("src") || "").trim();
+  const source = normalizeInlineImageReference(rawSource);
   const alt = normalizeInlineImageReference(image.getAttribute("alt"));
+  const sourceAttachmentId = getZohoInlineAttachmentId(rawSource);
   const imageAttachments = attachments.filter(attachmentLooksLikeImage);
 
   const matched = imageAttachments.find((attachment) => {
@@ -879,7 +899,8 @@ function findInlineImageAttachment(image, attachments) {
       .map(normalizeInlineImageReference)
       .filter(Boolean);
 
-    return references.some((reference) =>
+    return (sourceAttachmentId && getThreadAttachmentId(attachment) === sourceAttachmentId) ||
+      references.some((reference) =>
       reference === source ||
       reference === alt ||
       (source && (reference.endsWith(source) || source.endsWith(reference)))
@@ -893,6 +914,17 @@ function findInlineImageAttachment(image, attachments) {
   // inline image, while multiple images still require an exact match.
   if (imageAttachments.length === 1 && (source || alt)) {
     return imageAttachments[0];
+  }
+
+  // Zoho sometimes provides the protected attachment URL in the message HTML
+  // without repeating the same file in detail.attachments. The ID embedded in
+  // that URL is sufficient for our authenticated download endpoint.
+  if (sourceAttachmentId) {
+    return {
+      id: sourceAttachmentId,
+      name: image.getAttribute("alt") || `inline-image-${sourceAttachmentId}`,
+      content_type: "image/*",
+    };
   }
 
   return null;
@@ -946,7 +978,8 @@ async function resolveInlineEmailImages(html, thread, attachments) {
 
   for (const image of images) {
     const source = String(image.getAttribute("src") || "").trim();
-    if (/^(https?:|data:|blob:)/i.test(source)) continue;
+    if (/^(data:|blob:)/i.test(source)) continue;
+    if (/^https?:/i.test(source) && !isProtectedZohoImageSource(source)) continue;
 
     const attachment = findInlineImageAttachment(image, attachments);
     if (!attachment) continue;
